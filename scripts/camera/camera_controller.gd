@@ -1,0 +1,75 @@
+class_name CameraController
+extends Camera3D
+
+var focus_point: Vector3 = Vector3.ZERO
+var target_focus: Vector3 = Vector3.ZERO
+var distance: float = 16.5
+var target_distance: float = 16.5
+var yaw: float = deg_to_rad(45.0)
+var target_yaw: float = deg_to_rad(45.0)
+var pitch: float = deg_to_rad(55.0)
+var pan_speed: float = 7.0
+var _shake_time: float = 0.0
+var _shake_strength: float = 0.0
+
+
+func _ready() -> void:
+	current = true
+	fov = 48.0
+	near = 0.1
+	far = 100.0
+	_update_camera(1.0)
+
+
+func _process(delta: float) -> void:
+	var input_vector := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
+	if input_vector.length_squared() > 0.0:
+		var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var right := Vector3(forward.z, 0.0, -forward.x)
+		target_focus += (right * input_vector.x + forward * input_vector.y) * pan_speed * delta
+		target_focus.x = clampf(target_focus.x, -7.5, 7.5)
+		target_focus.z = clampf(target_focus.z, -7.5, 7.5)
+	if Input.is_action_pressed("camera_rotate_left"):
+		target_yaw -= delta * 1.35
+	if Input.is_action_pressed("camera_rotate_right"):
+		target_yaw += delta * 1.35
+	_update_camera(delta)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			target_distance = maxf(9.0, target_distance - 1.2)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			target_distance = minf(23.0, target_distance + 1.2)
+
+
+func focus_on(world_position: Vector3) -> void:
+	target_focus = Vector3(world_position.x, 0.0, world_position.z)
+
+
+func shake(strength: float, duration: float) -> void:
+	_shake_strength = maxf(_shake_strength, strength)
+	_shake_time = maxf(_shake_time, duration)
+
+
+func _update_camera(delta: float) -> void:
+	var weight := 1.0 if delta >= 1.0 else 1.0 - exp(-delta * 7.0)
+	focus_point = focus_point.lerp(target_focus, weight)
+	distance = lerpf(distance, target_distance, weight)
+	yaw = lerp_angle(yaw, target_yaw, weight)
+	var horizontal_distance := cos(pitch) * distance
+	var offset := Vector3(
+		sin(yaw) * horizontal_distance,
+		sin(pitch) * distance,
+		cos(yaw) * horizontal_distance
+	)
+	var shake_offset := Vector3.ZERO
+	if _shake_time > 0.0:
+		_shake_time -= delta
+		shake_offset = Vector3(randf_range(-1.0, 1.0), randf_range(-0.35, 0.35), randf_range(-1.0, 1.0)) * _shake_strength
+	else:
+		_shake_strength = 0.0
+	global_position = focus_point + offset + shake_offset
+	look_at(focus_point + Vector3(0.0, 0.25, 0.0), Vector3.UP)
+

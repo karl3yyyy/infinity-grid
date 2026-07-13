@@ -4,3 +4,5 @@ build/
 *.tmp
 *.log
 *.gd.uid
+assets/source_assets/*
+!assets/source_assets/.gdignore

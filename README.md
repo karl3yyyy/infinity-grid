@@ -1,92 +1,120 @@
 # Tactical Slash
 
-Tactical Slash is a playable 3D turn-based grid tactics prototype built with
-Godot 4.7 and typed GDScript. It uses only Godot primitive meshes, so the full
-battle works without external models, plugins, textures, or paid assets.
-The current milestone has passed headless validation and a complete UI-driven battle playtest.
+Tactical Slash is a playable 3D turn-based tactics game built with Godot 4.7
+and typed GDScript. Two teams of three licensed CC0 characters fight on a
+10x10 grid: Swordsman, Archer, and Priest. The project ships with real animated
+GLB characters, dungeon and nature scenery, a Poly Haven HDR sky, desktop and
+touch controls, automated tests, and Windows/Web/Android export presets.
 
 ## Play
 
-1. Open `project.godot` with Godot 4.7 stable.
-2. Press **F6** from `scenes/main.tscn`, or **F5** from anywhere in the editor.
-3. Left-click a blue swordsman, then a blue highlighted tile to move.
-4. Choose **ATTACK** and click an adjacent red enemy, or click an adjacent red
-   enemy directly. Damage is applied at the sword-impact event, not on click.
-5. Choose **WAIT** to finish that unit, or **END TURN** to hand control to AI.
-6. Right-click or use **CANCEL** to leave target/selection mode before moving.
+Open `project.godot` in Godot 4.7 stable and press F6 from
+`scenes/main.tscn`, or run the exported build.
 
-Camera controls: WASD or arrow keys pan, Q/E rotate, and the mouse wheel zooms.
-Eliminate all three raiders to win; losing all three swordsmen causes defeat.
+1. Select a blue unit and click/tap a highlighted tile to move.
+2. Use **ATTACK** for a class attack, **HEAL** for a Priest ally, **WAIT** to
+   finish the selected unit, or **END TURN** to hand control to the AI.
+3. Swordsmen attack adjacent targets. Archers fire at range 2-5 with line of
+   sight. Priests cast Holy Bolt at range 2-4 and heal allies at range 1-4.
+4. Eliminate all three skeletons to win; losing all three heroes causes defeat.
 
-## Features
+Desktop controls: left click selects and confirms, right click cancels, mouse
+wheel zooms, WASD/arrow keys pan, Q/E rotate, F11 toggles fullscreen, M toggles
+mute, and Escape opens/closes the menu.
 
-- 10×10 3D grid with hover, selection, movement, attack, occupied, and blocked
-  cell states.
-- BFS movement reachability and shortest paths around five obstacles and units.
-- Three player swordsmen and three AI raiders with authoritative `Vector2i`
-  coordinates.
-- Smooth tile-by-tile movement and a rotatable/zoomable tactical camera.
-- Procedural body, limbs, sword, shield, selection ring, shadows, and team color.
-- Idle breathing, alternating walk, articulated wind-up/slash, hit recoil/flash,
-  and persistent death pose.
-- Single timed slash hit event, damage formula, hit stop, sparks, camera shake,
-  and floating damage numbers.
-- Player/enemy phases, per-unit move/attack limits, AI turns, victory, defeat,
-  restart, and quit UI.
-- Empty `AudioStreamPlayer3D` placeholders; adding no audio never breaks play.
+Touch controls: tap selects/confirms, drag pans, pinch zooms, two-finger rotate
+orbits the camera, and long press cancels. UI respects the platform safe area;
+Android Back closes the current mode/menu before exiting.
+
+## Classes
+
+| Class | HP | ATK | DEF | MOVE | Actions |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Swordsman | 14 | 6 | 2 | 4 | Slash, range 1 |
+| Archer | 10 | 5 | 1 | 4 | Bow shot, range 2-5, line of sight |
+| Priest | 9 | 3 | 1 | 3 | Holy Bolt, range 2-4; Heal 6 HP, range 1-4 |
+
+Damage from arrows and spells is applied at projectile impact. Healing is
+clamped to maximum HP and cannot target enemies or defeated units. Enemy AI
+uses class-specific positioning and priorities; its Priest heals the lowest HP
+ratio ally below 50%, otherwise it attacks with Dark Bolt.
 
 ## Architecture
 
-- `scripts/grid`: logical cells, visual cell states, occupancy, BFS, paths.
-- `scripts/units`: unit rules/model/animation and step movement.
-- `scripts/battle`: battle state machine, orchestration, and timed attacks.
-- `scripts/controllers`: mouse-to-grid input and sequential enemy AI.
-- `scripts/camera`: smooth tactical orbit/pan/zoom/shake camera.
-- `scripts/ui`: responsive HUD, actions, selection stats, battle result.
-- `scripts/effects`: procedural hit sparks and damage numbers.
-- `tests`: headless scene and core rule assertions.
+- `scripts/grid`: logical cells, occupancy, line of sight, BFS, and paths.
+- `scripts/units`: class data, unit state, GLB loading, animation mapping, and
+  tile-by-tile movement.
+- `scripts/battle`: turn flow plus melee, projectile, and healing actions.
+- `scripts/controllers`: desktop/touch input and bounded class-aware enemy AI.
+- `scripts/camera`: smooth tactical pan, orbit, zoom, gesture input, and shake.
+- `scripts/ui`: responsive safe-area HUD, actions, menu, and results.
+- `scripts/effects`: hit, projectile, healing, and floating-number effects.
+- `tools`: Blender asset preparation, validation, Android setup, release build,
+  and local Web serving.
+- `tests`: headless integration and rule assertions.
 
-Game rules are stored independently from primitive-mesh visuals. Grid occupancy
-and movement use `Vector2i`; world positions are only the rendered projection.
+`BattleUnit.grid_position` and `GridCell.occupant` are authoritative. Rendered
+`Node3D` positions never replace the `Vector2i` game state. Licensed visuals are
+loaded behind the unit API, so battle rules do not depend on model node names.
 
-## Validation
+## Validate
 
 From PowerShell:
 
 ```powershell
 Set-Location D:\GameProjects
-.\tools\check_project.ps1
+powershell -ExecutionPolicy Bypass -File .\tools\check_project.ps1
 ```
 
-The script runs editor/resource loading, core automated assertions, and a
-120-frame Main-scene smoke test. Full output is written under `logs/`.
+This performs editor/resource loading, 34 core assertions, and a Main-scene
+smoke test. Logs are written to `logs/validation/`; Blender and export logs use
+`logs/blender/` and `logs/export/`.
 
-Equivalent direct commands:
+## Rebuild 3D assets
+
+The processed runtime assets are committed. To reproduce them from the audited
+source archives with Blender 5.1:
 
 ```powershell
-& "D:\Sion File\downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path D:\GameProjects --editor --quit
-& "D:\Sion File\downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path D:\GameProjects --script res://tests/test_runner.gd
-& "D:\Sion File\downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path D:\GameProjects --quit-after 120
+powershell -ExecutionPolicy Bypass -File .\tools\run_blender_asset_pipeline.ps1
 ```
 
-## Windows export
+Original archives/extractions live under `assets/source_assets/` and are
+excluded from Git and Godot import. Runtime GLBs and the HDR are under
+`assets/characters/`, `assets/environment/`, and `assets/sky/`. See
+`THIRD_PARTY_ASSETS.md`, `docs/asset-audit.md`, and `assets/licenses/`.
 
-`export_presets.cfg` targets `build/windows/TacticalSlash.exe`. This machine did
-not initially contain Godot 4.7 export templates, so install the official 4.7
-templates through **Editor > Manage Export Templates**, then run:
+## Build releases
+
+Export templates must match Godot 4.7. Android additionally uses OpenJDK 17 and
+Android SDK Platform/Build Tools 35 or newer. Verify the local Android setup:
 
 ```powershell
-& "D:\Sion File\downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path D:\GameProjects --export-release "Windows Desktop"
+powershell -ExecutionPolicy Bypass -File .\tools\setup_android_environment.ps1
 ```
 
-The editor-playable project does not require export templates.
+Create all artifacts and checksums:
 
-## Replacing the procedural fighters
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build_release.ps1
+```
 
-Import a GLB with a rig and `AnimationPlayer`, then replace `_build_model()` in
-`scripts/units/unit.gd` with an instantiated character scene. Preserve the
-`BattleUnit` root API, selection ring, status label, and grid coordinate. Map
-Idle/Walk/Hit/Death to the imported animation names. For Slash, add a Call Method
-Track at blade contact that invokes the same one-shot damage event currently
-located in `AttackAction.execute`; keep action completion after the animation's
-finished signal. This swaps visuals without changing combat, grid, turns, or AI.
+Outputs:
+
+- `build/windows/TacticalSlash.exe`
+- `build/web/index.html`
+- `build/android/TacticalSlash-debug.apk`
+- `build/packages/TacticalSlash-Windows-x86_64.zip`
+- `build/packages/TacticalSlash-Web.zip`
+- `build/build_manifest.json`
+- `build/SHA256SUMS.txt`
+
+Serve the Web build over HTTP (not `file://`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\serve_web.ps1
+```
+
+The Android package is `com.sionbarzahd.tacticalslash`, version `0.2.0`
+(version code 2), arm64, landscape. The generated debug keystore, SDK, JDK,
+build outputs, and logs are intentionally excluded from Git.

@@ -216,6 +216,34 @@ func manhattan_distance(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
+func has_line_of_sight(from: Vector2i, to: Vector2i) -> bool:
+	if not is_inside(from) or not is_inside(to) or from == to:
+		return false
+	var x := from.x
+	var y := from.y
+	var delta_x := absi(to.x - from.x)
+	var delta_y := absi(to.y - from.y)
+	var step_x := 1 if from.x < to.x else -1
+	var step_y := 1 if from.y < to.y else -1
+	var error := delta_x - delta_y
+	while true:
+		var coordinate := Vector2i(x, y)
+		if coordinate != from and coordinate != to:
+			var cell: GridCell = cells[coordinate]
+			if not cell.walkable or cell.occupant != null:
+				return false
+		if coordinate == to:
+			break
+		var doubled_error := error * 2
+		if doubled_error > -delta_y:
+			error -= delta_y
+			x += step_x
+		if doubled_error < delta_x:
+			error += delta_x
+			y += step_y
+	return true
+
+
 func _create_cell_visual(cell: GridCell) -> void:
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "Cell_%d_%d" % [cell.coordinate.x, cell.coordinate.y]
@@ -278,4 +306,3 @@ func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material.emission_enabled:
 		cell.material.emission = _colors[cell.highlight] * 0.36
 		cell.material.emission_energy_multiplier = 0.75
-

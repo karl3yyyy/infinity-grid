@@ -32,6 +32,8 @@ func can_attack(attacker: BattleUnit, target: BattleUnit, grid: GridManager) -> 
 		and not attacker.has_attacked
 		and not target.is_dead
 		and attacker.team_id != target.team_id
+		and attacker.unit_class_id == UnitClassData.UnitClass.SWORDSMAN
+		and grid.manhattan_distance(attacker.grid_position, target.grid_position) >= attacker.attack_min_range
 		and grid.manhattan_distance(attacker.grid_position, target.grid_position) <= attacker.attack_range
 	)
 
@@ -46,7 +48,7 @@ func execute(attacker: BattleUnit, target: BattleUnit, grid: GridManager) -> boo
 	busy = true
 	attack_started.emit(attacker, target)
 	attacker.face_world_position(target.global_position)
-	attacker.set_animation_state(&"slash")
+	attacker.play_melee_attack()
 
 	var windup := attacker.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	windup.set_parallel(true)
@@ -88,7 +90,7 @@ func execute(attacker: BattleUnit, target: BattleUnit, grid: GridManager) -> boo
 	recover.tween_property(attacker.visual_root, "position", Vector3.ZERO, 0.28)
 	await recover.finished
 	attacker.has_attacked = true
-	attacker.set_animation_state(&"idle")
+	attacker.play_idle()
 	busy = false
 	attack_finished.emit(attacker, target)
 	return true
@@ -101,4 +103,3 @@ func _spawn_hit_feedback(target: BattleUnit, damage: int) -> void:
 	var hit_effect := HitEffectScene.new()
 	get_tree().current_scene.add_child(hit_effect)
 	hit_effect.play(target.global_position)
-

@@ -12,6 +12,8 @@ var player_controller: PlayerController
 var enemy_controller: EnemyController
 var unit_movement: UnitMovement
 var attack_action: AttackAction
+var ranged_attack_action: RangedAttackAction
+var heal_action: HealAction
 var units_parent: Node3D
 
 var players: Array[BattleUnit] = []
@@ -19,6 +21,7 @@ var enemies: Array[BattleUnit] = []
 var selected_unit: BattleUnit = null
 var reachable_cells: Array[Vector2i] = []
 var attack_target_mode: bool = false
+var heal_target_mode: bool = false
 var input_locked: bool = true
 var battle_over: bool = false
 
@@ -32,6 +35,8 @@ func setup(
 	enemy_ai: EnemyController,
 	movement: UnitMovement,
 	attack: AttackAction,
+	ranged_attack: RangedAttackAction,
+	healing: HealAction,
 	unit_container: Node3D
 ) -> void:
 	grid_manager = grid
@@ -42,6 +47,8 @@ func setup(
 	enemy_controller = enemy_ai
 	unit_movement = movement
 	attack_action = attack
+	ranged_attack_action = ranged_attack
+	heal_action = healing
 	units_parent = unit_container
 	_connect_signals()
 	_spawn_armies()
@@ -52,6 +59,7 @@ func _connect_signals() -> void:
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_pressed)
 	battle_ui.attack_pressed.connect(_on_attack_pressed)
+	battle_ui.heal_pressed.connect(_on_heal_pressed)
 	battle_ui.wait_pressed.connect(_on_wait_pressed)
 	battle_ui.cancel_pressed.connect(_on_cancel_pressed)
 	battle_ui.end_turn_pressed.connect(_on_end_turn_pressed)
@@ -62,19 +70,28 @@ func _connect_signals() -> void:
 	turn_manager.state_changed.connect(_on_state_changed)
 	turn_manager.round_changed.connect(func(_round: int) -> void: _refresh_header())
 	attack_action.damage_applied.connect(_on_damage_applied)
+	ranged_attack_action.damage_applied.connect(_on_damage_applied)
+	heal_action.healing_applied.connect(_on_healing_applied)
 
 
 func _spawn_armies() -> void:
 	var player_starts: Array[Vector2i] = [Vector2i(1, 8), Vector2i(3, 8), Vector2i(5, 8)]
 	var enemy_starts: Array[Vector2i] = [Vector2i(8, 1), Vector2i(6, 1), Vector2i(4, 1)]
+	var class_ids: Array[int] = [
+		UnitClassData.UnitClass.SWORDSMAN,
+		UnitClassData.UnitClass.ARCHER,
+		UnitClassData.UnitClass.PRIEST,
+	]
+	var player_names: Array[String] = ["Swordsman A", "Archer A", "Priest A"]
+	var enemy_names: Array[String] = ["Boneguard", "Bone Archer", "Dark Priest"]
 	for index: int in range(3):
 		var player: BattleUnit = PlayerUnitScript.new()
-		player.setup_player("Swordsman %s" % char(65 + index), player_starts[index])
+		player.setup_player(player_names[index], player_starts[index], class_ids[index])
 		units_parent.add_child(player)
 		player.position = grid_manager.grid_to_world(player.grid_position)
 		_register_unit(player, players)
 		var enemy: BattleUnit = EnemyUnitScript.new()
-		enemy.setup_enemy("Raider %d" % (index + 1), enemy_starts[index])
+		enemy.setup_enemy(enemy_names[index], enemy_starts[index], class_ids[index])
 		units_parent.add_child(enemy)
 		enemy.position = grid_manager.grid_to_world(enemy.grid_position)
 		enemy.rotation_degrees.y = 180.0
@@ -109,7 +126,7 @@ func _begin_player_turn(increment_round: bool) -> void:
 	input_locked = false
 	player_controller.enabled = true
 	battle_ui.set_actions(false, false, false, true)
-	battle_ui.set_instruction("Select a blue swordsman • WASD/Arrows pan • Q/E rotate • Wheel zoom")
+	battle_ui.set_instruction("Select a blue unit • WASD/Arrows pan • Q/E rotate • Wheel/pinch zoom")
 	_refresh_header()
 
 
@@ -139,16 +156,22 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		if clicked_unit != null and clicked_unit.team_id == 0 and clicked_unit.can_act():
 			_select_unit(clicked_unit)
 		return
+	if heal_target_mode and clicked_unit != null and heal_action.can_heal(selected_unit, clicked_unit, grid_manager):
+		await _perform_player_heal(clicked_unit)
+		return
 	if clicked_unit != null and clicked_unit.team_id == 0:
 		if clicked_unit.can_act():
 			_select_unit(clicked_unit)
 		return
 	if clicked_unit != null and clicked_unit.team_id != selected_unit.team_id:
-		if attack_action.can_attack(selected_unit, clicked_unit, grid_manager):
+		if _can_unit_attack(selected_unit, clicked_unit):
 			await _perform_player_attack(clicked_unit)
 		return
 	if attack_target_mode:
-		battle_ui.set_instruction("Choose a red enemy on an adjacent highlighted tile, or right-click to cancel.")
+		battle_ui.set_instruction("Choose a highlighted enemy, or cancel.")
+		return
+	if heal_target_mode:
+		battle_ui.set_instruction("Choose a wounded highlighted ally, or cancel.")
 		return
 	if not selected_unit.has_moved and coordinate in reachable_cells and clicked_unit == null:
 		await _perform_player_move(coordinate)
@@ -160,13 +183,14 @@ func _select_unit(unit: BattleUnit) -> void:
 	selected_unit = unit
 	selected_unit.set_selected(true)
 	attack_target_mode = false
+	heal_target_mode = false
 	camera_controller.focus_on(unit.global_position)
 	battle_ui.update_unit(unit)
 	if not unit.has_moved:
 		reachable_cells = grid_manager.get_reachable(unit.grid_position, unit.movement_range, unit)
 		grid_manager.show_reachable(reachable_cells, unit.grid_position)
 		turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_MOVE)
-		battle_ui.set_instruction("Choose a blue tile to move, or attack an adjacent red enemy.")
+		battle_ui.set_instruction("Choose a blue tile to move, or use a class action.")
 	else:
 		reachable_cells.clear()
 		grid_manager.clear_highlights()
@@ -193,21 +217,37 @@ func _perform_player_move(destination: Vector2i) -> void:
 	player_controller.enabled = true
 	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_ACTION)
 	battle_ui.update_unit(selected_unit)
-	battle_ui.set_instruction("Movement complete. ATTACK an adjacent enemy or WAIT.")
+	var action_hint := "HEAL, HOLY BOLT, or WAIT" if selected_unit.unit_class_id == UnitClassData.UnitClass.PRIEST else "ATTACK or WAIT"
+	battle_ui.set_instruction("Movement complete. Choose %s." % action_hint)
 	_refresh_action_buttons()
 
 
 func _on_attack_pressed() -> void:
 	if input_locked or selected_unit == null or selected_unit.has_attacked:
 		return
-	var targets := _adjacent_enemy_coordinates(selected_unit)
+	var targets := _attackable_enemy_coordinates(selected_unit)
 	if targets.is_empty():
 		return
 	attack_target_mode = true
+	heal_target_mode = false
 	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_TARGET)
 	grid_manager.show_attackable(targets, selected_unit.grid_position)
-	battle_ui.set_instruction("Select an adjacent red enemy to slash. Damage lands at blade impact.")
+	battle_ui.set_instruction("Select a highlighted enemy. Damage lands only at weapon or projectile impact.")
 	battle_ui.set_actions(false, true, true, true)
+
+
+func _on_heal_pressed() -> void:
+	if input_locked or selected_unit == null or selected_unit.has_attacked:
+		return
+	var targets := _healable_ally_coordinates(selected_unit)
+	if targets.is_empty():
+		return
+	heal_target_mode = true
+	attack_target_mode = false
+	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_TARGET)
+	grid_manager.show_attackable(targets, selected_unit.grid_position)
+	battle_ui.set_instruction("Select a wounded ally. Healing applies at the holy effect peak.")
+	battle_ui.set_actions(false, true, true, true, false)
 
 
 func _perform_player_attack(target: BattleUnit) -> void:
@@ -217,7 +257,7 @@ func _perform_player_attack(target: BattleUnit) -> void:
 	turn_manager.set_state(TurnManager.BattleState.UNIT_ATTACKING)
 	grid_manager.clear_highlights()
 	battle_ui.set_actions(false, false, false, false)
-	await attack_action.execute(selected_unit, target, grid_manager)
+	await _execute_unit_attack(selected_unit, target)
 	if battle_over:
 		return
 	battle_ui.update_unit(selected_unit)
@@ -227,7 +267,29 @@ func _perform_player_attack(target: BattleUnit) -> void:
 		selected_unit.set_exhausted(true)
 		_deselect_unit()
 		turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
-		battle_ui.set_instruction("Select another blue swordsman, or end the turn.")
+		battle_ui.set_instruction("Select another blue unit, or end the turn.")
+	else:
+		_select_unit(selected_unit)
+	_check_auto_end_player_turn()
+
+
+func _perform_player_heal(target: BattleUnit) -> void:
+	input_locked = true
+	player_controller.enabled = false
+	heal_target_mode = false
+	turn_manager.set_state(TurnManager.BattleState.UNIT_ATTACKING)
+	grid_manager.clear_highlights()
+	battle_ui.set_actions(false, false, false, false)
+	await heal_action.execute(selected_unit, target, grid_manager)
+	if battle_over:
+		return
+	battle_ui.update_unit(selected_unit)
+	input_locked = false
+	player_controller.enabled = true
+	if selected_unit.has_moved and selected_unit.has_attacked:
+		selected_unit.set_exhausted(true)
+		_deselect_unit()
+		turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
 	else:
 		_select_unit(selected_unit)
 	_check_auto_end_player_turn()
@@ -239,20 +301,31 @@ func _on_wait_pressed() -> void:
 	selected_unit.finish_action()
 	_deselect_unit()
 	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
-	battle_ui.set_instruction("Unit is waiting. Select another swordsman, or end the turn.")
+	battle_ui.set_instruction("Unit is waiting. Select another unit, or end the turn.")
 	_check_auto_end_player_turn()
 
 
 func _on_cancel_pressed() -> void:
-	if input_locked or selected_unit == null:
+	if battle_ui.is_menu_open():
+		battle_ui.toggle_menu(false)
+		return
+	if input_locked:
+		return
+	if selected_unit == null:
+		battle_ui.toggle_menu(true)
 		return
 	if attack_target_mode:
 		attack_target_mode = false
 		_select_unit(selected_unit)
+	elif heal_target_mode:
+		heal_target_mode = false
+		_select_unit(selected_unit)
 	elif not selected_unit.has_moved:
 		_deselect_unit()
 		turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
-		battle_ui.set_instruction("Selection cancelled. Choose a blue swordsman.")
+		battle_ui.set_instruction("Selection cancelled. Choose a blue unit.")
+	else:
+		battle_ui.toggle_menu(true)
 
 
 func _on_end_turn_pressed() -> void:
@@ -285,6 +358,11 @@ func _on_damage_applied(_attacker: BattleUnit, target: BattleUnit, _damage: int)
 		battle_ui.update_unit(target)
 
 
+func _on_healing_applied(_healer: BattleUnit, target: BattleUnit, _amount: int) -> void:
+	if target == selected_unit:
+		battle_ui.update_unit(target)
+
+
 func _check_battle_result() -> void:
 	turn_manager.set_state(TurnManager.BattleState.CHECK_BATTLE_RESULT)
 	var players_alive := players.any(func(unit: BattleUnit) -> bool: return not unit.is_dead)
@@ -310,6 +388,7 @@ func _deselect_unit() -> void:
 		selected_unit.set_selected(false)
 	selected_unit = null
 	attack_target_mode = false
+	heal_target_mode = false
 	reachable_cells.clear()
 	if grid_manager != null:
 		grid_manager.clear_highlights()
@@ -318,26 +397,51 @@ func _deselect_unit() -> void:
 		battle_ui.set_actions(false, false, false, not input_locked)
 
 
-func _adjacent_enemy_coordinates(unit: BattleUnit) -> Array[Vector2i]:
+func _attackable_enemy_coordinates(unit: BattleUnit) -> Array[Vector2i]:
 	var coordinates: Array[Vector2i] = []
-	for coordinate: Vector2i in grid_manager.get_neighbors(unit.grid_position):
+	for coordinate_value: Variant in grid_manager.cells.keys():
+		var coordinate: Vector2i = coordinate_value
 		var node: Node = grid_manager.get_unit_at(coordinate)
 		var target: BattleUnit = node as BattleUnit
-		if target != null and not target.is_dead and target.team_id != unit.team_id:
+		if target != null and _can_unit_attack(unit, target):
 			coordinates.append(coordinate)
 	return coordinates
+
+
+func _healable_ally_coordinates(unit: BattleUnit) -> Array[Vector2i]:
+	var coordinates: Array[Vector2i] = []
+	for coordinate_value: Variant in grid_manager.cells.keys():
+		var coordinate: Vector2i = coordinate_value
+		var target := grid_manager.get_unit_at(coordinate) as BattleUnit
+		if target != null and heal_action.can_heal(unit, target, grid_manager):
+			coordinates.append(coordinate)
+	return coordinates
+
+
+func _can_unit_attack(attacker: BattleUnit, target: BattleUnit) -> bool:
+	if attacker.unit_class_id == UnitClassData.UnitClass.SWORDSMAN:
+		return attack_action.can_attack(attacker, target, grid_manager)
+	return ranged_attack_action.can_attack(attacker, target, grid_manager)
+
+
+func _execute_unit_attack(attacker: BattleUnit, target: BattleUnit) -> bool:
+	if attacker.unit_class_id == UnitClassData.UnitClass.SWORDSMAN:
+		return await attack_action.execute(attacker, target, grid_manager)
+	return await ranged_attack_action.execute(attacker, target, grid_manager)
 
 
 func _refresh_action_buttons() -> void:
 	if selected_unit == null:
 		battle_ui.set_actions(false, false, false, true)
 		return
-	var has_target := not _adjacent_enemy_coordinates(selected_unit).is_empty()
+	var has_target := not _attackable_enemy_coordinates(selected_unit).is_empty()
+	var has_heal_target := not _healable_ally_coordinates(selected_unit).is_empty()
 	battle_ui.set_actions(
 		not selected_unit.has_attacked and has_target,
 		true,
 		not selected_unit.has_moved,
-		true
+		true,
+		not selected_unit.has_attacked and has_heal_target
 	)
 
 
@@ -364,4 +468,3 @@ func _refresh_header() -> void:
 func _restart_battle() -> void:
 	Engine.time_scale = 1.0
 	get_tree().reload_current_scene()
-

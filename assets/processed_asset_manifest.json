@@ -1,0 +1,137 @@
+{
+  "blender": "5.1.2",
+  "characters": [
+    {
+      "output": "assets/characters/player/player_swordsman.glb",
+      "source": "assets/source_assets/kaykit_adventurers/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb",
+      "size": 549284,
+      "source_height": 2.4614,
+      "mesh_count": 10,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    },
+    {
+      "output": "assets/characters/player/player_archer.glb",
+      "source": "assets/source_assets/kaykit_adventurers/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue_Hooded.glb",
+      "size": 701504,
+      "source_height": 2.7443,
+      "mesh_count": 9,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    },
+    {
+      "output": "assets/characters/player/player_priest.glb",
+      "source": "assets/source_assets/kaykit_adventurers/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb",
+      "size": 536752,
+      "source_height": 2.999,
+      "mesh_count": 10,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    },
+    {
+      "output": "assets/characters/enemy/enemy_swordsman.glb",
+      "source": "assets/source_assets/kaykit_skeletons/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Warrior.glb",
+      "size": 673216,
+      "source_height": 3.0011,
+      "mesh_count": 12,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    },
+    {
+      "output": "assets/characters/enemy/enemy_archer.glb",
+      "source": "assets/source_assets/kaykit_skeletons/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Rogue.glb",
+      "size": 683976,
+      "source_height": 2.7069,
+      "mesh_count": 12,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    },
+    {
+      "output": "assets/characters/enemy/enemy_priest.glb",
+      "source": "assets/source_assets/kaykit_skeletons/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Mage.glb",
+      "size": 594168,
+      "source_height": 3.4731,
+      "mesh_count": 10,
+      "animations": [
+        "1H_Melee_Attack_Slice_Horizontal",
+        "2H_Ranged_Shoot",
+        "Death_A",
+        "Hit_A",
+        "Idle",
+        "Spellcast_Shoot",
+        "Walking_A"
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "output": "dungeon_wall.glb",
+      "source": "wall.gltf.glb",
+      "size": 53272
+    },
+    {
+      "output": "dungeon_pillar.glb",
+      "source": "wall_pillar.gltf.glb",
+      "size": 55328
+    },
+    {
+      "output": "dungeon_crate.glb",
+      "source": "box_small.gltf.glb",
+      "size": 28800
+    },
+    {
+      "output": "nature_tree.glb",
+      "source": "tree_oak.glb",
+      "size": 13680
+    },
+    {
+      "output": "nature_rock.glb",
+      "source": "rock_largeA.glb",
+      "size": 7248
+    },
+    {
+      "output": "nature_bush.glb",
+      "source": "plant_bushDetailed.glb",
+      "size": 9424
+    }
+  ],
+  "sky": {
+    "source": "assets/source_assets/poly_haven_cloud_layers/cloud_layers_2k.hdr",
+    "output": "assets/sky/cloud_layers_2k.hdr"
+  }
+}

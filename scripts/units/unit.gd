@@ -4,6 +4,25 @@ extends Node3D
 signal health_changed(unit: BattleUnit)
 signal died(unit: BattleUnit)
 
+const MODEL_PATHS: Dictionary = {
+	"0_0": "res://assets/characters/player/player_swordsman.glb",
+	"0_1": "res://assets/characters/player/player_archer.glb",
+	"0_2": "res://assets/characters/player/player_priest.glb",
+	"1_0": "res://assets/characters/enemy/enemy_swordsman.glb",
+	"1_1": "res://assets/characters/enemy/enemy_archer.glb",
+	"1_2": "res://assets/characters/enemy/enemy_priest.glb",
+}
+const ANIMATION_MAP: Dictionary = {
+	&"idle": [&"Idle", &"idle", &"Rig|Idle"],
+	&"walk": [&"Walking_A", &"Walk", &"walk", &"Rig|Walking_A"],
+	&"slash": [&"1H_Melee_Attack_Slice_Horizontal", &"Melee_Attack", &"Attack", &"Rig|1H_Melee_Attack_Slice_Horizontal"],
+	&"ranged": [&"2H_Ranged_Shoot", &"Ranged_Shoot", &"Shoot", &"Rig|2H_Ranged_Shoot"],
+	&"cast": [&"Spellcast_Shoot", &"Spellcasting", &"Spellcast_Long", &"Magic_Attack", &"Rig|Spellcast_Shoot"],
+	&"heal": [&"Spellcast_Shoot", &"Spellcasting", &"Spellcast_Long", &"Magic_Attack", &"Rig|Spellcast_Shoot"],
+	&"hit": [&"Hit_A", &"Hit", &"hit", &"Rig|Hit_A"],
+	&"death": [&"Death_A", &"Death", &"death", &"Rig|Death_A"],
+}
+
 var unit_name: String = "Unit"
 var team_id: int = 0
 var max_hp: int = 12
@@ -11,7 +30,13 @@ var current_hp: int = 12
 var attack_power: int = 5
 var defense: int = 2
 var movement_range: int = 4
+var attack_min_range: int = 1
 var attack_range: int = 1
+var heal_min_range: int = 0
+var heal_range: int = 0
+var heal_power: int = 0
+var unit_class_id: int = UnitClassData.UnitClass.SWORDSMAN
+var class_display_name: String = "Swordsman"
 var grid_position: Vector2i = Vector2i.ZERO
 var has_moved: bool = false
 var has_attacked: bool = false
@@ -27,12 +52,16 @@ var right_leg_pivot: Node3D
 var sword_pivot: Node3D
 var selection_ring: MeshInstance3D
 var status_label: Label3D
+var imported_model: Node3D
+var animation_player: AnimationPlayer
+var using_licensed_model: bool = false
 
 var _team_color: Color = Color("3a8fe7")
 var _accent_color: Color = Color("d7ecff")
 var _materials: Array[StandardMaterial3D] = []
 var _base_colors: Array[Color] = []
 var _idle_time: float = 0.0
+var _placeholder_root: Node3D
 
 
 func configure(
@@ -40,13 +69,27 @@ func configure(
 	new_team_id: int,
 	coordinate: Vector2i,
 	team_color: Color,
-	accent_color: Color
+	accent_color: Color,
+	new_class_id: int = UnitClassData.UnitClass.SWORDSMAN
 ) -> void:
 	unit_name = display_name
 	team_id = new_team_id
 	grid_position = coordinate
 	_team_color = team_color
 	_accent_color = accent_color
+	unit_class_id = new_class_id
+	var class_data := UnitClassData.create(new_class_id)
+	class_display_name = class_data.display_name
+	max_hp = class_data.max_hp
+	current_hp = max_hp
+	attack_power = class_data.attack_power
+	defense = class_data.defense
+	movement_range = class_data.movement_range
+	attack_min_range = class_data.attack_min_range
+	attack_range = class_data.attack_max_range
+	heal_min_range = class_data.heal_min_range
+	heal_range = class_data.heal_max_range
+	heal_power = class_data.heal_power
 	name = display_name.replace(" ", "_")
 
 
@@ -97,6 +140,7 @@ func set_exhausted(value: bool) -> void:
 
 func set_animation_state(state: StringName) -> void:
 	animation_state = state
+	_play_imported_animation(state)
 	if state == &"idle":
 		visual_root.position = Vector3.ZERO
 		left_leg_pivot.rotation = Vector3.ZERO
@@ -105,6 +149,51 @@ func set_animation_state(state: StringName) -> void:
 		sword_arm_pivot.rotation = Vector3.ZERO
 		torso_pivot.rotation = Vector3.ZERO
 		sword_pivot.rotation = Vector3.ZERO
+
+
+func play_mapped_animation(state: StringName) -> void:
+	set_animation_state(state)
+
+
+func play_idle() -> void:
+	set_animation_state(&"idle")
+
+
+func play_walk() -> void:
+	set_animation_state(&"walk")
+
+
+func play_melee_attack() -> void:
+	set_animation_state(&"slash")
+
+
+func play_ranged_attack() -> void:
+	set_animation_state(&"ranged")
+
+
+func play_cast() -> void:
+	set_animation_state(&"cast")
+
+
+func play_heal() -> void:
+	set_animation_state(&"heal")
+
+
+func play_hit() -> void:
+	set_animation_state(&"hit")
+
+
+func has_animation_mapping(state: StringName) -> bool:
+	return ANIMATION_MAP.has(state) and not (ANIMATION_MAP[state] as Array).is_empty()
+
+
+func has_imported_animation(state: StringName) -> bool:
+	if animation_player == null or not ANIMATION_MAP.has(state):
+		return false
+	for candidate_value: Variant in ANIMATION_MAP[state]:
+		if animation_player.has_animation(StringName(candidate_value)):
+			return true
+	return false
 
 
 func face_world_position(target_position: Vector3) -> void:
@@ -121,11 +210,21 @@ func apply_damage(amount: int) -> void:
 	health_changed.emit(self)
 
 
+func apply_healing(amount: int) -> int:
+	if is_dead or amount <= 0:
+		return 0
+	var previous_hp := current_hp
+	current_hp = mini(max_hp, current_hp + amount)
+	_update_status_label()
+	health_changed.emit(self)
+	return current_hp - previous_hp
+
+
 func play_hit_reaction(from_position: Vector3) -> void:
 	if current_hp <= 0:
 		await play_death(from_position)
 		return
-	set_animation_state(&"hit")
+	play_hit()
 	_flash(Color.WHITE)
 	var original_position := position
 	var away := (global_position - from_position).normalized()
@@ -141,16 +240,24 @@ func play_hit_reaction(from_position: Vector3) -> void:
 	recover.tween_property(self, "position", original_position, 0.20)
 	await recover.finished
 	_restore_materials()
-	set_animation_state(&"idle")
+	play_idle()
 
 
-func play_death(from_position: Vector3) -> void:
+func play_death(from_position: Vector3 = Vector3.INF) -> void:
 	if is_dead:
 		return
 	is_dead = true
-	animation_state = &"death"
+	set_animation_state(&"death")
 	selection_ring.visible = false
 	_flash(Color("ffb3b3"))
+	if from_position == Vector3.INF:
+		from_position = global_position + Vector3.BACK
+	if using_licensed_model:
+		await get_tree().create_timer(0.65).timeout
+		_restore_materials()
+		status_label.text = "%s  [DOWN]" % unit_name
+		died.emit(self)
+		return
 	var away := (global_position - from_position).normalized()
 	var fall_sign: float = -1.0 if away.x + away.z < 0.0 else 1.0
 	var tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
@@ -167,11 +274,14 @@ func _build_model() -> void:
 	visual_root = Node3D.new()
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
+	_placeholder_root = Node3D.new()
+	_placeholder_root.name = "ProceduralFallback"
+	visual_root.add_child(_placeholder_root)
 
 	torso_pivot = Node3D.new()
 	torso_pivot.name = "TorsoPivot"
 	torso_pivot.position.y = 0.95
-	visual_root.add_child(torso_pivot)
+	_placeholder_root.add_child(torso_pivot)
 	var body_mesh := CapsuleMesh.new()
 	body_mesh.radius = 0.30
 	body_mesh.height = 0.88
@@ -182,8 +292,8 @@ func _build_model() -> void:
 	head_mesh.height = 0.48
 	_add_mesh(torso_pivot, head_mesh, Vector3(0.0, 0.70, 0.0), Color("f2c9a5"))
 
-	left_leg_pivot = _make_limb_pivot("LeftLegPivot", visual_root, Vector3(-0.16, 0.62, 0.0))
-	right_leg_pivot = _make_limb_pivot("RightLegPivot", visual_root, Vector3(0.16, 0.62, 0.0))
+	left_leg_pivot = _make_limb_pivot("LeftLegPivot", _placeholder_root, Vector3(-0.16, 0.62, 0.0))
+	right_leg_pivot = _make_limb_pivot("RightLegPivot", _placeholder_root, Vector3(0.16, 0.62, 0.0))
 	var leg_mesh := BoxMesh.new()
 	leg_mesh.size = Vector3(0.18, 0.62, 0.20)
 	_add_mesh(left_leg_pivot, leg_mesh, Vector3(0.0, -0.30, 0.0), Color("263746"))
@@ -239,6 +349,47 @@ func _build_model() -> void:
 	status_label.modulate = _accent_color
 	add_child(status_label)
 
+	using_licensed_model = _load_licensed_model()
+	_placeholder_root.visible = not using_licensed_model
+
+
+func _load_licensed_model() -> bool:
+	var key := "%d_%d" % [team_id, unit_class_id]
+	var model_path: String = MODEL_PATHS.get(key, "")
+	if model_path.is_empty() or not ResourceLoader.exists(model_path):
+		return false
+	var packed := load(model_path) as PackedScene
+	if packed == null:
+		return false
+	imported_model = packed.instantiate() as Node3D
+	if imported_model == null:
+		return false
+	imported_model.name = "LicensedCharacter"
+	visual_root.add_child(imported_model)
+	animation_player = _find_animation_player(imported_model)
+	return true
+
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child: Node in node.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+
+func _play_imported_animation(state: StringName) -> void:
+	if animation_player == null or not ANIMATION_MAP.has(state):
+		return
+	var candidates: Array = ANIMATION_MAP[state]
+	for candidate_value: Variant in candidates:
+		var candidate := StringName(candidate_value)
+		if animation_player.has_animation(candidate):
+			animation_player.play(candidate)
+			return
+
 
 func _make_limb_pivot(node_name: String, parent: Node3D, at: Vector3) -> Node3D:
 	var pivot := Node3D.new()
@@ -286,4 +437,3 @@ func _restore_materials() -> void:
 func _update_status_label() -> void:
 	if status_label != null:
 		status_label.text = "%s  %d/%d" % [unit_name, current_hp, max_hp]
-

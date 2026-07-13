@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$LogDirectory = Join-Path $ProjectRoot "logs"
+$LogDirectory = Join-Path $ProjectRoot "logs\validation"
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 
 if (-not (Test-Path -LiteralPath $Godot)) {
@@ -45,4 +45,3 @@ Invoke-GodotCheck -Name "main-smoke" -Arguments @(
 )
 
 Write-Host "`nAll Tactical Slash validation checks passed." -ForegroundColor Green
-

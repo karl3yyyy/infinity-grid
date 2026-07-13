@@ -53,6 +53,23 @@ func shake(strength: float, duration: float) -> void:
 	_shake_time = maxf(_shake_time, duration)
 
 
+func pan_by_screen_delta(relative: Vector2) -> void:
+	var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var right := Vector3(forward.z, 0.0, -forward.x)
+	var scale_factor := distance * 0.0018
+	target_focus += (-right * relative.x + forward * relative.y) * scale_factor
+	target_focus.x = clampf(target_focus.x, -7.5, 7.5)
+	target_focus.z = clampf(target_focus.z, -7.5, 7.5)
+
+
+func zoom_by_gesture(distance_delta: float) -> void:
+	target_distance = clampf(target_distance - distance_delta * 0.018, 9.0, 23.0)
+
+
+func rotate_by_gesture(angle_delta: float) -> void:
+	target_yaw += angle_delta
+
+
 func _update_camera(delta: float) -> void:
 	var weight := 1.0 if delta >= 1.0 else 1.0 - exp(-delta * 7.0)
 	focus_point = focus_point.lerp(target_focus, weight)
@@ -72,4 +89,3 @@ func _update_camera(delta: float) -> void:
 		_shake_strength = 0.0
 	global_position = focus_point + offset + shake_offset
 	look_at(focus_point + Vector3(0.0, 0.25, 0.0), Vector3.UP)
-

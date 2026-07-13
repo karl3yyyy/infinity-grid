@@ -1,10 +1,14 @@
 # Tactical Slash
 
-Tactical Slash is a playable 3D turn-based tactics game built with Godot 4.7
-and typed GDScript. Two teams of three licensed CC0 characters fight on a
-10x10 grid: Swordsman, Archer, and Priest. The project ships with real animated
-GLB characters, dungeon and nature scenery, a Poly Haven HDR sky, desktop and
-touch controls, automated tests, and Windows/Web/Android export presets.
+Tactical Slash is a 3D turn-based tactical RPG built with Godot 4. Players
+command a Swordsman, Archer and Priest against an enemy squad with matching
+classes. The battle takes place on a 10x10 grid and uses animated 3D characters,
+class-specific actions, line of sight, healing, and class-aware enemy AI.
+
+[**Play Online**](https://sion-rgb.github.io/tactical-slash/) ·
+[**Download for Windows**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-Windows-x86_64.zip) ·
+[**Download Android APK**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-debug.apk) ·
+[**View Third-Party Asset Licenses**](THIRD_PARTY_ASSETS.md)
 
 ## Play
 
@@ -18,13 +22,25 @@ Open `project.godot` in Godot 4.7 stable and press F6 from
    sight. Priests cast Holy Bolt at range 2-4 and heal allies at range 1-4.
 4. Eliminate all three skeletons to win; losing all three heroes causes defeat.
 
-Desktop controls: left click selects and confirms, right click cancels, mouse
-wheel zooms, WASD/arrow keys pan, Q/E rotate, F11 toggles fullscreen, M toggles
-mute, and Escape opens/closes the menu.
+Desktop/Web controls:
 
-Touch controls: tap selects/confirms, drag pans, pinch zooms, two-finger rotate
-orbits the camera, and long press cancels. UI respects the platform safe area;
-Android Back closes the current mode/menu before exiting.
+- **Left Click:** select, move, and choose a target.
+- **Right Click:** cancel.
+- **WASD / Arrow Keys:** pan the camera.
+- **Q / E:** rotate the camera.
+- **Mouse Wheel:** zoom.
+- **Escape:** pause or close the current menu.
+- **F11:** toggle fullscreen; **M:** toggle mute.
+
+Android controls:
+
+- **Tap:** select and confirm.
+- **Drag:** pan the camera.
+- **Pinch:** zoom.
+- **UI Buttons:** rotate, cancel, and end the turn.
+- Two-finger rotate orbits the camera and long press cancels. The UI respects
+  the platform safe area; Android Back closes the current mode/menu before
+  exiting.
 
 ## Classes
 
@@ -34,10 +50,27 @@ Android Back closes the current mode/menu before exiting.
 | Archer | 10 | 5 | 1 | 4 | Bow shot, range 2-5, line of sight |
 | Priest | 9 | 3 | 1 | 3 | Holy Bolt, range 2-4; Heal 6 HP, range 1-4 |
 
+- **Swordsman:** melee defense and Slash.
+- **Archer:** range 2-5 with line of sight.
+- **Priest:** Heal and Holy Bolt.
+
 Damage from arrows and spells is applied at projectile impact. Healing is
 clamped to maximum HP and cannot target enemies or defeated units. Enemy AI
 uses class-specific positioning and priorities; its Priest heals the lowest HP
 ratio ally below 50%, otherwise it attacks with Dark Bolt.
+
+## Versions, Web, and licensing
+
+- Godot 4.7 stable with typed GDScript and the Compatibility renderer.
+- Blender 5.1.2 for the reproducible 3D asset preparation pipeline.
+- The browser build uses the **Web Single-Threaded** preset without threads,
+  SharedArrayBuffer, extensions, or GDExtension.
+- Character and environment assets are CC0 packs from KayKit and Kenney; the
+  HDR sky is a CC0 Poly Haven asset. See [THIRD_PARTY_ASSETS.md](THIRD_PARTY_ASSETS.md)
+  and [the asset audit](docs/asset-audit.md) for authors, sources, and licenses.
+- Original project code is available under the [MIT License](LICENSE). The MIT
+  License does not replace the separate licenses for third-party assets.
+- Release hashes: [SHA256SUMS.txt](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/SHA256SUMS.txt).
 
 ## Architecture
 
@@ -113,6 +146,12 @@ Serve the Web build over HTTP (not `file://`):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\serve_web.ps1
+```
+
+Prepare the tracked GitHub Pages directory from a fresh Single-Threaded export:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\prepare_github_pages.ps1
 ```
 
 The Android package is `com.sionbarzahd.tacticalslash`, version `0.2.0`

@@ -4,6 +4,7 @@ extends CanvasLayer
 signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
+signal lan_match_requested
 signal restart_pressed
 signal quit_pressed
 signal board_insets_changed(top_pixels: float, bottom_pixels: float)
@@ -24,6 +25,8 @@ var card_views: Array = [[], []]
 var next_views: Array[CardView] = [null, null]
 var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
+## Opponent plays on another phone; only the viewer's own hand is clickable.
+var opponent_is_remote: bool = false
 var opponent_label: String = "BOT"
 var viewer_team: int = 0
 var result_overlay: ColorRect
@@ -68,7 +71,7 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 	for position: int in range(2):
 		var team_id := _team_at(position)
 		var rotated := position == 1
-		var bot_hand := opponent_is_bot and team_id == 1
+		var bot_hand := (opponent_is_bot and team_id == 1) or (opponent_is_remote and position == 1)
 		for slot: int in range(2):
 			var view: CardView = card_views[position][slot]
 			var card: MovementCard = hands[team_id][slot]
@@ -102,11 +105,19 @@ func set_opponent_bot(enabled: bool, difficulty_label: String = "") -> void:
 		hand_titles[1].text = _team_name(_team_at(1))
 
 
+func set_opponent_remote(enabled: bool) -> void:
+	opponent_is_remote = enabled
+	if enabled:
+		opponent_is_bot = false
+
+
 func _team_at(position: int) -> int:
 	return viewer_team if position == 0 else 1 - viewer_team
 
 
 func _team_name(team_id: int) -> String:
+	if opponent_is_remote:
+		return "DU" if team_id == viewer_team else "GEGNER"
 	if team_id == 1 and opponent_is_bot:
 		return opponent_label
 	if opponent_is_bot:
@@ -269,6 +280,7 @@ func _build_main_menu() -> void:
 	add_child(main_menu)
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
+	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 

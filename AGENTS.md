@@ -75,6 +75,10 @@ After modifying files:
 
 Complete only the requested milestone.
 
-Do not implement networking, shop transactions, ranked services, or online
-profiles without an explicit backend milestone. Their menu entries are status
-pages only; the local profile name/avatar is stored on-device.
+Do not implement internet networking, shop transactions, ranked services, or
+online profiles without an explicit backend milestone. Their menu entries are
+status pages only; the local profile name/avatar is stored on-device.
+
+Approved exception: Wi-Fi play. `tools/lan_host.gd` runs on a PC in the same
+network, serves the web export and relays moves between two browsers
+(`scripts/network/`). It stays a relay; every client runs the rules itself.

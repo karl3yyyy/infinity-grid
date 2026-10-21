@@ -65,6 +65,18 @@ static func create_deck() -> Array[MovementCard]:
 	]
 
 
+## Rebuilds cards dealt elsewhere (by the Wi-Fi host) from their names.
+static func cards_from_names(names: Array) -> Array[MovementCard]:
+	var by_name: Dictionary = {}
+	for card: MovementCard in create_deck():
+		by_name[card.card_name] = card
+	var result: Array[MovementCard] = []
+	for card_name: Variant in names:
+		if by_name.has(str(card_name)):
+			result.append(by_name[str(card_name)])
+	return result
+
+
 ## Draws a random set of distinct cards for one match.
 static func draw_match_cards(count: int = 5) -> Array[MovementCard]:
 	var deck := create_deck()

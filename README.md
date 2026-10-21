@@ -83,6 +83,20 @@ Quick play asks for a difficulty, saved with the local profile:
 The search lives in `scripts/battle/bot_ai.gd` and works on a compact copy
 of the match state, separate from scene nodes.
 
+## Wi-Fi play (two phones, no internet)
+
+1. On the PC, double-click `WLAN-Spiel starten.bat`. It exports the web build
+   to `build/web` when scripts or assets changed (Godot export templates must
+   be installed), then prints addresses such as `http://192.168.178.37:8060`.
+   Allow Godot through the Windows firewall when asked.
+2. Open that address in the browser on both phones (same Wi-Fi).
+3. In the game choose **Multiplayer > Im WLAN spielen**. The first two players
+   who join are paired; each phone sees the board from its own side.
+
+The PC (`tools/lan_host.gd`) serves the page on port 8060 and relays moves on
+8061 (`scripts/network/`). Both phones apply the rules themselves. The GitHub
+Pages build cannot use this mode because it is served over HTTPS.
+
 ## Tools, Web, and licensing
 
 - Godot 4.7 stable with typed GDScript and the Compatibility renderer.

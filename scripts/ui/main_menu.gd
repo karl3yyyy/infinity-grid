@@ -3,6 +3,7 @@ extends Control
 
 signal bot_training_requested
 signal local_multiplayer_requested
+signal lan_match_requested
 signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
@@ -159,8 +160,28 @@ func _show_multiplayer() -> void:
 	_content.add_child(_make_label("MULTIPLAYER", 26, UITheme.GOLD_LIGHT))
 	_content.add_child(_make_label("Wähle, wie ihr spielen möchtet.", 15, Color("b9b3cc")))
 	_add_menu_button(_content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person spielen", _start_local_multiplayer)
+	_add_menu_button(_content, "IM WLAN SPIELEN", "Zwei Handys, der PC ist Gastgeber", _start_lan_match)
 	_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
+
+
+func _start_lan_match() -> void:
+	if not LanClient.is_available():
+		_show_lan_help()
+		return
+	close_menu()
+	lan_match_requested.emit()
+
+
+func _show_lan_help() -> void:
+	_clear_content()
+	_content.add_child(_make_label("IM WLAN SPIELEN", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label(
+		"Starte am PC „WLAN-Spiel starten“ und öffne auf beiden Handys die Adresse, die dort angezeigt wird. Diese Version hier kommt aus dem Internet und kann sich nicht mit deinem PC verbinden.",
+		16,
+		Color("b9b3cc")
+	))
+	_add_menu_button(_content, "ZURÜCK", "", _show_multiplayer)
 
 
 func _show_online_page(mode_name: String) -> void:

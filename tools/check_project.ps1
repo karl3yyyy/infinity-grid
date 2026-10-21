@@ -43,6 +43,9 @@ Invoke-GodotCheck -Name "editor-load" -Arguments @(
 Invoke-GodotCheck -Name "core-tests" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--script", "res://tests/test_runner.gd"
 )
+Invoke-GodotCheck -Name "lan-tests" -Arguments @(
+    "--headless", "--path", $ProjectRoot, "--script", "res://tests/lan_test.gd"
+)
 Invoke-GodotCheck -Name "main-smoke" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--quit-after", "120"
 )

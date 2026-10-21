@@ -45,6 +45,7 @@ func setup(
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
 	battle_ui.bot_training_requested.connect(_start_bot_training)
+	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
@@ -88,6 +89,8 @@ func _spawn_armies() -> void:
 func _show_title_menu() -> void:
 	input_locked = true
 	player_controller.enabled = false
+	grid_manager.get_parent().visible = false
+	battle_ui.main_menu.open_menu(false)
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	battle_ui.set_instruction("Choose a mode to begin.")
@@ -97,6 +100,7 @@ func _start_bot_training() -> void:
 	if battle_over:
 		return
 	battle_ui.main_menu.close_menu()
+	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = true
 	battle_ui.set_opponent_bot(true)
 	input_locked = false
@@ -104,6 +108,20 @@ func _start_bot_training() -> void:
 	camera_controller.set_player_view(current_player)
 	_refresh_ui()
 	battle_ui.set_instruction("Player 1: choose a movement card, then a figure and a highlighted destination.")
+
+
+func _start_local_multiplayer() -> void:
+	if battle_over:
+		return
+	battle_ui.main_menu.close_menu()
+	grid_manager.get_parent().visible = true
+	bot_opponent_enabled = false
+	battle_ui.set_opponent_bot(false)
+	input_locked = false
+	player_controller.enabled = true
+	camera_controller.set_player_view(0)
+	_refresh_ui()
+	battle_ui.set_instruction("Player 1: choose a movement card, then pass the device after your move.")
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:

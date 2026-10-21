@@ -2,6 +2,7 @@ class_name MainMenu
 extends Control
 
 signal bot_training_requested
+signal local_multiplayer_requested
 signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
@@ -14,6 +15,7 @@ var profile_name: String = "Spieler"
 var avatar_index: int = 0
 var _panel: PanelContainer
 var _content: VBoxContainer
+var _profile_button: Button
 var _resume_available: bool = false
 
 
@@ -38,7 +40,7 @@ func close_menu() -> void:
 
 func _build_shell() -> void:
 	var backdrop := ColorRect.new()
-	backdrop.color = Color(0.025, 0.055, 0.075, 0.94)
+	backdrop.color = Color("142b2c")
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
@@ -54,39 +56,36 @@ func _build_shell() -> void:
 	margin.add_theme_constant_override("margin_bottom", 18)
 	_panel.add_child(margin)
 	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", 12)
+	_content.add_theme_constant_override("separation", 16)
+	_content.alignment = BoxContainer.ALIGNMENT_CENTER
 	margin.add_child(_content)
+	_profile_button = Button.new()
+	_profile_button.anchor_left = 1.0
+	_profile_button.anchor_right = 1.0
+	_profile_button.offset_left = -210.0
+	_profile_button.offset_top = 18.0
+	_profile_button.offset_right = -22.0
+	_profile_button.offset_bottom = 70.0
+	_profile_button.add_theme_font_size_override("font_size", 15)
+	_profile_button.pressed.connect(_show_profile)
+	add_child(_profile_button)
 	add_to_group("interactive_ui")
 
 
 func _show_home() -> void:
 	_clear_content()
+	_update_profile_button()
 	var eyebrow := _make_label("INFINITY GRID  /  ECHOES OF THE MEADOW", 13, Color("e6bd70"))
 	_content.add_child(eyebrow)
-	_content.add_child(_make_label("Eine Arena. Zwei Seiten. Kein Ende.", 28, Color("f0f4df")))
-	_content.add_child(_make_label("Dein Meister und vier Schüler warten auf den nächsten Zug.", 15, Color("afc2b6")))
-
-	var profile_button := Button.new()
-	profile_button.text = "%s     %s" % [_avatar_initial(), profile_name]
-	profile_button.custom_minimum_size = Vector2(0.0, 48.0)
-	profile_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	profile_button.modulate = AVATAR_COLORS[avatar_index]
-	profile_button.pressed.connect(func() -> void: _show_profile())
-	_content.add_child(profile_button)
-
-	var modes := GridContainer.new()
-	modes.columns = 2
-	modes.add_theme_constant_override("h_separation", 8)
-	modes.add_theme_constant_override("v_separation", 8)
-	_content.add_child(modes)
-	_add_menu_button(modes, "SCHNELLES SPIEL", "Online-Gegner suchen", _show_online_page.bind("SCHNELLES SPIEL"))
-	_add_menu_button(modes, "MEHRSPIELER", "Online-Modi und Einladungen", _show_online_page.bind("MEHRSPIELER"))
-	_add_menu_button(modes, "BOT-TRAINING", "Lokale Partie starten", _start_bot_training)
-	_add_menu_button(modes, "RANKED", "Wertungskampf online", _show_online_page.bind("RANKED"))
-	_add_menu_button(modes, "SAMMLUNG", "Deine Bewegungskarten", _show_collection)
-	_add_menu_button(modes, "SHOP", "Kosmetik und Kartenrücken", _show_online_page.bind("SHOP"))
-	_add_menu_button(modes, "RANGLISTE", "Globale Platzierungen", _show_online_page.bind("RANGLISTE"))
-	_add_menu_button(modes, "FREUNDE", "Freunde und Einladungen", _show_online_page.bind("FREUNDE"))
+	_content.add_child(_make_label("Eine Arena. Zwei Seiten. Kein Ende.", 26, Color("f0f4df")))
+	_content.add_child(_make_label("Dein Meister und vier Schüler warten auf den nächsten Zug.", 14, Color("afc2b6")))
+	var spacer := Control.new()
+	spacer.custom_minimum_size.y = 22.0
+	_content.add_child(spacer)
+	_add_menu_button(_content, "SCHNELLES SPIEL", "Sofort gegen einen Bot", _start_bot_training)
+	_add_menu_button(_content, "MULTIPLAYER", "Lokal auf einem Gerät oder online", _show_multiplayer)
+	_add_menu_button(_content, "SAMMLUNG", "Deine Bewegungskarten", _show_collection)
+	_add_menu_button(_content, "SHOP", "Kosmetik und Kartenrücken", _show_online_page.bind("SHOP"))
 
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 10)
@@ -98,11 +97,21 @@ func _show_home() -> void:
 	quit_button.custom_minimum_size = Vector2(110.0, 42.0)
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	footer.add_child(quit_button)
-	_content.add_child(_make_label("Online-Modi benötigen noch einen Spielserver.", 12, Color("d9a07c")))
+	_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, Color("d9a07c")))
+
+
+func _show_multiplayer() -> void:
+	_clear_content()
+	_content.add_child(_make_label("MULTIPLAYER", 26, Color("f0f4df")))
+	_content.add_child(_make_label("Wähle, wie ihr spielen möchtet.", 15, Color("afc2b6")))
+	_add_menu_button(_content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person spielen", _start_local_multiplayer)
+	_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
+	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
 
 func _show_online_page(mode_name: String) -> void:
 	_clear_content()
+	_update_profile_button()
 	_content.add_child(_make_label(mode_name, 26, Color("f0f4df")))
 	_content.add_child(_make_label(
 		"Die Online-Verbindung ist noch nicht eingerichtet. Es gibt noch keinen Matchmaking-, Freunde- oder Ranglistenserver.",
@@ -110,7 +119,6 @@ func _show_online_page(mode_name: String) -> void:
 		Color("afc2b6")
 	))
 	_content.add_child(_make_label("Dein Profilname und Avatar werden lokal auf diesem Gerät gespeichert.", 14, Color("8fa69a")))
-	_add_menu_button(_content, "BOT-TRAINING STARTEN", "", _start_bot_training)
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
 
@@ -178,6 +186,11 @@ func _start_bot_training() -> void:
 	bot_training_requested.emit()
 
 
+func _start_local_multiplayer() -> void:
+	close_menu()
+	local_multiplayer_requested.emit()
+
+
 func _add_menu_button(parent: Control, title: String, subtitle: String, action: Callable) -> void:
 	var button := Button.new()
 	button.text = title if subtitle.is_empty() else "%s\n%s" % [title, subtitle]
@@ -228,13 +241,24 @@ func _apply_layout() -> void:
 	if viewport_size.x < 720.0:
 		_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		_panel.offset_left = 12.0
-		_panel.offset_top = 12.0
+		_panel.offset_top = 82.0
 		_panel.offset_right = -12.0
 		_panel.offset_bottom = -12.0
 	else:
 		_panel.set_anchors_preset(Control.PRESET_CENTER)
-		_panel.position = Vector2(-330.0, -350.0)
-		_panel.size = Vector2(660.0, 700.0)
+		_panel.position = Vector2(-280.0, -320.0)
+		_panel.size = Vector2(560.0, 640.0)
+	_profile_button.offset_left = -minf(230.0, viewport_size.x - 32.0)
+	_profile_button.offset_right = -18.0
+	_profile_button.offset_top = 14.0
+	_profile_button.offset_bottom = 64.0
+
+
+func _update_profile_button() -> void:
+	if _profile_button == null:
+		return
+	_profile_button.text = "%s   %s" % [_avatar_initial(), profile_name]
+	_profile_button.modulate = AVATAR_COLORS[avatar_index]
 
 
 func _panel_style(color: Color = Color("13272b")) -> StyleBoxFlat:

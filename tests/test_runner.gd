@@ -26,10 +26,15 @@ func _run_tests() -> void:
 	_expect(ui != null, "Card-selection UI exists")
 	_expect(camera != null and camera.projection == Camera3D.PROJECTION_ORTHOGONAL and camera.pitch < deg_to_rad(70.0), "Board uses an oblique camera behind the active side")
 	if battle != null and ui != null:
-		_expect(ui.main_menu.visible and battle.input_locked, "Main menu opens before the first move")
-		battle._start_bot_training()
+		_expect(ui.main_menu.visible and battle.input_locked and not grid.get_parent().visible, "Opaque main menu opens before the board is shown")
+		ui.main_menu.local_multiplayer_requested.emit()
 		await process_frame
-		_expect(not ui.main_menu.visible and not battle.input_locked, "Bot training starts the board from the menu")
+		_expect(not ui.main_menu.visible and not battle.bot_opponent_enabled and grid.get_parent().visible, "Local multiplayer starts with the second hand enabled")
+		battle._show_title_menu()
+		_expect(ui.main_menu.visible and not grid.get_parent().visible, "Returning to the title hides the board again")
+		ui.main_menu.bot_training_requested.emit()
+		await process_frame
+		_expect(not ui.main_menu.visible and battle.bot_opponent_enabled and grid.get_parent().visible, "Quick play starts a visible bot match")
 	if ui != null:
 		ui._apply_responsive_layout(Vector2(390.0, 844.0))
 		_expect(ui.card_layout.columns == 1 and ui.tray.offset_top == -312.0, "Card HUD stacks for portrait mobile screens")

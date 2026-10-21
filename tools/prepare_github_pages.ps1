@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\Sion File\downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe"
+    [string]$Godot = ""
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Ensure-Directory {
+function New-Directory {
     param([Parameter(Mandatory)][string]$Path)
 
     for ($Attempt = 1; $Attempt -le 5; $Attempt++) {
@@ -32,7 +32,7 @@ function Clear-DirectoryContents {
         [Parameter(Mandatory)][string]$AllowedRoot
     )
 
-    Ensure-Directory -Path $Path
+    New-Directory -Path $Path
     $ResolvedAllowedRoot = [System.IO.Path]::GetFullPath($AllowedRoot).TrimEnd("\") + "\"
     $ResolvedPath = [System.IO.Path]::GetFullPath($Path).TrimEnd("\") + "\"
     if (-not $ResolvedPath.StartsWith($ResolvedAllowedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -56,6 +56,11 @@ function Clear-DirectoryContents {
 
 try {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
+    if (-not $Godot) {
+        $GodotPackagePattern = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\GodotEngine.GodotEngine_*"
+        $Godot = Get-ChildItem -Path $GodotPackagePattern -Recurse -Filter "Godot_v4.7-stable_win64_console.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
     $BuildRoot = Join-Path $ProjectRoot "build"
     $WebRoot = Join-Path $BuildRoot "web"
     $SiteRoot = Join-Path $ProjectRoot "site"
@@ -93,8 +98,8 @@ try {
         throw "The Web Single-Threaded export preset is missing or has threads/extensions enabled."
     }
 
-    Ensure-Directory -Path $BuildRoot
-    Ensure-Directory -Path $ExportLogDirectory
+    New-Directory -Path $BuildRoot
+    New-Directory -Path $ExportLogDirectory
     $ResolvedBuildRoot = [System.IO.Path]::GetFullPath($BuildRoot).TrimEnd("\") + "\"
     $ResolvedWebRoot = [System.IO.Path]::GetFullPath($WebRoot)
     if (-not $ResolvedWebRoot.StartsWith($ResolvedBuildRoot, [System.StringComparison]::OrdinalIgnoreCase)) {

@@ -2,6 +2,12 @@ name = "infinity-grid"
 main = "worker.js"
 compatibility_date = "2025-06-01"
 
+# The web build (prepared by tools/publish_online.ps1). Files that exist are
+# served directly; everything else (/play, /index.wasm) reaches worker.js.
+[assets]
+directory = "../../build/online_site"
+binding = "ASSETS"
+
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "Room"

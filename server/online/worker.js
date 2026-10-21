@@ -11,11 +11,18 @@ const CARD_NAMES = [
   "Ember", "Drift", "Zephyr", "Eclipse", "Prism", "Pulse", "Echo", "Serpent", "Viper",
 ];
 
+// Static assets are limited to 25 MiB per file, so the engine's index.wasm is
+// uploaded in parts (tools/publish_online.ps1) and joined here.
+const WASM_PARTS = ["/index.wasm.part0", "/index.wasm.part1"];
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/index.wasm") {
+      return serveSplitWasm(request, env);
+    }
     if (url.pathname !== "/play") {
-      return new Response("Infinity Grid online server", { status: 200 });
+      return new Response("Not found", { status: 404 });
     }
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("Expected a WebSocket", { status: 426 });
@@ -98,6 +105,28 @@ export class Room {
   webSocketError(socket) {
     this.webSocketClose(socket);
   }
+}
+
+async function serveSplitWasm(request, env) {
+  const parts = await Promise.all(
+    WASM_PARTS.map((path) => env.ASSETS.fetch(new Request(new URL(path, request.url))))
+  );
+  if (parts.some((part) => !part.ok)) {
+    return new Response("Engine file missing", { status: 500 });
+  }
+  const length = parts.reduce((sum, part) => sum + Number(part.headers.get("Content-Length") || 0), 0);
+  const { readable, writable } = new TransformStream();
+  (async () => {
+    for (const part of parts) {
+      await part.body.pipeTo(writable, { preventClose: true });
+    }
+    await writable.close();
+  })();
+  const headers = { "Content-Type": "application/wasm", "Cache-Control": "public, max-age=3600" };
+  if (length > 0) {
+    headers["Content-Length"] = String(length);
+  }
+  return new Response(readable, { headers });
 }
 
 function drawCards(count) {

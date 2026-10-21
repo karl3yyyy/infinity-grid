@@ -105,16 +105,21 @@ Durable Object per room (`server/online/`, free Workers plan). It speaks the
 same protocol as the PC host, which can stand in for tests:
 `INFINITY_GRID_ONLINE=ws://127.0.0.1:8061` on desktop.
 
-Deploy once (needs Node.js and a Cloudflare account):
+The same Worker also serves the game itself:
+**https://infinity-grid.infinitygrid.workers.dev** (marked `noindex`). The
+repository stays private; GitHub Pages would need it public.
+
+Publish a new version (needs Node.js and `npx wrangler login`):
 
 ```
-cd server/online
-npx wrangler deploy
+powershell -File tools/prepare_github_pages.ps1 -Godot <path to Godot console exe>
+powershell -File tools/publish_online.ps1
 ```
 
-Then put the printed address as `wss://...workers.dev` into
-`ONLINE_SERVER_URL` in `scripts/network/match_client.gd`, rebuild the web
-export and publish `site/`. The menu shows Online only when that address is set.
+`publish_online.ps1` copies `site/` to `build/online_site`, splits
+`index.wasm` into two parts (Cloudflare allows 25 MiB per file; `worker.js`
+joins them) and deploys. `ONLINE_SERVER_URL` in
+`scripts/network/match_client.gd` points at the same Worker.
 
 ## Tools, Web, and licensing
 

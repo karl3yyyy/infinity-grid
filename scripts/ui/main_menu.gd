@@ -45,9 +45,17 @@ func _build_shell() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
 
+	var centerer := CenterContainer.new()
+	centerer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	centerer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centerer)
+
 	_panel = PanelContainer.new()
+	_panel.custom_minimum_size = Vector2(560.0, 640.0)
+	_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_panel.add_theme_stylebox_override("panel", _panel_style())
-	add_child(_panel)
+	centerer.add_child(_panel)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 22)
@@ -56,6 +64,9 @@ func _build_shell() -> void:
 	margin.add_theme_constant_override("margin_bottom", 18)
 	_panel.add_child(margin)
 	_content = VBoxContainer.new()
+	_content.custom_minimum_size.x = 516.0
+	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_theme_constant_override("separation", 16)
 	_content.alignment = BoxContainer.ALIGNMENT_CENTER
 	margin.add_child(_content)
@@ -239,15 +250,11 @@ func _apply_layout() -> void:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x < 720.0:
-		_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		_panel.offset_left = 12.0
-		_panel.offset_top = 82.0
-		_panel.offset_right = -12.0
-		_panel.offset_bottom = -12.0
+		_panel.custom_minimum_size = Vector2(maxf(220.0, viewport_size.x - 24.0), maxf(420.0, viewport_size.y - 88.0))
+		_content.custom_minimum_size.x = maxf(176.0, viewport_size.x - 68.0)
 	else:
-		_panel.set_anchors_preset(Control.PRESET_CENTER)
-		_panel.position = Vector2(-280.0, -320.0)
-		_panel.size = Vector2(560.0, 640.0)
+		_panel.custom_minimum_size = Vector2(560.0, 640.0)
+		_content.custom_minimum_size.x = 516.0
 	_profile_button.offset_left = -minf(230.0, viewport_size.x - 32.0)
 	_profile_button.offset_right = -18.0
 	_profile_button.offset_top = 14.0

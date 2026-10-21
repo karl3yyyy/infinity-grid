@@ -1,14 +1,15 @@
 # Architecture notes
 
-`Main` builds the licensed environment and wires focused systems.
-`BattleManager` owns battle flow but delegates coordinates, line of sight, and
-paths to `GridManager`; motion to `UnitMovement`; melee, projectile, and healing
-timing to action classes; pointer and gesture projection to `PlayerController`;
-and bounded class-specific decisions to `EnemyController`. Signals report state,
-health, death, actions, and controller events without scene-path guesses.
+`Main` builds the meadow environment and wires the game systems.
+`OnitamaBattleManager` owns card dealing, turn flow, capture rules, and the local
+bot. `GridManager` owns the single 5x5 cylindrical board; `MovementCard` defines
+relative legal destinations; `UnitMovement` animates one authoritative unit;
+`PlayerController` maps screen input to logical cells; and `CameraController`
+frames the board from the player's side.
 
-Authoritative state flows from `BattleUnit.grid_position` and each
-`GridCell.occupant`; `Node3D.position` is updated only after a validated path.
-`UnitClassData` is the single source for combat stats and ranges. `BattleUnit`
-maps semantic animation states to the clips inside each processed GLB, keeping
-model structure independent from combat and AI rules.
+`BattleUnit.grid_position` and `GridCell.occupant` are authoritative. Side-strip
+tiles and repeated figure visuals are render-only projections; clicks on them
+map to the same central coordinates. The bot evaluates legal card moves and
+prefers Master captures and moves toward the opposing Master. `MainMenu` stores a
+local display name/avatar and exposes collection data; online menu destinations
+remain placeholders until an online backend exists.

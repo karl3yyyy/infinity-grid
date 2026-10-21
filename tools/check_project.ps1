@@ -47,4 +47,4 @@ Invoke-GodotCheck -Name "main-smoke" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--quit-after", "120"
 )
 
-Write-Host "`nAll Tactical Slash validation checks passed." -ForegroundColor Green
+Write-Host "`nAll Infinity Grid validation checks passed." -ForegroundColor Green

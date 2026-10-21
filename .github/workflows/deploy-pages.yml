@@ -1,4 +1,4 @@
-name: Deploy Tactical Slash Web
+name: Deploy Infinity Grid Web
 
 on:
   push:

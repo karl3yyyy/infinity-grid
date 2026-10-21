@@ -1,7 +1,6 @@
 extends Node3D
 
 const GridManagerScript := preload("res://scripts/grid/grid_manager.gd")
-const TurnManagerScript := preload("res://scripts/battle/turn_manager.gd")
 const BattleManagerScript := preload("res://scripts/battle/onitama_battle_manager.gd")
 const PlayerControllerScript := preload("res://scripts/controllers/player_controller.gd")
 const UnitMovementScript := preload("res://scripts/units/unit_movement.gd")
@@ -34,9 +33,6 @@ func _ready() -> void:
 	battle_ui.name = "BattleUI"
 	add_child(battle_ui)
 
-	var turn_manager: TurnManager = TurnManagerScript.new()
-	turn_manager.name = "TurnManager"
-	add_child(turn_manager)
 	var unit_movement: UnitMovement = UnitMovementScript.new()
 	unit_movement.name = "UnitMovement"
 	add_child(unit_movement)
@@ -50,7 +46,6 @@ func _ready() -> void:
 	battle_manager.setup(
 		grid_manager,
 		camera_controller,
-		turn_manager,
 		battle_ui,
 		player_controller,
 		unit_movement,

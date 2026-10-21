@@ -23,7 +23,7 @@ REQUIRED_ANIMATIONS = {
 
 def parse_args() -> argparse.Namespace:
     arguments = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    parser = argparse.ArgumentParser(description="Prepare Tactical Slash CC0 assets")
+    parser = argparse.ArgumentParser(description="Prepare Infinity Grid CC0 assets")
     parser.add_argument("--project-root", required=True, type=Path)
     return parser.parse_args(arguments)
 
@@ -106,7 +106,7 @@ def normalize_character(target_height: float = 1.85) -> float:
     if height <= 0.01:
         raise RuntimeError("Character has no measurable mesh height")
     scale = target_height / height
-    root = bpy.data.objects.new("TacticalSlashCharacter", None)
+    root = bpy.data.objects.new("InfinityGridCharacter", None)
     bpy.context.collection.objects.link(root)
     for item in list(bpy.context.scene.objects):
         if item == root or item.parent is not None:

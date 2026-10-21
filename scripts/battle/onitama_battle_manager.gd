@@ -7,7 +7,6 @@ const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 
 var grid_manager: GridManager
 var camera_controller: CameraController
-var turn_manager: TurnManager
 var battle_ui: OnitamaUI
 var player_controller: PlayerController
 var unit_movement: UnitMovement
@@ -30,7 +29,6 @@ var bot_opponent_enabled: bool = true
 func setup(
 	grid: GridManager,
 	camera: CameraController,
-	turns: TurnManager,
 	ui: OnitamaUI,
 	player_input: PlayerController,
 	movement: UnitMovement,
@@ -38,7 +36,6 @@ func setup(
 ) -> void:
 	grid_manager = grid
 	camera_controller = camera
-	turn_manager = turns
 	battle_ui = ui
 	battle_ui.set_opponent_bot(bot_opponent_enabled)
 	player_controller = player_input
@@ -92,7 +89,6 @@ func _show_title_menu() -> void:
 	input_locked = true
 	player_controller.enabled = false
 	camera_controller.set_player_view(0)
-	turn_manager.set_state(TurnManager.BattleState.BATTLE_START)
 	_refresh_ui()
 	battle_ui.set_instruction("Choose a mode to begin.")
 
@@ -106,7 +102,6 @@ func _start_bot_training() -> void:
 	input_locked = false
 	player_controller.enabled = true
 	camera_controller.set_player_view(current_player)
-	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
 	_refresh_ui()
 	battle_ui.set_instruction("Player 1: choose a movement card, then a figure and a highlighted destination.")
 
@@ -177,7 +172,6 @@ func _perform_move(destination: Vector2i) -> void:
 	var captured_master := captured_unit != null and captured_unit.is_master
 	grid_manager.clear_highlights()
 	if captured_unit != null:
-		captured_unit.apply_damage(captured_unit.current_hp)
 		await captured_unit.play_death(moving_unit.global_position)
 	var path: Array[Vector2i] = [source, destination]
 	await unit_movement.move_unit(moving_unit, path, grid_manager)
@@ -203,7 +197,6 @@ func _advance_turn() -> void:
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	input_locked = bot_turn
 	player_controller.enabled = not bot_turn
-	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
 	_refresh_ui()
 	if bot_turn:
 		battle_ui.set_instruction("The bot is thinking...")
@@ -283,7 +276,6 @@ func _finish_battle(winner: int) -> void:
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
-	turn_manager.set_state(TurnManager.BattleState.VICTORY if winner == 0 else TurnManager.BattleState.DEFEAT)
 	battle_ui.show_result("PLAYER %d WINS" % (winner + 1))
 
 

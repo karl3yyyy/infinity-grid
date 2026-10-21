@@ -1,22 +1,19 @@
-# Tactical Slash Project Instructions
+# Infinity Grid Project Instructions
 
 ## Project goal
 
-Build a playable 3D turn-based tactical grid game in Godot 4 using GDScript.
+Build Infinity Grid, a playable 3D turn-based card strategy game in Godot 4 using GDScript.
 
 The first playable prototype must contain:
 
-- A 10x10 square grid with pathfinding obstacles.
-- Three player-controlled swordsmen.
-- Three AI enemy swordsmen.
-- Mouse-based unit and tile selection.
-- Movement range highlighting.
-- Grid-based pathfinding.
-- Player and enemy turns.
-- A melee slash attack.
-- Damage, hit reaction and death.
-- Win and lose conditions.
-- Placeholder models where final assets do not exist.
+- One 5x5 board with horizontal wraparound; top and bottom edges stay closed.
+- Five movement cards, two cards per side, and one shared pass card.
+- A Master and four Students per side.
+- Card-based legal-move highlighting and capture.
+- Capturing the opposing Master wins the match.
+- A local bot opponent for Bot Training.
+- Render-only side projections that map back to the same logical cells and units.
+- An oblique player-side camera and responsive main menu.
 
 ## Technical requirements
 
@@ -37,33 +34,25 @@ The first playable prototype must contain:
 
 Separate the project into these systems:
 
-1. GridManager
-2. GridCell data
-3. Unit
-4. UnitMovement
-5. TurnManager
-6. BattleManager
-7. PlayerController
-8. EnemyController
-9. AttackAction
-10. BattleUI
+1. GridManager and GridCell data
+2. BattleUnit and UnitMovement
+3. MovementCard
+4. OnitamaBattleManager, including the local bot
+5. PlayerController
+6. CameraController
+7. OnitamaUI and MainMenu
 
-Supporting focused systems include CameraController, EnemyController,
-AttackAction, DamageNumber and HitEffect. Keep each responsibility separate.
+Keep game rules separate from rendering and keep edge projections non-authoritative.
 
-## Combat requirements
+## Move and capture requirements
 
-The slash attack sequence must be:
+Every move must:
 
-1. Validate that the target is an adjacent enemy.
-2. Rotate the attacker toward the target.
-3. Play the slash animation.
-4. Apply damage only at the animation hit event.
-5. Play hit reaction, sound and placeholder hit effect.
-6. Play death animation when HP reaches zero.
-7. End the acting unit's action only after the animation finishes.
-
-Do not apply damage immediately when the attack button is pressed.
+1. Match one of the selected card's relative offsets.
+2. Wrap horizontal coordinates with modulo; reject moves past the top or bottom.
+3. Capture an opposing unit on the destination; capturing its Master ends the match.
+4. Animate the one authoritative unit while syncing its visual edge projections.
+5. Exchange the used card with the shared pass card before changing turns.
 
 ## Development workflow
 
@@ -85,15 +74,6 @@ After modifying files:
 
 Complete only the requested milestone.
 
-Do not add:
-
-- Multiplayer
-- Inventory
-- Equipment
-- Dialogue systems
-- Procedural worlds
-- Online services
-- Save systems
-- Complex shaders
-
-unless explicitly requested.
+Do not implement networking, shop transactions, ranked services, or online
+profiles without an explicit backend milestone. Their menu entries are status
+pages only; the local profile name/avatar is stored on-device.

@@ -25,7 +25,7 @@ $MimeTypes = @{
 $Listener = [System.Net.HttpListener]::new()
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
 $Listener.Start()
-Write-Host "Serving Tactical Slash at http://127.0.0.1:$Port/"
+Write-Host "Serving Infinity Grid at http://127.0.0.1:$Port/"
 
 try {
     while ($Listener.IsListening) {

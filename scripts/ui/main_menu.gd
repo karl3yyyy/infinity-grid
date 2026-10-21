@@ -61,7 +61,7 @@ func _build_shell() -> void:
 
 func _show_home() -> void:
 	_clear_content()
-	var eyebrow := _make_label("RING DUEL  /  ECHOES OF THE MEADOW", 13, Color("e6bd70"))
+	var eyebrow := _make_label("INFINITY GRID  /  ECHOES OF THE MEADOW", 13, Color("e6bd70"))
 	_content.add_child(eyebrow)
 	_content.add_child(_make_label("Eine Arena. Zwei Seiten. Kein Ende.", 28, Color("f0f4df")))
 	_content.add_child(_make_label("Dein Meister und vier Schüler warten auf den nächsten Zug.", 15, Color("afc2b6")))

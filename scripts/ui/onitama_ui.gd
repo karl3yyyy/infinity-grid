@@ -181,7 +181,7 @@ func _build_ui() -> void:
 	menu_box.add_theme_constant_override("separation", 14)
 	menu_overlay.add_child(menu_box)
 	var title := Label.new()
-	title.text = "RING DUEL"
+	title.text = "INFINITY GRID"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	menu_box.add_child(title)

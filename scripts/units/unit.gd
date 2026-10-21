@@ -1,46 +1,22 @@
 class_name BattleUnit
 extends Node3D
 
-signal health_changed(unit: BattleUnit)
 signal died(unit: BattleUnit)
 
 const MODEL_PATHS: Dictionary = {
-	"0_0": "res://assets/characters/player/player_swordsman.glb",
-	"0_1": "res://assets/characters/player/player_archer.glb",
-	"0_2": "res://assets/characters/player/player_priest.glb",
-	"1_0": "res://assets/characters/enemy/enemy_swordsman.glb",
-	"1_1": "res://assets/characters/enemy/enemy_archer.glb",
-	"1_2": "res://assets/characters/enemy/enemy_priest.glb",
+	0: "res://assets/characters/player/player_swordsman.glb",
+	1: "res://assets/characters/enemy/enemy_swordsman.glb",
 }
 const ANIMATION_MAP: Dictionary = {
 	&"idle": [&"Idle", &"idle", &"Rig|Idle"],
 	&"walk": [&"Walking_A", &"Walk", &"walk", &"Rig|Walking_A"],
-	&"slash": [&"1H_Melee_Attack_Slice_Horizontal", &"Melee_Attack", &"Attack", &"Rig|1H_Melee_Attack_Slice_Horizontal"],
-	&"ranged": [&"2H_Ranged_Shoot", &"Ranged_Shoot", &"Shoot", &"Rig|2H_Ranged_Shoot"],
-	&"cast": [&"Spellcast_Shoot", &"Spellcasting", &"Spellcast_Long", &"Magic_Attack", &"Rig|Spellcast_Shoot"],
-	&"heal": [&"Spellcast_Shoot", &"Spellcasting", &"Spellcast_Long", &"Magic_Attack", &"Rig|Spellcast_Shoot"],
-	&"hit": [&"Hit_A", &"Hit", &"hit", &"Rig|Hit_A"],
 	&"death": [&"Death_A", &"Death", &"death", &"Rig|Death_A"],
 }
 
 var unit_name: String = "Unit"
 var team_id: int = 0
-var max_hp: int = 12
-var current_hp: int = 12
-var attack_power: int = 5
-var defense: int = 2
-var movement_range: int = 4
-var attack_min_range: int = 1
-var attack_range: int = 1
-var heal_min_range: int = 0
-var heal_range: int = 0
-var heal_power: int = 0
-var unit_class_id: int = UnitClassData.UnitClass.SWORDSMAN
-var class_display_name: String = "Swordsman"
 var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
-var has_moved: bool = false
-var has_attacked: bool = false
 var is_dead: bool = false
 var animation_state: StringName = &"idle"
 
@@ -71,27 +47,13 @@ func configure(
 	new_team_id: int,
 	coordinate: Vector2i,
 	team_color: Color,
-	accent_color: Color,
-	new_class_id: int = UnitClassData.UnitClass.SWORDSMAN
+	accent_color: Color
 ) -> void:
 	unit_name = display_name
 	team_id = new_team_id
 	grid_position = coordinate
 	_team_color = team_color
 	_accent_color = accent_color
-	unit_class_id = new_class_id
-	var class_data := UnitClassData.create(new_class_id)
-	class_display_name = class_data.display_name
-	max_hp = class_data.max_hp
-	current_hp = max_hp
-	attack_power = class_data.attack_power
-	defense = class_data.defense
-	movement_range = class_data.movement_range
-	attack_min_range = class_data.attack_min_range
-	attack_range = class_data.attack_max_range
-	heal_min_range = class_data.heal_min_range
-	heal_range = class_data.heal_max_range
-	heal_power = class_data.heal_power
 	name = display_name.replace(" ", "_")
 
 
@@ -145,29 +107,8 @@ func create_wrap_projections(parent: Node, board_width: float) -> void:
 	_sync_wrap_projections()
 
 
-func begin_turn() -> void:
-	has_moved = false
-	has_attacked = false
-	set_exhausted(false)
-
-
-func finish_action() -> void:
-	has_moved = true
-	has_attacked = true
-	set_exhausted(true)
-
-
-func can_act() -> bool:
-	return not is_dead and (not has_moved or not has_attacked)
-
-
 func set_selected(value: bool) -> void:
 	selection_ring.visible = value and not is_dead
-
-
-func set_exhausted(value: bool) -> void:
-	for index: int in range(_materials.size()):
-		_materials[index].albedo_color = _base_colors[index] * (0.48 if value else 1.0)
 
 
 func set_animation_state(state: StringName) -> void:
@@ -183,10 +124,6 @@ func set_animation_state(state: StringName) -> void:
 		sword_pivot.rotation = Vector3.ZERO
 
 
-func play_mapped_animation(state: StringName) -> void:
-	set_animation_state(state)
-
-
 func play_idle() -> void:
 	set_animation_state(&"idle")
 
@@ -195,84 +132,10 @@ func play_walk() -> void:
 	set_animation_state(&"walk")
 
 
-func play_melee_attack() -> void:
-	set_animation_state(&"slash")
-
-
-func play_ranged_attack() -> void:
-	set_animation_state(&"ranged")
-
-
-func play_cast() -> void:
-	set_animation_state(&"cast")
-
-
-func play_heal() -> void:
-	set_animation_state(&"heal")
-
-
-func play_hit() -> void:
-	set_animation_state(&"hit")
-
-
-func has_animation_mapping(state: StringName) -> bool:
-	return ANIMATION_MAP.has(state) and not (ANIMATION_MAP[state] as Array).is_empty()
-
-
-func has_imported_animation(state: StringName) -> bool:
-	if animation_player == null or not ANIMATION_MAP.has(state):
-		return false
-	for candidate_value: Variant in ANIMATION_MAP[state]:
-		if animation_player.has_animation(StringName(candidate_value)):
-			return true
-	return false
-
-
 func face_world_position(target_position: Vector3) -> void:
 	var flat_target := Vector3(target_position.x, global_position.y, target_position.z)
 	if global_position.distance_squared_to(flat_target) > 0.001:
 		look_at(flat_target, Vector3.UP, true)
-
-
-func apply_damage(amount: int) -> void:
-	if is_dead:
-		return
-	current_hp = maxi(0, current_hp - amount)
-	_update_status_label()
-	health_changed.emit(self)
-
-
-func apply_healing(amount: int) -> int:
-	if is_dead or amount <= 0:
-		return 0
-	var previous_hp := current_hp
-	current_hp = mini(max_hp, current_hp + amount)
-	_update_status_label()
-	health_changed.emit(self)
-	return current_hp - previous_hp
-
-
-func play_hit_reaction(from_position: Vector3) -> void:
-	if current_hp <= 0:
-		await play_death(from_position)
-		return
-	play_hit()
-	_flash(Color.WHITE)
-	var original_position := position
-	var away := (global_position - from_position).normalized()
-	away.y = 0.0
-	var tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.set_parallel(true)
-	tween.tween_property(torso_pivot, "rotation_degrees:x", -20.0, 0.10)
-	tween.tween_property(self, "position", original_position + away * 0.16, 0.10)
-	await tween.finished
-	var recover := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	recover.set_parallel(true)
-	recover.tween_property(torso_pivot, "rotation_degrees:x", 0.0, 0.20)
-	recover.tween_property(self, "position", original_position, 0.20)
-	await recover.finished
-	_restore_materials()
-	play_idle()
 
 
 func play_death(from_position: Vector3 = Vector3.INF) -> void:
@@ -287,7 +150,7 @@ func play_death(from_position: Vector3 = Vector3.INF) -> void:
 	if using_licensed_model:
 		await get_tree().create_timer(0.65).timeout
 		_restore_materials()
-		status_label.text = "%s  [DOWN]" % unit_name
+		status_label.text = "%s  [DOWN]" % _role_name()
 		died.emit(self)
 		return
 	var away := (global_position - from_position).normalized()
@@ -298,7 +161,7 @@ func play_death(from_position: Vector3 = Vector3.INF) -> void:
 	tween.tween_property(visual_root, "position:y", 0.18, 0.58)
 	await tween.finished
 	_restore_materials()
-	status_label.text = "%s  [DOWN]" % unit_name
+	status_label.text = "%s  [DOWN]" % _role_name()
 	died.emit(self)
 
 
@@ -401,8 +264,7 @@ func _build_model() -> void:
 
 
 func _load_licensed_model() -> bool:
-	var key := "%d_%d" % [team_id, unit_class_id]
-	var model_path: String = MODEL_PATHS.get(key, "")
+	var model_path: String = MODEL_PATHS.get(team_id, "")
 	if model_path.is_empty() or not ResourceLoader.exists(model_path):
 		return false
 	var packed := load(model_path) as PackedScene
@@ -483,8 +345,11 @@ func _restore_materials() -> void:
 
 func _update_status_label() -> void:
 	if status_label != null:
-		var title := "MASTER" if is_master else "STUDENT"
-		status_label.text = "%s  %d/%d" % [title, current_hp, max_hp]
+		status_label.text = _role_name()
+
+
+func _role_name() -> String:
+	return "MASTER" if is_master else "STUDENT"
 
 
 func _sync_wrap_projections() -> void:

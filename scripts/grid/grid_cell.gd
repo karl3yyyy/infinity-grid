@@ -8,13 +8,10 @@ enum Highlight {
 	MOVE,
 	ATTACK,
 	OCCUPIED,
-	BLOCKED,
 }
 
 var coordinate: Vector2i
 var world_position: Vector3
-var walkable: bool = true
-var movement_cost: int = 1
 var occupant: Node = null
 var highlight: Highlight = Highlight.NORMAL
 var visual: MeshInstance3D = null

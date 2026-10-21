@@ -35,23 +35,23 @@ function Invoke-Export {
     }
 }
 
-Invoke-Export "Windows Desktop" "--export-release" "build\windows\TacticalSlash.exe" "windows.log"
+Invoke-Export "Windows Desktop" "--export-release" "build\windows\InfinityGrid.exe" "windows.log"
 Invoke-Export "Web Single-Threaded" "--export-release" "build\web\index.html" "web.log"
-Invoke-Export "Android APK" "--export-debug" "build\android\TacticalSlash-debug.apk" "android.log"
+Invoke-Export "Android APK" "--export-debug" "build\android\InfinityGrid-debug.apk" "android.log"
 
-$WindowsZip = Join-Path $PackageDirectory "TacticalSlash-Windows-x86_64.zip"
-$WebZip = Join-Path $PackageDirectory "TacticalSlash-Web.zip"
+$WindowsZip = Join-Path $PackageDirectory "InfinityGrid-Windows-x86_64.zip"
+$WebZip = Join-Path $PackageDirectory "InfinityGrid-Web.zip"
 if (Test-Path -LiteralPath $WindowsZip) { Remove-Item -LiteralPath $WindowsZip -Force }
 if (Test-Path -LiteralPath $WebZip) { Remove-Item -LiteralPath $WebZip -Force }
 Compress-Archive -Path (Join-Path $BuildRoot "windows\*") -DestinationPath $WindowsZip -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $BuildRoot "web\*") -DestinationPath $WebZip -CompressionLevel Optimal
 
 $Artifacts = @(
-    "windows\TacticalSlash.exe",
+    "windows\InfinityGrid.exe",
     "web\index.html",
-    "android\TacticalSlash-debug.apk",
-    "packages\TacticalSlash-Windows-x86_64.zip",
-    "packages\TacticalSlash-Web.zip"
+    "android\InfinityGrid-debug.apk",
+    "packages\InfinityGrid-Windows-x86_64.zip",
+    "packages\InfinityGrid-Web.zip"
 )
 $ArtifactRecords = foreach ($relative in $Artifacts) {
     $path = Join-Path $BuildRoot $relative
@@ -61,15 +61,15 @@ $ArtifactRecords = foreach ($relative in $Artifacts) {
         sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
     }
 }
-$GitCommit = git -c safe.directory='D:/GameProjects' -C $ProjectRoot rev-parse HEAD
+$GitCommit = git -C $ProjectRoot rev-parse HEAD
 $Manifest = [ordered]@{
-    game = "Tactical Slash"
+    game = "Infinity Grid"
     version = "0.2.0"
     godot = (& $Godot --version).Trim()
     blender = (& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" --version | Select-Object -First 1).Trim()
     build_date = (Get-Date).ToUniversalTime().ToString("o")
     git_commit = $GitCommit
-    tests = "34 core assertions plus editor-load and main-scene smoke checks passed"
+    tests = "Editor import, core integration suite, and main-scene smoke check passed"
     artifacts = $ArtifactRecords
 }
 $Manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $BuildRoot "build_manifest.json") -Encoding UTF8

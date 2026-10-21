@@ -1,23 +1,20 @@
-# Tactical Slash
+# Infinity Grid
 
-Tactical Slash is a 3D strategy game built with Godot 4. Play locally against a
-simple bot as a Master and four Students on a 5x5 cylindrical board. Its left
-and right edge projections show the same units and tiles, not additional game
-pieces. Five movement cards are dealt between both sides and a shared pass
-space; after each move, the used card trades places with the pass card. Capture
-the opposing Master to win.
+Infinity Grid is a 3D card strategy game built with Godot 4. Play locally
+against a simple bot as a Master and four Students on one 5x5 cylindrical
+board. Its left and right edge projections show the same units and tiles, not
+additional game pieces. Five movement cards are dealt between both sides and a
+shared pass space; after each move, the used card trades places with the pass
+card. Capture the opposing Master to win.
 
-[**Play Online**](https://sion-rgb.github.io/tactical-slash/) ·
-[**Download for Windows**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-Windows-x86_64.zip) ·
-[**Download Android APK**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-debug.apk) ·
-[**View Third-Party Asset Licenses**](THIRD_PARTY_ASSETS.md)
+[**Third-Party Asset Licenses**](THIRD_PARTY_ASSETS.md)
 
 ## Play
 
 Open `project.godot` in Godot 4.7 stable and press F6 from
-`scenes/main.tscn`, or run the exported build. Select **Bot-Training** from the
-start menu to play locally. The profile name and avatar are saved on this
-device. Online menus are present, but matchmaking, friends, ranked, and shop
+`scenes/main.tscn`, or run the exported build. Choose **Bot-Training** to start
+a local match. The profile name and avatar are saved on this device. The menu
+also shows planned online modes, but matchmaking, friends, ranked, and shop
 services need a backend and are not connected yet.
 
 1. Choose one of your two movement cards.
@@ -25,8 +22,8 @@ services need a backend and are not connected yet.
 3. Move onto an opponent's figure to capture it. Capturing the opposing Master
   wins the game.
 4. The played card moves to the shared pass space; take the card that was there.
-5. The camera turns behind each side as the turn changes. Playable edge
-  projections map to the same wrapped board coordinates.
+5. The camera stays behind Player 1 during bot training. Edge projections map
+  to the same wrapped coordinates on the single board.
 
 Desktop/Web controls:
 
@@ -54,11 +51,10 @@ The five shuffled cards are **Crane**, **Wave**, **Comet**, **Shell**, and
 **Vortex**. Each card defines three relative moves. Horizontal moves wrap around
 the board; moves past the top or bottom edge are invalid. Player 2's forward
 direction is mirrored. The HUD shows both hands and the shared pass card.
-The camera switches to the opposite side of the same board after each move. On
-portrait screens, the card tray stacks vertically to keep the board and controls
-readable.
+During bot training, the camera stays behind the player. On portrait screens,
+the card tray stacks vertically to keep the board and controls readable.
 
-## Versions, Web, and licensing
+## Tools, Web, and licensing
 
 - Godot 4.7 stable with typed GDScript and the Compatibility renderer.
 - Blender 5.1.2 for the reproducible 3D asset preparation pipeline.
@@ -70,19 +66,10 @@ readable.
   and [the asset audit](docs/asset-audit.md) for authors, sources, and licenses.
 - Original project code is available under the [MIT License](LICENSE). The MIT
   License does not replace the separate licenses for third-party assets.
-- Release hashes: [SHA256SUMS.txt](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/SHA256SUMS.txt).
 
 ## Architecture
 
-- `scripts/grid`: logical cells, occupancy, cylindrical neighbors, and paths.
-- `scripts/units`: unit state, GLB loading, animation mapping, and movement.
-- `scripts/battle`: movement cards, card exchange, turn flow, and capture rules.
-- `scripts/controllers`: desktop/touch input.
-- `scripts/camera`: smooth tactical pan, orbit, zoom, gesture input, and shake.
-- `scripts/ui`: responsive safe-area HUD, actions, menu, and results.
-- `scripts/effects`: hit, projectile, healing, and floating-number effects.
-- `tools`: Blender asset preparation, validation, Android setup, release build,
-  and local Web serving.
+ `scripts/effects`: hit, projectile, healing, and floating-number effects.
 - `tests`: headless integration and rule assertions.
 
 `BattleUnit.grid_position` and `GridCell.occupant` are authoritative. Rendered
@@ -98,8 +85,8 @@ Set-Location D:\GameProjects
 powershell -ExecutionPolicy Bypass -File .\tools\check_project.ps1
 ```
 
-This performs editor/resource loading, 34 core assertions, and a Main-scene
-smoke test. Logs are written to `logs/validation/`; Blender and export logs use
+This performs editor/resource loading, core integration assertions, and a
+Main-scene smoke test. Logs are written to `logs/validation/`; Blender and export logs use
 `logs/blender/` and `logs/export/`.
 
 ## Rebuild 3D assets
@@ -133,11 +120,11 @@ powershell -ExecutionPolicy Bypass -File .\tools\build_release.ps1
 
 Outputs:
 
-- `build/windows/TacticalSlash.exe`
+- `build/windows/InfinityGrid.exe`
 - `build/web/index.html`
-- `build/android/TacticalSlash-debug.apk`
-- `build/packages/TacticalSlash-Windows-x86_64.zip`
-- `build/packages/TacticalSlash-Web.zip`
+- `build/android/InfinityGrid-debug.apk`
+- `build/packages/InfinityGrid-Windows-x86_64.zip`
+- `build/packages/InfinityGrid-Web.zip`
 - `build/build_manifest.json`
 - `build/SHA256SUMS.txt`
 
@@ -153,6 +140,6 @@ Prepare the tracked GitHub Pages directory from a fresh Single-Threaded export:
 powershell -ExecutionPolicy Bypass -File .\tools\prepare_github_pages.ps1
 ```
 
-The Android package is `com.sionbarzahd.tacticalslash`, version `0.2.0`
-(version code 2), arm64, landscape. The generated debug keystore, SDK, JDK,
-build outputs, and logs are intentionally excluded from Git.
+The Android package is `com.karl3yyyy.infinitygrid`, version `0.2.0`
+(version code 2), arm64. The generated debug keystore, SDK, JDK, build outputs,
+and logs are intentionally excluded from Git.

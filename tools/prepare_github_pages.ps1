@@ -75,7 +75,7 @@ try {
         if (-not (Test-Path -LiteralPath $GodotMainSource -PathType Leaf)) {
             throw "Godot failed to start and its companion executable was not found: $GodotMainSource"
         }
-        $GodotCache = Join-Path $env:LOCALAPPDATA "TacticalSlash\Godot-4.7"
+        $GodotCache = Join-Path $env:LOCALAPPDATA "InfinityGrid\Godot-4.7"
         New-Item -ItemType Directory -Force -Path $GodotCache | Out-Null
         Copy-Item -LiteralPath $Godot, $GodotMainSource -Destination $GodotCache -Force
         $GodotCommand = Join-Path $GodotCache (Split-Path -Leaf $Godot)

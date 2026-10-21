@@ -155,11 +155,13 @@ func _build_ui() -> void:
 	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	round_label.add_theme_font_size_override("font_size", 20)
+	_outline(round_label)
 	header.add_child(round_label)
 	selection_label = Label.new()
 	selection_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	selection_label.add_theme_font_size_override("font_size", 15)
-	selection_label.modulate = Color("c7d3dd")
+	selection_label.modulate = Color("e6edf2")
+	_outline(selection_label)
 	header.add_child(selection_label)
 	menu_button = _make_button("☰", header)
 	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
@@ -181,7 +183,8 @@ func _build_ui() -> void:
 	instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction_label.custom_minimum_size.y = 42.0
 	instruction_label.add_theme_font_size_override("font_size", 16)
-	instruction_label.modulate = Color("e3e9ef")
+	instruction_label.modulate = Color.WHITE
+	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
 	_add_hand_title(bottom_box, 0)
 	_add_hand_row(bottom_box, 0)
@@ -246,17 +249,28 @@ func _build_main_menu() -> void:
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 
+## Transparent tray: the meadow and board stay visible behind the cards.
 func _make_tray() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.04, 0.065, 0.86)))
+	var clear := StyleBoxEmpty.new()
+	clear.set_content_margin_all(12.0)
+	panel.add_theme_stylebox_override("panel", clear)
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel.add_to_group("interactive_ui")
 	return panel
+
+
+## Dark outline keeps HUD text readable on top of the bright meadow.
+func _outline(label: Label, outline_size: int = 6) -> void:
+	label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.06, 0.9))
+	label.add_theme_constant_override("outline_size", outline_size)
 
 
 func _add_hand_title(parent: Control, position: int) -> void:
 	var title := Label.new()
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 16)
+	_outline(title)
 	title.text = "DU" if position == 0 else "BOT"
 	parent.add_child(title)
 	hand_titles.append(title)

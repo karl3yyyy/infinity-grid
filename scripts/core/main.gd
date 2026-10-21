@@ -109,9 +109,11 @@ func _build_environment() -> void:
 	var meadow_mesh := PlaneMesh.new()
 	meadow_mesh.size = Vector2(80.0, 80.0)
 	meadow.mesh = meadow_mesh
-	meadow.position.y = -0.72
+	# Just below the battlefield top, same tone, so the meadow reads as one field
+	# behind the transparent card trays without a visible base edge.
+	meadow.position.y = -0.13
 	var meadow_material := StandardMaterial3D.new()
-	meadow_material.albedo_color = Color("66834a")
+	meadow_material.albedo_color = Color("486b38")
 	meadow_material.roughness = 1.0
 	meadow.material_override = meadow_material
 	add_child(meadow)

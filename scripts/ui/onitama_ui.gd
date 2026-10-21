@@ -10,6 +10,8 @@ var instruction_label: Label
 var selection_label: Label
 var pass_label: Label
 var card_buttons: Array = [[], []]
+var hand_titles: Array[Label] = []
+var opponent_is_bot: bool = false
 var result_overlay: ColorRect
 var result_label: Label
 var menu_overlay: ColorRect
@@ -40,10 +42,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func update_header(current_player: int, round_number: int) -> void:
 	var narrow_view := get_viewport().get_visible_rect().size.x < 600.0
-	round_label.text = (
-		"ROUND %02d  •  P%d" % [round_number, current_player + 1]
-		if narrow_view else "ROUND %02d    PLAYER %d TO MOVE" % [round_number, current_player + 1]
-	)
+	var player_name := "BOT" if opponent_is_bot and current_player == 1 else "PLAYER %d" % (current_player + 1)
+	var compact_name := "BOT" if opponent_is_bot and current_player == 1 else "P%d" % (current_player + 1)
+	round_label.text = "ROUND %02d  •  %s" % [round_number, compact_name] if narrow_view else "ROUND %02d    %s TO MOVE" % [round_number, player_name]
 	round_label.modulate = Color("8fdff4") if current_player == 0 else Color("ff9b82")
 
 
@@ -54,7 +55,7 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 			var card: MovementCard = hands[team_id][slot]
 			button.text = "%s\n%s" % [card.card_name, card.move_summary(team_id)]
 			button.tooltip_text = card.move_summary(team_id)
-			button.disabled = team_id != current_player
+			button.disabled = team_id != current_player or (opponent_is_bot and team_id == 1)
 			button.modulate = Color("ffe08a") if team_id == current_player and slot == selected_slot else Color.WHITE
 	pass_label.text = "PASS\n%s\n%s" % [pass_card.card_name, pass_card.move_summary(current_player)]
 
@@ -65,6 +66,12 @@ func update_selection(unit: BattleUnit) -> void:
 
 func set_instruction(text_value: String) -> void:
 	instruction_label.text = text_value
+
+
+func set_opponent_bot(enabled: bool) -> void:
+	opponent_is_bot = enabled
+	if hand_titles.size() > 1:
+		hand_titles[1].text = "BOT" if enabled else "PLAYER 2"
 
 
 func show_result(text_value: String) -> void:
@@ -192,6 +199,7 @@ func _add_hand(parent: GridContainer, team_id: int, title_text: String, team_col
 	title.modulate = team_color
 	title.add_theme_font_size_override("font_size", 14)
 	hand.add_child(title)
+	hand_titles.append(title)
 	var cards := HBoxContainer.new()
 	cards.add_theme_constant_override("separation", 8)
 	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL

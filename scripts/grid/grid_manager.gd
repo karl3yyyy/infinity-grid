@@ -10,6 +10,8 @@ var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
 var obstacle_coordinates: Array[Vector2i] = []
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
+var wrap_projection_count: int = 0
+var _wrap_materials: Dictionary = {}
 
 var _colors: Dictionary = {
 	GridCellData.Highlight.NORMAL: Color("35545b"),
@@ -26,6 +28,8 @@ func setup() -> void:
 	for child: Node in get_children():
 		child.queue_free()
 	cells.clear()
+	_wrap_materials.clear()
+	wrap_projection_count = 0
 	for y: int in range(grid_size.y):
 		for x: int in range(grid_size.x):
 			var coordinate := Vector2i(x, y)
@@ -38,6 +42,7 @@ func setup() -> void:
 		cell.highlight = GridCellData.Highlight.BLOCKED
 		_create_obstacle(cell)
 		_update_cell_visual(cell)
+	_create_wrap_projections()
 	_create_wrap_seams()
 
 
@@ -54,9 +59,13 @@ func grid_to_world(coordinate: Vector2i) -> Vector3:
 func world_to_grid(world_position: Vector3) -> Vector2i:
 	var half_width := float(grid_size.x - 1) * 0.5
 	var half_height := float(grid_size.y - 1) * 0.5
+	var raw_column := roundi(world_position.x / CELL_SIZE + half_width)
+	var row := roundi(world_position.z / CELL_SIZE + half_height)
+	if raw_column < -2 or raw_column >= grid_size.x + 2:
+		return Vector2i(-1, row)
 	return Vector2i(
-		roundi(world_position.x / CELL_SIZE + half_width),
-		roundi(world_position.z / CELL_SIZE + half_height)
+		posmod(raw_column, grid_size.x),
+		row
 	)
 
 
@@ -290,6 +299,37 @@ func _create_obstacle(cell: GridCell) -> void:
 	add_child(obstacle)
 
 
+func _create_wrap_projections() -> void:
+	var repeated_width := float(grid_size.x) * CELL_SIZE
+	for y: int in range(grid_size.y):
+		for depth: int in range(2):
+			var left_column := grid_size.x - 1 - depth
+			var right_column := depth
+			_create_wrap_tile(Vector2i(left_column, y), -repeated_width, 0.46 - float(depth) * 0.17)
+			_create_wrap_tile(Vector2i(right_column, y), repeated_width, 0.46 - float(depth) * 0.17)
+
+
+func _create_wrap_tile(coordinate: Vector2i, horizontal_offset: float, opacity: float) -> void:
+	var source_cell: GridCell = cells[coordinate]
+	var projection := MeshInstance3D.new()
+	projection.name = "WrapCell_%d_%d_%d" % [coordinate.x, coordinate.y, roundi(horizontal_offset)]
+	var box := BoxMesh.new()
+	box.size = Vector3(CELL_SIZE * 0.94, 0.12, CELL_SIZE * 0.94)
+	projection.mesh = box
+	projection.position = source_cell.world_position + Vector3(horizontal_offset, -0.08, 0.0)
+	var material := StandardMaterial3D.new()
+	material.roughness = 0.86
+	material.metallic = 0.05
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	projection.material_override = material
+	add_child(projection)
+	if not _wrap_materials.has(coordinate):
+		_wrap_materials[coordinate] = []
+	(_wrap_materials[coordinate] as Array).append({"material": material, "opacity": opacity})
+	wrap_projection_count += 1
+	_update_cell_visual(source_cell)
+
+
 func _create_wrap_seams() -> void:
 	var half_width := float(grid_size.x - 1) * 0.5 * CELL_SIZE + CELL_SIZE * 0.5
 	for side: int in [-1, 1]:
@@ -340,13 +380,24 @@ func _update_cell_visual(cell: GridCell) -> void:
 		return
 	var is_light_square := (cell.coordinate.x + cell.coordinate.y) % 2 == 0
 	var grass_color := Color("6f9651") if is_light_square else Color("527a40")
-	cell.material.albedo_color = grass_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
-	cell.material.emission_enabled = cell.highlight in [
+	var tile_color: Color = grass_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
+	var is_emissive := cell.highlight in [
 		GridCellData.Highlight.HOVER,
 		GridCellData.Highlight.SELECTED,
 		GridCellData.Highlight.MOVE,
 		GridCellData.Highlight.ATTACK,
 	]
-	if cell.material.emission_enabled:
-		cell.material.emission = _colors[cell.highlight] * 0.36
-		cell.material.emission_energy_multiplier = 0.75
+	_apply_cell_material(cell.material, tile_color, 1.0, is_emissive)
+	for projection_value: Variant in _wrap_materials.get(cell.coordinate, []):
+		var projection: Dictionary = projection_value
+		_apply_cell_material(projection["material"], tile_color, float(projection["opacity"]), is_emissive)
+
+
+func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, is_emissive: bool) -> void:
+	var faded_color := color
+	faded_color.a = opacity
+	material.albedo_color = faded_color
+	material.emission_enabled = is_emissive
+	if is_emissive:
+		material.emission = color * 0.36
+		material.emission_energy_multiplier = 0.75

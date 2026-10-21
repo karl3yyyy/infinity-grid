@@ -7,7 +7,7 @@ var distance: float = 11.5
 var target_distance: float = 11.5
 var yaw: float = 0.0
 var target_yaw: float = 0.0
-var pitch: float = deg_to_rad(78.0)
+var pitch: float = deg_to_rad(58.0)
 var pan_speed: float = 7.0
 var _shake_time: float = 0.0
 var _shake_strength: float = 0.0
@@ -105,5 +105,7 @@ func _update_framing() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 	var aspect_ratio := viewport_size.x / viewport_size.y
-	target_distance = maxf(11.5, 7.8 / aspect_ratio)
+	var repeated_side_cells := 1.0 if aspect_ratio < 0.8 else 2.0
+	var total_board_width := (5.0 + repeated_side_cells * 2.0) * 1.4
+	target_distance = maxf(8.2, total_board_width / aspect_ratio)
 	distance = target_distance

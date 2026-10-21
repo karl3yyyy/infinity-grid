@@ -24,6 +24,7 @@ var current_player: int = 0
 var round_number: int = 1
 var input_locked: bool = true
 var battle_over: bool = false
+var bot_opponent_enabled: bool = true
 
 
 func setup(
@@ -39,6 +40,7 @@ func setup(
 	camera_controller = camera
 	turn_manager = turns
 	battle_ui = ui
+	battle_ui.set_opponent_bot(bot_opponent_enabled)
 	player_controller = player_input
 	unit_movement = movement
 	units_parent = unit_container
@@ -79,6 +81,7 @@ func _spawn_armies() -> void:
 			unit.scale = Vector3.ONE * (1.18 if is_master else 1.0)
 			units_parent.add_child(unit)
 			unit.position = grid_manager.grid_to_world(coordinate)
+			unit.create_wrap_projections(units_parent, float(grid_manager.grid_size.x) * GridManager.CELL_SIZE)
 			team.append(unit)
 			grid_manager.set_occupant(coordinate, unit)
 			unit.died.connect(_on_unit_died)
@@ -181,11 +184,71 @@ func _advance_turn() -> void:
 	if current_player == 0:
 		round_number += 1
 	selected_card_slot = -1
-	input_locked = false
-	player_controller.enabled = true
+	var bot_turn := bot_opponent_enabled and current_player == 1
+	input_locked = bot_turn
+	player_controller.enabled = not bot_turn
 	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
 	_refresh_ui()
-	battle_ui.set_instruction("Player %d: choose a movement card, then a figure and a highlighted destination." % (current_player + 1))
+	if bot_turn:
+		battle_ui.set_instruction("The bot is thinking...")
+		call_deferred("_run_bot_turn")
+	else:
+		battle_ui.set_instruction("Player %d: choose a movement card, then a figure and a highlighted destination." % (current_player + 1))
+
+
+func _run_bot_turn() -> void:
+	await get_tree().create_timer(0.4).timeout
+	if battle_over or current_player != 1 or not bot_opponent_enabled:
+		return
+	var choice := _choose_bot_move()
+	if choice.is_empty():
+		input_locked = false
+		player_controller.enabled = true
+		battle_ui.set_instruction("The bot has no legal move. Select a figure to continue.")
+		return
+	selected_card_slot = int(choice["slot"])
+	_select_unit(choice["unit"] as BattleUnit)
+	await get_tree().create_timer(0.18).timeout
+	if not battle_over and current_player == 1:
+		await _perform_move(choice["destination"])
+
+
+func _choose_bot_move() -> Dictionary:
+	var player_master := _find_master(players)
+	if player_master == null:
+		return {}
+	var best_score := -INF
+	var best_moves: Array[Dictionary] = []
+	for unit: BattleUnit in enemies:
+		if unit.is_dead:
+			continue
+		for slot: int in range(2):
+			var card: MovementCard = hands[1][slot]
+			for destination: Vector2i in card.destinations(unit.grid_position, 1, grid_manager.grid_size.x):
+				var target := grid_manager.get_unit_at(destination) as BattleUnit
+				if target != null and target.team_id == 1:
+					continue
+				var old_distance := grid_manager.manhattan_distance(unit.grid_position, player_master.grid_position)
+				var new_distance := grid_manager.manhattan_distance(destination, player_master.grid_position)
+				var score := float(old_distance - new_distance) * 20.0 + randf()
+				if target == player_master:
+					score += 10000.0
+				elif target != null:
+					score += 250.0
+				if score > best_score:
+					best_score = score
+					best_moves.clear()
+					best_moves.append({"unit": unit, "slot": slot, "destination": destination})
+				elif is_equal_approx(score, best_score):
+					best_moves.append({"unit": unit, "slot": slot, "destination": destination})
+	return best_moves.pick_random() if not best_moves.is_empty() else {}
+
+
+func _find_master(team: Array[BattleUnit]) -> BattleUnit:
+	for unit: BattleUnit in team:
+		if unit.is_master and not unit.is_dead:
+			return unit
+	return null
 
 
 func _deselect_unit() -> void:

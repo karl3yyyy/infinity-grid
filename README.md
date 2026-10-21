@@ -1,10 +1,11 @@
 # Tactical Slash
 
-Tactical Slash is a local two-player 3D strategy game built with Godot 4. Each
-player commands a Master and four Students on a 5x5 board whose left and right
-edges wrap around. Five movement cards are dealt between both players and a
-shared pass space; after each move, the used card trades places with the pass
-card. Capture the opposing Master to win.
+Tactical Slash is a 3D strategy game built with Godot 4. Play locally against a
+simple bot as a Master and four Students on a 5x5 cylindrical board. Its left
+and right edge projections show the same units and tiles, not additional game
+pieces. Five movement cards are dealt between both sides and a shared pass
+space; after each move, the used card trades places with the pass card. Capture
+the opposing Master to win.
 
 [**Play Online**](https://sion-rgb.github.io/tactical-slash/) ·
 [**Download for Windows**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-Windows-x86_64.zip) ·
@@ -14,15 +15,16 @@ card. Capture the opposing Master to win.
 ## Play
 
 Open `project.godot` in Godot 4.7 stable and press F6 from
-`scenes/main.tscn`, or run the exported build. The game is hot-seat multiplayer:
-both players take turns on the same device.
+`scenes/main.tscn`, or run the exported build. Player 2 is a simple local bot;
+online play is not implemented yet.
 
 1. Choose one of your two movement cards.
 2. Select one of your five figures; highlighted fields show legal moves.
 3. Move onto an opponent's figure to capture it. Capturing the opposing Master
   wins the game.
 4. The played card moves to the shared pass space; take the card that was there.
-5. Players alternate after every move. Gold lines mark the connected board edges.
+5. The camera turns behind each side as the turn changes. Playable edge
+  projections map to the same wrapped board coordinates.
 
 Desktop/Web controls:
 

@@ -24,16 +24,20 @@ func _run_tests() -> void:
 	_expect(grid != null, "GridManager exists")
 	_expect(battle != null, "Onitama battle manager exists")
 	_expect(ui != null, "Card-selection UI exists")
-	_expect(camera != null and camera.projection == Camera3D.PROJECTION_ORTHOGONAL, "Board uses chess-style orthographic camera")
+	_expect(camera != null and camera.projection == Camera3D.PROJECTION_ORTHOGONAL and camera.pitch < deg_to_rad(70.0), "Board uses an oblique camera behind the active side")
 	if ui != null:
 		ui._apply_responsive_layout(Vector2(390.0, 844.0))
 		_expect(ui.card_layout.columns == 1 and ui.tray.offset_top == -312.0, "Card HUD stacks for portrait mobile screens")
 		ui._apply_responsive_layout(Vector2(1280.0, 720.0))
 	if grid != null:
 		_expect(grid.cells.size() == 25, "Grid contains 25 cells")
+		_expect(grid.wrap_projection_count == 20, "Two projected edge columns appear on each side")
 		_expect(Vector2i(4, 2) in grid.get_neighbors(Vector2i(0, 2)), "Left and right edges wrap")
 		_expect(Vector2i(0, 2) in grid.get_neighbors(Vector2i(4, 2)), "Wrap works in both directions")
 		_expect(grid.manhattan_distance(Vector2i(0, 2), Vector2i(4, 2)) == 1, "Distance uses cylindrical X")
+		_expect(grid.world_to_grid(grid.grid_to_world(Vector2i(4, 2)) + Vector3(-7.0, 0.0, 0.0)) == Vector2i(4, 2), "Left projection maps to the same logical tile")
+		_expect(grid.world_to_grid(grid.grid_to_world(Vector2i(0, 2)) + Vector3(7.0, 0.0, 0.0)) == Vector2i(0, 2), "Right projection maps to the same logical tile")
+		_expect(grid.world_to_grid(Vector3(-20.0, 0.0, 0.0)).x == -1, "Clicks beyond the visible wrap projections are rejected")
 		_expect(grid.get_neighbors(Vector2i(2, 0)).size() == 3, "Top and bottom edges remain closed")
 
 	var deck: Array[MovementCard] = MovementCardScript.create_deck()
@@ -46,9 +50,12 @@ func _run_tests() -> void:
 	_expect(deck[0].move_summary(0) == deck[0].move_summary(1), "Both players read identical relative arrows from their own sides")
 
 	if battle != null:
+		battle.bot_opponent_enabled = false
 		_expect(battle.players.size() == 5 and battle.enemies.size() == 5, "Each player has five figures")
 		_expect(battle.players.filter(func(unit: BattleUnit) -> bool: return unit.is_master).size() == 1, "Player 1 has one master")
 		_expect(battle.enemies.filter(func(unit: BattleUnit) -> bool: return unit.is_master).size() == 1, "Player 2 has one master")
+		_expect(battle.players[0]._wrap_projections.size() == 2, "Each logical figure has only render-only side projections")
+		_expect(ui.opponent_is_bot and ui.hand_titles[1].text == "BOT", "Second hand is identified as the bot")
 		var card_names: Array[String] = []
 		for team_hand: Array in battle.hands:
 			_expect(team_hand.size() == 2, "Each player receives two cards")
@@ -73,6 +80,14 @@ func _run_tests() -> void:
 			_expect(battle.hands[0][slot] == incoming_card and battle.pass_card == used_card, "Used card swaps with the pass card")
 			_expect(battle.current_player == 1, "Turn passes to Player 2 after one move")
 			_expect(is_equal_approx(camera.target_yaw, PI), "Player 2 sees the same board rotated 180 degrees")
+			var bot_move := battle._choose_bot_move()
+			_expect(not bot_move.is_empty(), "Bot can choose a legal card-and-piece move")
+			battle.bot_opponent_enabled = true
+			battle.battle_ui.set_opponent_bot(true)
+			battle.player_controller.enabled = false
+			battle.input_locked = true
+			await battle._run_bot_turn()
+			_expect(battle.current_player == 0, "Bot completes its move and returns the turn to Player 1")
 			var seam_attacker: BattleUnit = battle.players[0]
 			var seam_target: BattleUnit = battle.enemies[0]
 			var attacker_origin := seam_attacker.grid_position

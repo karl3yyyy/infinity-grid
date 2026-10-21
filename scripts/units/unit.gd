@@ -63,6 +63,7 @@ var _materials: Array[StandardMaterial3D] = []
 var _base_colors: Array[Color] = []
 var _idle_time: float = 0.0
 var _placeholder_root: Node3D
+var _wrap_projections: Array[Dictionary] = []
 
 
 func configure(
@@ -100,6 +101,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_sync_wrap_projections()
 	if is_dead:
 		return
 	_idle_time += delta
@@ -112,6 +114,35 @@ func _process(delta: float) -> void:
 		right_leg_pivot.rotation_degrees.x = -stride * 25.0
 		sword_arm_pivot.rotation_degrees.x = -stride * 14.0
 		off_arm_pivot.rotation_degrees.x = stride * 14.0
+
+
+func create_wrap_projections(parent: Node, board_width: float) -> void:
+	for side: int in [-1, 1]:
+		var projection_root := Node3D.new()
+		projection_root.name = "%s_Wrap_%d" % [name, side]
+		parent.add_child(projection_root)
+		var projection_visual := visual_root.duplicate() as Node3D
+		projection_visual.name = "VisualProjection"
+		projection_root.add_child(projection_visual)
+		_set_projection_transparency(projection_visual, 0.48)
+		var projection_ring := selection_ring.duplicate() as MeshInstance3D
+		projection_ring.name = "SelectionProjection"
+		projection_root.add_child(projection_ring)
+		_set_projection_transparency(projection_ring, 0.58)
+		var projection_label := status_label.duplicate() as Label3D
+		projection_label.name = "StatusProjection"
+		projection_root.add_child(projection_label)
+		projection_label.modulate.a = 0.52
+		_wrap_projections.append({
+			"root": projection_root,
+			"visual": projection_visual,
+			"ring": projection_ring,
+			"label": projection_label,
+			"animation_player": _find_animation_player(projection_visual),
+			"animation_state": &"",
+			"offset": float(side) * board_width,
+		})
+	_sync_wrap_projections()
 
 
 func begin_turn() -> void:
@@ -454,3 +485,45 @@ func _update_status_label() -> void:
 	if status_label != null:
 		var title := "MASTER" if is_master else "STUDENT"
 		status_label.text = "%s  %d/%d" % [title, current_hp, max_hp]
+
+
+func _sync_wrap_projections() -> void:
+	if _wrap_projections.is_empty() or visual_root == null:
+		return
+	for index: int in range(_wrap_projections.size()):
+		var projection: Dictionary = _wrap_projections[index]
+		var projection_root := projection["root"] as Node3D
+		projection_root.global_position = global_position + Vector3(float(projection["offset"]), 0.0, 0.0)
+		projection_root.global_rotation = global_rotation
+		projection_root.scale = scale
+		var projection_visual := projection["visual"] as Node3D
+		projection_visual.position = visual_root.position
+		projection_visual.rotation = visual_root.rotation
+		projection_visual.scale = visual_root.scale
+		var projection_ring := projection["ring"] as MeshInstance3D
+		projection_ring.position = selection_ring.position
+		projection_ring.rotation = selection_ring.rotation
+		projection_ring.visible = selection_ring.visible
+		var projection_label := projection["label"] as Label3D
+		projection_label.position = status_label.position
+		projection_label.text = status_label.text
+		projection_label.modulate = status_label.modulate
+		projection_label.modulate.a = 0.52
+		var projected_animation := projection["animation_player"] as AnimationPlayer
+		if projected_animation != null and projection["animation_state"] != animation_state:
+			for candidate_value: Variant in ANIMATION_MAP.get(animation_state, []):
+				var candidate := StringName(candidate_value)
+				if projected_animation.has_animation(candidate):
+					projected_animation.play(candidate)
+					break
+			projection["animation_state"] = animation_state
+			_wrap_projections[index] = projection
+
+
+func _set_projection_transparency(node: Node, transparency_amount: float) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		geometry.transparency = transparency_amount
+		geometry.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child: Node in node.get_children():
+		_set_projection_transparency(child, transparency_amount)

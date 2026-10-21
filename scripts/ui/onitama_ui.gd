@@ -10,7 +10,7 @@ signal board_insets_changed(top_pixels: float, bottom_pixels: float)
 
 const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
 const CardViewScript := preload("res://scripts/ui/card_view.gd")
-const TEAM_COLORS: Array[Color] = [Color("3f8fd2"), Color("d8644f")]
+const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
 
 var round_label: Label
@@ -58,7 +58,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func update_header(current_player: int, round_number: int) -> void:
 	var mover := "%s AM ZUG" % _team_name(current_player)
 	round_label.text = "RUNDE %02d  •  %s" % [round_number, mover]
-	round_label.modulate = TEAM_COLORS[current_player].lightened(0.35)
+	round_label.modulate = UITheme.GOLD_LIGHT if current_player == viewer_team else TEAM_COLORS[current_player].lightened(0.35)
 
 
 func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
@@ -134,6 +134,7 @@ func _build_ui() -> void:
 	hud_root = Control.new()
 	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.theme = UITheme.theme()
 	add_child(hud_root)
 	hud_column = Control.new()
 	hud_column.anchor_left = 0.5
@@ -154,13 +155,14 @@ func _build_ui() -> void:
 	round_label = Label.new()
 	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	round_label.add_theme_font_size_override("font_size", 20)
+	round_label.add_theme_font_size_override("font_size", 21)
 	_outline(round_label)
 	header.add_child(round_label)
 	selection_label = Label.new()
 	selection_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	selection_label.add_theme_font_size_override("font_size", 15)
 	selection_label.modulate = Color("e6edf2")
+	selection_label.add_theme_font_override("font", ThemeDB.fallback_font)
 	_outline(selection_label)
 	header.add_child(selection_label)
 	menu_button = _make_button("☰", header)
@@ -184,6 +186,7 @@ func _build_ui() -> void:
 	instruction_label.custom_minimum_size.y = 42.0
 	instruction_label.add_theme_font_size_override("font_size", 16)
 	instruction_label.modulate = Color.WHITE
+	instruction_label.add_theme_font_override("font", ThemeDB.fallback_font)
 	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
 	_add_hand_title(bottom_box, 0)
@@ -192,7 +195,7 @@ func _build_ui() -> void:
 	hand_titles.reverse()
 
 	result_overlay = ColorRect.new()
-	result_overlay.color = Color(0.01, 0.015, 0.025, 0.88)
+	result_overlay.color = Color(0.03, 0.02, 0.07, 0.82)
 	result_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_overlay.visible = false
 	result_overlay.add_to_group("interactive_ui")
@@ -206,15 +209,18 @@ func _build_ui() -> void:
 	result_overlay.add_child(result_box)
 	result_label = Label.new()
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result_label.add_theme_font_size_override("font_size", 38)
+	result_label.add_theme_font_size_override("font_size", 52)
+	result_label.add_theme_font_override("font", UITheme.decorative_font())
+	result_label.modulate = UITheme.GOLD_LIGHT
+	_outline(result_label, 12)
 	result_box.add_child(result_label)
-	var restart_button := _make_button("PLAY AGAIN", result_box)
-	var quit_button := _make_button("QUIT", result_box)
+	var restart_button := _make_button("NOCHMAL SPIELEN", result_box)
+	var quit_button := _make_button("BEENDEN", result_box)
 	restart_button.pressed.connect(func() -> void: restart_pressed.emit())
 	quit_button.pressed.connect(func() -> void: quit_pressed.emit())
 
 	menu_overlay = ColorRect.new()
-	menu_overlay.color = Color(0.01, 0.015, 0.025, 0.91)
+	menu_overlay.color = Color(0.03, 0.02, 0.07, 0.88)
 	menu_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_overlay.visible = false
 	menu_overlay.add_to_group("interactive_ui")
@@ -231,8 +237,8 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	menu_box.add_child(title)
-	var resume_button := _make_button("RESUME", menu_box)
-	var restart_menu_button := _make_button("RESTART", menu_box)
+	var resume_button := _make_button("WEITER", menu_box)
+	var restart_menu_button := _make_button("NEU STARTEN", menu_box)
 	resume_button.pressed.connect(func() -> void: toggle_menu(false))
 	restart_menu_button.pressed.connect(func() -> void: restart_pressed.emit())
 
@@ -269,7 +275,7 @@ func _outline(label: Label, outline_size: int = 6) -> void:
 func _add_hand_title(parent: Control, position: int) -> void:
 	var title := Label.new()
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_font_size_override("font_size", 18)
 	_outline(title)
 	title.text = "DU" if position == 0 else "BOT"
 	parent.add_child(title)

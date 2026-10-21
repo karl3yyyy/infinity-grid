@@ -40,6 +40,7 @@ var _base_colors: Array[Color] = []
 var _idle_time: float = 0.0
 var _placeholder_root: Node3D
 var _wrap_projections: Array[Dictionary] = []
+var _crown_gem: Node3D
 
 
 func configure(
@@ -67,6 +68,9 @@ func _process(delta: float) -> void:
 	if is_dead:
 		return
 	_idle_time += delta
+	if _crown_gem != null:
+		_crown_gem.rotation.y += delta * 1.5
+		_crown_gem.position.y = 2.25 + sin(_idle_time * 2.0) * 0.06
 	if animation_state == &"idle":
 		visual_root.position.y = sin(_idle_time * 2.2) * 0.025
 		sword_pivot.rotation_degrees.z = sin(_idle_time * 1.7) * 2.0
@@ -142,6 +146,7 @@ func play_death(from_position: Vector3 = Vector3.INF) -> void:
 	if is_dead:
 		return
 	is_dead = true
+	_hide_auras()
 	set_animation_state(&"death")
 	selection_ring.visible = false
 	_flash(Color("ffb3b3"))
@@ -163,6 +168,16 @@ func play_death(from_position: Vector3 = Vector3.INF) -> void:
 	_restore_materials()
 	status_label.text = "%s  [DOWN]" % _role_name()
 	died.emit(self)
+
+
+func _hide_auras() -> void:
+	var roots: Array[Node] = [visual_root]
+	for projection: Dictionary in _wrap_projections:
+		roots.append(projection["visual"])
+	for root: Node in roots:
+		var aura := root.get_node_or_null("TeamAura") as Node3D
+		if aura != null:
+			aura.visible = false
 
 
 func _build_model() -> void:
@@ -259,8 +274,81 @@ func _build_model() -> void:
 	status_label.modulate = _accent_color
 	add_child(status_label)
 
+	# Role is shown by the aura and crown gem instead of floating text.
+	status_label.visible = false
 	using_licensed_model = _load_licensed_model()
 	_placeholder_root.visible = not using_licensed_model
+	_build_team_aura()
+
+
+func _aura_color() -> Color:
+	return Color("3fa9ff") if team_id == 0 else Color("ff4f3a")
+
+
+## Glowing team ring under every figure; masters get a gold ring and a crown gem.
+func _build_team_aura() -> void:
+	var aura := Node3D.new()
+	aura.name = "TeamAura"
+	visual_root.add_child(aura)
+	var color := _aura_color()
+	var glow := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(1.25, 1.25)
+	glow.mesh = plane
+	glow.position.y = 0.03
+	var glow_material := StandardMaterial3D.new()
+	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.55, 0.75, 1.0])
+	gradient.colors = PackedColorArray([Color(color, 0.05), Color(color, 0.25), Color(color, 0.9), Color(color, 0.0)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	glow_material.albedo_texture = texture
+	glow.material_override = glow_material
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	aura.add_child(glow)
+	if not is_master:
+		return
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.52
+	torus.outer_radius = 0.6
+	ring.mesh = torus
+	ring.position.y = 0.05
+	var gold := StandardMaterial3D.new()
+	gold.albedo_color = Color("e2b04a")
+	gold.metallic = 0.9
+	gold.roughness = 0.25
+	gold.emission_enabled = true
+	gold.emission = Color("c98a24")
+	gold.emission_energy_multiplier = 1.2
+	ring.material_override = gold
+	aura.add_child(ring)
+	_crown_gem = Node3D.new()
+	_crown_gem.name = "CrownGem"
+	_crown_gem.position.y = 2.25
+	aura.add_child(_crown_gem)
+	var gem_material := StandardMaterial3D.new()
+	gem_material.albedo_color = color.lightened(0.2)
+	gem_material.emission_enabled = true
+	gem_material.emission = color
+	gem_material.emission_energy_multiplier = 2.6
+	gem_material.metallic = 0.4
+	gem_material.roughness = 0.1
+	for flip: float in [1.0, -1.0]:
+		var half := MeshInstance3D.new()
+		var prism := PrismMesh.new()
+		prism.size = Vector3(0.3, 0.28, 0.3)
+		half.mesh = prism
+		half.position.y = 0.14 * flip
+		half.rotation_degrees.x = 0.0 if flip > 0.0 else 180.0
+		half.material_override = gem_material
+		_crown_gem.add_child(half)
 
 
 func _load_licensed_model() -> bool:

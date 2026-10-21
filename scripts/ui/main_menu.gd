@@ -47,8 +47,18 @@ func close_menu() -> void:
 
 
 func _build_shell() -> void:
-	var backdrop := ColorRect.new()
-	backdrop.color = Color("142b2c")
+	theme = UITheme.theme()
+	var backdrop := TextureRect.new()
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	gradient.colors = PackedColorArray([Color("2b1d3f"), Color("120f22"), Color("06060d")])
+	var gradient_texture := GradientTexture2D.new()
+	gradient_texture.gradient = gradient
+	gradient_texture.fill = GradientTexture2D.FILL_RADIAL
+	gradient_texture.fill_from = Vector2(0.5, 0.3)
+	gradient_texture.fill_to = Vector2(1.1, 1.0)
+	backdrop.texture = gradient_texture
+	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
@@ -94,10 +104,18 @@ func _build_shell() -> void:
 func _show_home() -> void:
 	_clear_content()
 	_update_profile_button()
-	var eyebrow := _make_label("INFINITY GRID  /  ECHOES OF THE MEADOW", 13, Color("e6bd70"))
-	_content.add_child(eyebrow)
-	_content.add_child(_make_label("Eine Arena. Zwei Seiten. Kein Ende.", 26, Color("f0f4df")))
-	_content.add_child(_make_label("Dein Meister und vier Schüler warten auf den nächsten Zug.", 14, Color("afc2b6")))
+	var logo := _make_label("INFINITY GRID", 44, UITheme.GOLD_LIGHT)
+	logo.add_theme_font_override("font", UITheme.decorative_font())
+	logo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UITheme.outline_label(logo, 10)
+	_content.add_child(logo)
+	var tagline := _make_label("Eine Arena. Zwei Seiten. Kein Ende.", 18, UITheme.GOLD)
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_content.add_child(tagline)
+	var subline := _make_label("Dein Meister und vier Schüler warten auf den nächsten Zug.", 14, Color("b9b3cc"))
+	subline.add_theme_font_override("font", ThemeDB.fallback_font)
+	subline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_content.add_child(subline)
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 22.0
 	_content.add_child(spacer)
@@ -116,13 +134,13 @@ func _show_home() -> void:
 	quit_button.custom_minimum_size = Vector2(110.0, 42.0)
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	footer.add_child(quit_button)
-	_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, Color("d9a07c")))
+	_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, UITheme.GOLD))
 
 
 func _show_difficulty() -> void:
 	_clear_content()
-	_content.add_child(_make_label("SCHWIERIGKEIT", 26, Color("f0f4df")))
-	_content.add_child(_make_label("Wie stark soll der Bot spielen?", 15, Color("afc2b6")))
+	_content.add_child(_make_label("SCHWIERIGKEIT", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label("Wie stark soll der Bot spielen?", 15, Color("b9b3cc")))
 	for level: int in range(DIFFICULTY_OPTIONS.size()):
 		var option: Dictionary = DIFFICULTY_OPTIONS[level]
 		var marker := "  ●" if level == bot_difficulty else ""
@@ -138,8 +156,8 @@ func _choose_difficulty(level: int) -> void:
 
 func _show_multiplayer() -> void:
 	_clear_content()
-	_content.add_child(_make_label("MULTIPLAYER", 26, Color("f0f4df")))
-	_content.add_child(_make_label("Wähle, wie ihr spielen möchtet.", 15, Color("afc2b6")))
+	_content.add_child(_make_label("MULTIPLAYER", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label("Wähle, wie ihr spielen möchtet.", 15, Color("b9b3cc")))
 	_add_menu_button(_content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person spielen", _start_local_multiplayer)
 	_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
@@ -148,26 +166,26 @@ func _show_multiplayer() -> void:
 func _show_online_page(mode_name: String) -> void:
 	_clear_content()
 	_update_profile_button()
-	_content.add_child(_make_label(mode_name, 26, Color("f0f4df")))
+	_content.add_child(_make_label(mode_name, 26, UITheme.GOLD_LIGHT))
 	_content.add_child(_make_label(
 		"Die Online-Verbindung ist noch nicht eingerichtet. Es gibt noch keinen Matchmaking-, Freunde- oder Ranglistenserver.",
 		16,
-		Color("afc2b6")
+		Color("b9b3cc")
 	))
-	_content.add_child(_make_label("Dein Profilname und Avatar werden lokal auf diesem Gerät gespeichert.", 14, Color("8fa69a")))
+	_content.add_child(_make_label("Dein Profilname und Avatar werden lokal auf diesem Gerät gespeichert.", 14, Color("9a94ad")))
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
 
 func _show_profile() -> void:
 	_clear_content()
-	_content.add_child(_make_label("SPIELERPROFIL", 26, Color("f0f4df")))
-	_content.add_child(_make_label("Name", 14, Color("afc2b6")))
+	_content.add_child(_make_label("SPIELERPROFIL", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label("Name", 14, Color("b9b3cc")))
 	var name_input := LineEdit.new()
 	name_input.text = profile_name
 	name_input.max_length = 20
 	name_input.placeholder_text = "Dein Anzeigename"
 	_content.add_child(name_input)
-	_content.add_child(_make_label("Avatarfarbe", 14, Color("afc2b6")))
+	_content.add_child(_make_label("Avatarfarbe", 14, Color("b9b3cc")))
 	var color_choices := HBoxContainer.new()
 	color_choices.add_theme_constant_override("separation", 8)
 	_content.add_child(color_choices)
@@ -202,8 +220,8 @@ func _show_profile() -> void:
 func _show_collection() -> void:
 	_clear_content()
 	var deck := MovementCardScript.create_deck()
-	_content.add_child(_make_label("KARTENSAMMLUNG", 26, Color("f0f4df")))
-	_content.add_child(_make_label("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), 14, Color("afc2b6")))
+	_content.add_child(_make_label("KARTENSAMMLUNG", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), 14, Color("b9b3cc")))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.custom_minimum_size.y = 380.0
@@ -219,7 +237,7 @@ func _show_collection() -> void:
 	for card: MovementCard in deck:
 		var view: CardView = CardViewScript.new()
 		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
-		view.show_card(card, false, Color("3f8fd2"), false)
+		view.show_card(card, false, UITheme.TEAM_COLORS[0], false)
 		grid.add_child(view)
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
@@ -302,11 +320,5 @@ func _update_profile_button() -> void:
 	_profile_button.modulate = AVATAR_COLORS[avatar_index]
 
 
-func _panel_style(color: Color = Color("13272b")) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.border_color = Color("668676")
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	style.set_content_margin_all(12.0)
-	return style
+func _panel_style(color: Color = Color(0.07, 0.065, 0.11, 0.94)) -> StyleBoxFlat:
+	return UITheme.panel_style(color)

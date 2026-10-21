@@ -14,11 +14,11 @@ var _wrap_materials: Dictionary = {}
 
 var _colors: Dictionary = {
 	GridCellData.Highlight.NORMAL: Color("35545b"),
-	GridCellData.Highlight.HOVER: Color("6bd8d0"),
-	GridCellData.Highlight.SELECTED: Color("f8d66d"),
-	GridCellData.Highlight.MOVE: Color("54a7e8"),
-	GridCellData.Highlight.ATTACK: Color("e95b65"),
-	GridCellData.Highlight.OCCUPIED: Color("5e6b80"),
+	GridCellData.Highlight.HOVER: Color("6a7fb0"),
+	GridCellData.Highlight.SELECTED: Color("ffcf5a"),
+	GridCellData.Highlight.MOVE: Color("3fb8ff"),
+	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
+	GridCellData.Highlight.OCCUPIED: Color("4a4562"),
 }
 
 
@@ -155,8 +155,8 @@ func _create_cell_visual(cell: GridCell) -> void:
 	mesh_instance.mesh = box
 	mesh_instance.position = cell.world_position + Vector3(0.0, -0.08, 0.0)
 	var material := StandardMaterial3D.new()
-	material.roughness = 0.86
-	material.metallic = 0.05
+	material.roughness = 0.62
+	material.metallic = 0.12
 	mesh_instance.material_override = material
 	add_child(mesh_instance)
 	cell.visual = mesh_instance
@@ -195,32 +195,48 @@ func _create_wrap_tile(coordinate: Vector2i, horizontal_offset: float, opacity: 
 	_update_cell_visual(source_cell)
 
 
+## Glowing portal curtains mark where the board wraps around.
 func _create_wrap_seams() -> void:
 	var half_width := float(grid_size.x - 1) * 0.5 * CELL_SIZE + CELL_SIZE * 0.5
+	var depth := float(grid_size.y) * CELL_SIZE
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
+	gradient.colors = PackedColorArray([Color(0.55, 0.9, 1.0, 0.95), Color(0.35, 0.6, 1.0, 0.55), Color(0.5, 0.3, 1.0, 0.0)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill_from = Vector2(0.5, 1.0)
+	texture.fill_to = Vector2(0.5, 0.0)
 	for side: int in [-1, 1]:
+		var curtain := MeshInstance3D.new()
+		curtain.name = "WrapPortal_%d" % side
+		var quad := QuadMesh.new()
+		quad.size = Vector2(depth, 0.9)
+		curtain.mesh = quad
+		curtain.position = Vector3(float(side) * half_width, 0.42, 0.0)
+		curtain.rotation_degrees.y = 90.0
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		material.albedo_texture = texture
+		material.albedo_color = Color(0.6, 0.85, 1.0, 0.45)
+		curtain.material_override = material
+		curtain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(curtain)
 		var seam := MeshInstance3D.new()
 		seam.name = "WrapSeam_%d" % side
 		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.09, 0.08, float(grid_size.y) * CELL_SIZE)
+		mesh.size = Vector3(0.07, 0.06, depth)
 		seam.mesh = mesh
-		seam.position = Vector3(float(side) * half_width, 0.015, 0.0)
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("e0b45b")
-		material.emission_enabled = true
-		material.emission = Color("a66e2b")
-		material.emission_energy_multiplier = 0.8
-		material.metallic = 0.3
-		seam.material_override = material
+		seam.position = Vector3(float(side) * half_width, 0.0, 0.0)
+		var seam_material := StandardMaterial3D.new()
+		seam_material.albedo_color = Color("9fe4ff")
+		seam_material.emission_enabled = true
+		seam_material.emission = Color("4cc7ff")
+		seam_material.emission_energy_multiplier = 1.4
+		seam.material_override = seam_material
 		add_child(seam)
-		var label := Label3D.new()
-		label.name = "WrapLabel_%d" % side
-		label.text = "LINK"
-		label.position = Vector3(float(side) * (half_width + 0.08), 0.18, 0.0)
-		label.font_size = 36
-		label.outline_size = 5
-		label.modulate = Color("ffe08a")
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		add_child(label)
 
 
 func _refresh_coordinate(coordinate: Vector2i) -> void:
@@ -242,8 +258,8 @@ func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
 	var is_light_square := (cell.coordinate.x + cell.coordinate.y) % 2 == 0
-	var grass_color := Color("6f9651") if is_light_square else Color("527a40")
-	var tile_color: Color = grass_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
+	var stone_color := Color("4d4b5c") if is_light_square else Color("33323f")
+	var tile_color: Color = stone_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
 	var is_emissive := cell.highlight in [
 		GridCellData.Highlight.HOVER,
 		GridCellData.Highlight.SELECTED,
@@ -262,5 +278,5 @@ func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: f
 	material.albedo_color = faded_color
 	material.emission_enabled = is_emissive
 	if is_emissive:
-		material.emission = color * 0.36
-		material.emission_energy_multiplier = 0.75
+		material.emission = color
+		material.emission_energy_multiplier = 0.45

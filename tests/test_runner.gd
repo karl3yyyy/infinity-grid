@@ -82,12 +82,14 @@ func _run_tests() -> void:
 			_expect(is_equal_approx(camera.target_yaw, PI), "Player 2 sees the same board rotated 180 degrees")
 			var bot_move := battle._choose_bot_move()
 			_expect(not bot_move.is_empty(), "Bot can choose a legal card-and-piece move")
+			camera.set_player_view(0)
 			battle.bot_opponent_enabled = true
 			battle.battle_ui.set_opponent_bot(true)
 			battle.player_controller.enabled = false
 			battle.input_locked = true
 			await battle._run_bot_turn()
 			_expect(battle.current_player == 0, "Bot completes its move and returns the turn to Player 1")
+			_expect(is_zero_approx(camera.target_yaw), "Camera stays behind Player 1 while playing against the bot")
 			var seam_attacker: BattleUnit = battle.players[0]
 			var seam_target: BattleUnit = battle.enemies[0]
 			var attacker_origin := seam_attacker.grid_position

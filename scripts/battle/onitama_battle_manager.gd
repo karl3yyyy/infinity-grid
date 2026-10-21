@@ -180,7 +180,8 @@ func _perform_move(destination: Vector2i) -> void:
 
 func _advance_turn() -> void:
 	current_player = 1 - current_player
-	camera_controller.set_player_view(current_player)
+	if not bot_opponent_enabled:
+		camera_controller.set_player_view(current_player)
 	if current_player == 0:
 		round_number += 1
 	selected_card_slot = -1

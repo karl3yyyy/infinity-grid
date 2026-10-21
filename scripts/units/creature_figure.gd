@@ -7,11 +7,11 @@ extends Node3D
 ## Front of the figure is local +Z. Animated parts are tagged with metadata so a
 ## duplicated figure (wrap projections) animates without being rebuilt.
 
-const CELESTIAL_BODY := Color("c9d0e2")
-const CELESTIAL_SHADE := Color("7f8db5")
+const CELESTIAL_BODY := Color("e8ecf6")
+const CELESTIAL_SHADE := Color("9aa8cc")
 const CELESTIAL_GLOW := Color("5fd4ff")
-const ABYSS_BODY := Color("3a2f3f")
-const ABYSS_SHADE := Color("4a2a35")
+const ABYSS_BODY := Color("5c3a44")
+const ABYSS_SHADE := Color("8a4040")
 const ABYSS_GLOW := Color("ff4a1c")
 const GOLD := Color("d9a640")
 const BRONZE := Color("8c5a2b")
@@ -91,7 +91,7 @@ func _build_plinth() -> void:
 	plinth.top_radius = 0.4
 	plinth.bottom_radius = 0.45
 	plinth.height = 0.14
-	var stone := _body(Color("ced2df") if team_id == 0 else Color("1a1720"), 0.5)
+	var stone := _body(Color("ced2df") if team_id == 0 else Color("3e3036"), 0.5)
 	_mesh(self, plinth, Vector3(0, 0.07, 0), stone)
 	var rim := TorusMesh.new()
 	rim.inner_radius = 0.38
@@ -192,7 +192,7 @@ func _build_imp() -> void:
 		var wing := _group(root, Vector3(side * 0.15, 0.6, -0.12))
 		wing.rotation_degrees = Vector3(-15.0, side * 30.0, side * 55.0)
 		wing.set_meta("flap", 0.12 * side)
-		_mesh(wing, _prism(Vector3(0.36, 0.5, 0.03)), Vector3(0, 0.22, 0), _body(Color("5a1f22")))
+		_mesh(wing, _prism(Vector3(0.36, 0.5, 0.03)), Vector3(0, 0.22, 0), _body(Color("c0504a")))
 		var arm := _mesh(root, _capsule(0.06, 0.32), Vector3(side * 0.2, 0.42, 0.08), skin)
 		arm.rotation_degrees = Vector3(-30.0, 0, side * 15.0)
 	var tail := _mesh(root, _capsule(0.035, 0.5), Vector3(0, 0.22, -0.26), skin)
@@ -211,7 +211,7 @@ func _build_abyss_lord() -> void:
 	cape.top_radius = 0.18
 	cape.bottom_radius = 0.4
 	cape.height = 0.9
-	_mesh(root, cape, Vector3(0, 0.45, -0.03), _body(Color("3a1418")))
+	_mesh(root, cape, Vector3(0, 0.45, -0.03), _body(Color("a03a34")))
 	var chest := _mesh(root, _sphere(0.3, 0.55), Vector3(0, 0.92, 0), skin)
 	chest.scale = Vector3(1.25, 1.0, 0.9)
 	var core := _mesh(root, _sphere(0.08, 0.16), Vector3(0, 0.95, 0.24), _glow(ABYSS_GLOW, 3.0))
@@ -233,7 +233,7 @@ func _build_abyss_lord() -> void:
 		var wing := _group(root, Vector3(side * 0.18, 1.0, -0.2))
 		wing.rotation_degrees = Vector3(-20.0, side * 25.0, side * 50.0)
 		wing.set_meta("flap", 0.1 * side)
-		_mesh(wing, _prism(Vector3(0.55, 0.9, 0.035)), Vector3(0, 0.4, 0), _body(Color("4a1a1e")))
+		_mesh(wing, _prism(Vector3(0.55, 0.9, 0.035)), Vector3(0, 0.4, 0), _body(Color("b0443e")))
 		_mesh(wing, _capsule(0.03, 0.95), Vector3(-side * 0.12, 0.45, 0.02), bronze)
 	var head := _group(root, Vector3(0, 1.32, 0.04))
 	_mesh(head, _sphere(0.18, 0.34), Vector3.ZERO, skin)
@@ -333,6 +333,13 @@ func _body(color: Color, roughness: float = 0.42) -> StandardMaterial3D:
 	material.rim_enabled = true
 	material.rim = 0.35
 	material.rim_tint = 0.4
+	# Carved marble look; the tint turns it pale for the Order and blood-red for the Horde.
+	var stone := "marble"
+	material.albedo_texture = WoodMaterials.tex(stone + "_albedo.jpg")
+	material.normal_enabled = true
+	material.normal_texture = WoodMaterials.tex(stone + "_normal.jpg")
+	material.uv1_triplanar = true
+	material.uv1_scale = Vector3(0.7, 0.7, 0.7)
 	body_materials.append(material)
 	return material
 

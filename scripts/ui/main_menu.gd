@@ -51,7 +51,7 @@ func _build_shell() -> void:
 	var backdrop := TextureRect.new()
 	var gradient := Gradient.new()
 	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
-	gradient.colors = PackedColorArray([Color("2b1d3f"), Color("120f22"), Color("06060d")])
+	gradient.colors = PackedColorArray([Color("3a2414"), Color("1a0f08"), Color("070402")])
 	var gradient_texture := GradientTexture2D.new()
 	gradient_texture.gradient = gradient
 	gradient_texture.fill = GradientTexture2D.FILL_RADIAL
@@ -320,5 +320,5 @@ func _update_profile_button() -> void:
 	_profile_button.modulate = AVATAR_COLORS[avatar_index]
 
 
-func _panel_style(color: Color = Color(0.07, 0.065, 0.11, 0.94)) -> StyleBoxFlat:
+func _panel_style(color: Color = Color(0.07, 0.065, 0.11, 0.94)) -> StyleBox:
 	return UITheme.panel_style(color)

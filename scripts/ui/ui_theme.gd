@@ -54,10 +54,10 @@ static func theme() -> Theme:
 	_theme.set_color("font_pressed_color", "Button", GOLD)
 	_theme.set_color("font_disabled_color", "Button", Color(INK, 0.4))
 	_theme.set_color("font_color", "Label", INK)
-	_theme.set_stylebox("normal", "Button", button_style(STONE_LIGHT, GOLD_DARK))
-	_theme.set_stylebox("hover", "Button", button_style(Color("3a3652"), GOLD))
-	_theme.set_stylebox("pressed", "Button", button_style(Color("15141f"), GOLD_LIGHT))
-	_theme.set_stylebox("disabled", "Button", button_style(Color(STONE, 0.7), Color(GOLD_DARK, 0.4)))
+	_theme.set_stylebox("normal", "Button", wood_button(Color.WHITE))
+	_theme.set_stylebox("hover", "Button", wood_button(Color(1.25, 1.15, 1.0)))
+	_theme.set_stylebox("pressed", "Button", wood_button(Color(0.75, 0.7, 0.65)))
+	_theme.set_stylebox("disabled", "Button", wood_button(Color(0.5, 0.5, 0.5, 0.7)))
 	_theme.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	_theme.set_stylebox("panel", "PanelContainer", panel_style())
 	return _theme
@@ -76,15 +76,38 @@ static func button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	return style
 
 
-static func panel_style(fill: Color = Color(0.07, 0.065, 0.11, 0.94)) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = GOLD_DARK
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	style.set_content_margin_all(14.0)
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 12
+## Stitched leather panel; falls back to a flat panel if the texture is missing.
+static func panel_style(fill: Color = Color(0.07, 0.065, 0.11, 0.94)) -> StyleBox:
+	var leather := load("res://assets/textures/ui_leather.jpg") as Texture2D
+	if leather == null:
+		var flat := StyleBoxFlat.new()
+		flat.bg_color = fill
+		flat.border_color = GOLD_DARK
+		flat.set_border_width_all(2)
+		flat.set_content_margin_all(14.0)
+		return flat
+	var style := StyleBoxTexture.new()
+	style.texture = leather
+	style.set_texture_margin_all(28.0)
+	style.set_content_margin_all(22.0)
+	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE_FIT
+	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE_FIT
+	return style
+
+
+## Wooden plank with an iron band, as a 9-patch.
+static func wood_button(tint: Color) -> StyleBox:
+	var plank := load("res://assets/textures/ui_button.jpg") as Texture2D
+	if plank == null:
+		return button_style(STONE_LIGHT, GOLD_DARK)
+	var style := StyleBoxTexture.new()
+	style.texture = plank
+	style.set_texture_margin_all(12.0)
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 10.0
+	style.content_margin_bottom = 10.0
+	style.modulate_color = tint
 	return style
 
 

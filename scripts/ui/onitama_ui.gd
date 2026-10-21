@@ -13,9 +13,7 @@ const CardViewScript := preload("res://scripts/ui/card_view.gd")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
 ## Opponent cards are drawn smaller, like a hand seen across the table.
-const OPPONENT_CARD_SCALE: float = 0.64
-## Screen share kept free above the board for the opponent creature at the table.
-const CREATURE_SPACE_RATIO: float = 0.17
+const OPPONENT_CARD_SCALE: float = 0.8
 
 var round_label: Label
 var instruction_label: Label
@@ -28,7 +26,6 @@ var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
 var opponent_label: String = "BOT"
 var viewer_team: int = 0
-var creature_space: float = 0.0
 var result_overlay: ColorRect
 var result_label: Label
 var menu_overlay: ColorRect
@@ -141,6 +138,21 @@ func _build_ui() -> void:
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.theme = UITheme.theme()
 	add_child(hud_root)
+	# Dark vignette frames the candle-lit table like a tavern scene.
+	var vignette := TextureRect.new()
+	var vignette_gradient := Gradient.new()
+	vignette_gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	vignette_gradient.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0.02, 0.01, 0.0, 0.15), Color(0.02, 0.01, 0.0, 0.7)])
+	var vignette_texture := GradientTexture2D.new()
+	vignette_texture.gradient = vignette_gradient
+	vignette_texture.fill = GradientTexture2D.FILL_RADIAL
+	vignette_texture.fill_from = Vector2(0.5, 0.5)
+	vignette_texture.fill_to = Vector2(1.05, 0.5)
+	vignette.texture = vignette_texture
+	vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(vignette)
 	hud_column = Control.new()
 	hud_column.anchor_left = 0.5
 	hud_column.anchor_right = 0.5
@@ -369,8 +381,8 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	hud_column.offset_right = column_width * 0.5
 	# Two hand cards plus a slightly smaller next card share one row.
 	var usable := column_width - 24.0 - 20.0
-	var card_width := clampf(usable / 2.8, 90.0, 230.0)
-	var card_height := clampf(card_width * 1.08, 100.0, minf(240.0, viewport_size.y * 0.17))
+	var card_width := clampf(usable / 2.95, 100.0, 260.0)
+	var card_height := clampf(card_width * 1.2, 120.0, minf(320.0, viewport_size.y * 0.24))
 	for position: int in range(2):
 		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
 		for view: CardView in card_views[position]:
@@ -384,7 +396,6 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	top_tray.offset_bottom = top_tray.get_combined_minimum_size().y
 	bottom_tray.offset_bottom = 0.0
 	bottom_tray.offset_top = -bottom_tray.get_combined_minimum_size().y
-	creature_space = viewport_size.y * CREATURE_SPACE_RATIO
 	var insets := get_board_insets()
 	board_insets_changed.emit(insets.x, insets.y)
 
@@ -392,4 +403,4 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 func get_board_insets() -> Vector2:
 	if top_tray == null:
 		return Vector2.ZERO
-	return Vector2(top_tray.offset_bottom + hud_root.offset_top + creature_space, -bottom_tray.offset_top - hud_root.offset_bottom)
+	return Vector2(top_tray.offset_bottom + hud_root.offset_top, -bottom_tray.offset_top - hud_root.offset_bottom)

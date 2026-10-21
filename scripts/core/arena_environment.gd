@@ -2,22 +2,14 @@ class_name ArenaEnvironment
 extends Node3D
 
 ## Purely visual scene around the board: an old wooden table in a candle-lit
-## hall, a carved wooden game board with brass corners, and a hooded mystic
-## creature looming over the far side of the table as the opponent.
+## hall and a carved wooden game board with iron-capped rails.
 ## Nothing here affects game rules.
 
 const BOARD_HALF_DEPTH: float = 3.5
 const FRAME_WIDTH: float = 0.55
 
 var _flicker_lights: Array[OmniLight3D] = []
-var _creature_eyes: Array[MeshInstance3D] = []
-var _creature_root: Node3D
 var _time: float = 0.0
-
-
-func set_opponent_creature_visible(value: bool) -> void:
-	if _creature_root != null:
-		_creature_root.visible = value
 
 
 func build() -> void:
@@ -27,7 +19,6 @@ func build() -> void:
 	_build_board_frame()
 	_build_candles()
 	_build_props()
-	_build_opponent_creature()
 	_build_dust()
 
 
@@ -37,11 +28,6 @@ func _process(delta: float) -> void:
 		var light := _flicker_lights[index]
 		var base := float(light.get_meta("base_energy"))
 		light.light_energy = base * (0.88 + sin(_time * 9.0 + index * 2.3) * 0.06 + sin(_time * 23.0 + index) * 0.04)
-	if _creature_root != null:
-		_creature_root.position.y = sin(_time * 0.8) * 0.08
-		var blink := fmod(_time, 5.5) < 0.14
-		for eye: MeshInstance3D in _creature_eyes:
-			eye.scale.y = 0.1 if blink else 1.0
 
 
 func _build_world_environment() -> void:
@@ -52,7 +38,7 @@ func _build_world_environment() -> void:
 	environment.background_color = Color("0b0705")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("6b4a33")
-	environment.ambient_light_energy = 0.42
+	environment.ambient_light_energy = 0.55
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_exposure = 1.0
 	environment.glow_enabled = true
@@ -78,7 +64,7 @@ func _build_lights() -> void:
 	key.name = "KeyLight"
 	key.rotation_degrees = Vector3(-60.0, -32.0, 0.0)
 	key.light_color = Color("ffd9a8")
-	key.light_energy = 0.95
+	key.light_energy = 1.25
 	key.shadow_enabled = true
 	key.shadow_opacity = 0.7
 	add_child(key)
@@ -97,7 +83,7 @@ func _build_table() -> void:
 	top.size = Vector3(40.0, 0.7, 44.0)
 	table.mesh = top
 	table.position.y = -0.62
-	table.material_override = WoodMaterials.material("table", false, 0.7)
+	table.material_override = WoodMaterials.surface("table", 0.16, 0.75)
 	add_child(table)
 	# Board base: one solid slab of walnut under the tiles.
 	var slab := MeshInstance3D.new()
@@ -105,14 +91,15 @@ func _build_table() -> void:
 	slab_mesh.size = Vector3(11.4, 0.24, BOARD_HALF_DEPTH * 2.0 + FRAME_WIDTH * 2.0)
 	slab.mesh = slab_mesh
 	slab.position.y = -0.2
-	slab.material_override = WoodMaterials.material("walnut")
+	slab.material_override = WoodMaterials.surface("frame", 0.5)
 	add_child(slab)
 
 
 func _build_board_frame() -> void:
 	var rail_z := BOARD_HALF_DEPTH + FRAME_WIDTH * 0.5
-	var oak := WoodMaterials.material("oak", false, 0.45)
+	var oak := WoodMaterials.surface("frame", 0.45, 0.5)
 	var brass := WoodMaterials.brass(0.15)
+	var studs := WoodMaterials.iron()
 	for side: int in [-1, 1]:
 		var rail := MeshInstance3D.new()
 		var rail_mesh := BoxMesh.new()
@@ -137,7 +124,7 @@ func _build_board_frame() -> void:
 			stud_mesh.height = 0.08
 			stud.mesh = stud_mesh
 			stud.position = Vector3(-4.2 + index * 1.4, 0.17, float(side) * (rail_z + 0.08))
-			stud.material_override = brass
+			stud.material_override = studs
 			add_child(stud)
 		for end: int in [-1, 1]:
 			_brass_corner(Vector3(float(end) * 5.5, 0.0, float(side) * rail_z))
@@ -149,7 +136,7 @@ func _brass_corner(at: Vector3) -> void:
 	mesh.size = Vector3(0.7, 0.4, FRAME_WIDTH + 0.12)
 	cap.mesh = mesh
 	cap.position = at
-	cap.material_override = WoodMaterials.brass(0.1)
+	cap.material_override = WoodMaterials.iron()
 	add_child(cap)
 	var gem := MeshInstance3D.new()
 	var gem_mesh := SphereMesh.new()
@@ -266,129 +253,6 @@ func _build_props() -> void:
 	glass.metallic = 0.2
 	orb.material_override = glass
 	add_child(orb)
-
-
-## A huge hooded being on the far side of the table, hands resting on the wood.
-func _build_opponent_creature() -> void:
-	_creature_root = Node3D.new()
-	_creature_root.name = "OpponentCreature"
-	add_child(_creature_root)
-	var robe := StandardMaterial3D.new()
-	robe.albedo_color = Color("2a1622")
-	robe.roughness = 0.85
-	robe.rim_enabled = true
-	robe.rim = 0.6
-	robe.rim_tint = 0.2
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = Color("3d3a4a")
-	skin.roughness = 0.5
-	skin.rim_enabled = true
-	skin.rim = 0.4
-	var horn := StandardMaterial3D.new()
-	horn.albedo_color = Color("b8a68a")
-	horn.roughness = 0.4
-
-	var body := MeshInstance3D.new()
-	var torso := SphereMesh.new()
-	torso.radius = 3.2
-	torso.height = 5.0
-	body.mesh = torso
-	body.position = Vector3(0.0, -0.9, -9.0)
-	body.scale = Vector3(1.35, 1.0, 0.8)
-	body.material_override = robe
-	_creature_root.add_child(body)
-	var hood := MeshInstance3D.new()
-	var hood_mesh := SphereMesh.new()
-	hood_mesh.radius = 1.6
-	hood_mesh.height = 3.4
-	hood.mesh = hood_mesh
-	hood.position = Vector3(0.0, 1.9, -7.9)
-	hood.material_override = robe
-	_creature_root.add_child(hood)
-	var face := MeshInstance3D.new()
-	var face_mesh := SphereMesh.new()
-	face_mesh.radius = 1.05
-	face_mesh.height = 2.0
-	face.mesh = face_mesh
-	face.position = Vector3(0.0, 1.75, -7.1)
-	var void_material := StandardMaterial3D.new()
-	void_material.albedo_color = Color("050307")
-	void_material.roughness = 1.0
-	face.material_override = void_material
-	_creature_root.add_child(face)
-	for side: float in [-1.0, 1.0]:
-		var eye := MeshInstance3D.new()
-		var eye_mesh := SphereMesh.new()
-		eye_mesh.radius = 0.2
-		eye_mesh.height = 0.22
-		eye.mesh = eye_mesh
-		eye.position = Vector3(side * 0.42, 1.85, -6.25)
-		eye.scale = Vector3(1.6, 1.0, 1.0)
-		var eye_material := StandardMaterial3D.new()
-		eye_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		eye_material.albedo_color = Color("ffb04a")
-		eye_material.emission_enabled = true
-		eye_material.emission = Color("ff7a1c")
-		eye_material.emission_energy_multiplier = 4.0
-		eye.material_override = eye_material
-		_creature_root.add_child(eye)
-		_creature_eyes.append(eye)
-		# Curled horns breaking out of the hood: chained tapering segments.
-		var joint := Node3D.new()
-		joint.position = Vector3(side * 0.95, 2.75, -7.7)
-		joint.rotation_degrees = Vector3(-10.0, 0.0, -side * 55.0)
-		_creature_root.add_child(joint)
-		for segment: int in range(5):
-			var length := 0.55 - segment * 0.05
-			var piece := MeshInstance3D.new()
-			var cone := CylinderMesh.new()
-			cone.bottom_radius = 0.3 - segment * 0.055
-			cone.top_radius = maxf(0.02, 0.3 - (segment + 1) * 0.055)
-			cone.height = length
-			piece.mesh = cone
-			piece.position.y = length * 0.5
-			piece.material_override = horn
-			joint.add_child(piece)
-			var next := Node3D.new()
-			next.position.y = length
-			next.rotation_degrees = Vector3(-14.0, 0.0, side * 28.0)
-			joint.add_child(next)
-			joint = next
-		# Clawed hands resting on the table edge beside the board.
-		var hand := Node3D.new()
-		hand.position = Vector3(side * 3.4, -0.05, -5.1)
-		hand.rotation_degrees.y = side * -18.0
-		_creature_root.add_child(hand)
-		var palm := MeshInstance3D.new()
-		var palm_mesh := SphereMesh.new()
-		palm_mesh.radius = 0.55
-		palm_mesh.height = 0.6
-		palm.mesh = palm_mesh
-		palm.scale = Vector3(1.0, 0.6, 1.2)
-		palm.material_override = skin
-		hand.add_child(palm)
-		var forearm := MeshInstance3D.new()
-		var arm_mesh := CylinderMesh.new()
-		arm_mesh.top_radius = 0.42
-		arm_mesh.bottom_radius = 0.6
-		arm_mesh.height = 2.6
-		forearm.mesh = arm_mesh
-		forearm.position = Vector3(0.0, 0.5, -1.4)
-		forearm.rotation_degrees.x = 62.0
-		forearm.material_override = robe
-		hand.add_child(forearm)
-		for finger: int in range(4):
-			var claw := MeshInstance3D.new()
-			var claw_mesh := CylinderMesh.new()
-			claw_mesh.top_radius = 0.0
-			claw_mesh.bottom_radius = 0.09
-			claw_mesh.height = 0.62
-			claw.mesh = claw_mesh
-			var spread := (float(finger) - 1.5) * 0.24
-			claw.position = Vector3(spread, -0.02, 0.62)
-			claw.rotation_degrees = Vector3(78.0, spread * 20.0, 0.0)
-			claw.material_override = horn
-			hand.add_child(claw)
 
 
 func _build_dust() -> void:

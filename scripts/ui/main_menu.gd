@@ -143,7 +143,7 @@ func _show_difficulty() -> void:
 	_content.add_child(_make_label("Wie stark soll der Bot spielen?", 15, Color("b9b3cc")))
 	for level: int in range(DIFFICULTY_OPTIONS.size()):
 		var option: Dictionary = DIFFICULTY_OPTIONS[level]
-		var marker := "  ●" if level == bot_difficulty else ""
+		var marker := "  (gewählt)" if level == bot_difficulty else ""
 		_add_menu_button(_content, str(option["title"]) + marker, str(option["subtitle"]), _choose_difficulty.bind(level))
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 

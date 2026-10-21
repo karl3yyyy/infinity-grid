@@ -6,12 +6,9 @@ signal hovered_cell_changed(coordinate: Vector2i)
 const GridCellData := preload("res://scripts/grid/grid_cell.gd")
 const CELL_SIZE: float = 1.4
 
-var grid_size: Vector2i = Vector2i(10, 10)
+var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
-var obstacle_coordinates: Array[Vector2i] = [
-	Vector2i(2, 4), Vector2i(4, 4), Vector2i(5, 4),
-	Vector2i(4, 5), Vector2i(7, 5),
-]
+var obstacle_coordinates: Array[Vector2i] = []
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
 
 var _colors: Dictionary = {
@@ -41,6 +38,7 @@ func setup() -> void:
 		cell.highlight = GridCellData.Highlight.BLOCKED
 		_create_obstacle(cell)
 		_update_cell_visual(cell)
+	_create_wrap_seams()
 
 
 func grid_to_world(coordinate: Vector2i) -> Vector3:
@@ -114,6 +112,19 @@ func show_attackable(coordinates: Array[Vector2i], selected: Vector2i) -> void:
 		_update_cell_visual(selected_cell)
 
 
+func show_movement_targets(coordinates: Array[Vector2i], selected: Vector2i, moving_team: int) -> void:
+	clear_highlights()
+	for coordinate: Vector2i in coordinates:
+		var cell: GridCell = cells[coordinate]
+		var occupant := cell.occupant as BattleUnit
+		cell.highlight = GridCellData.Highlight.ATTACK if occupant != null and occupant.team_id != moving_team else GridCellData.Highlight.MOVE
+		_update_cell_visual(cell)
+	if is_inside(selected):
+		var selected_cell: GridCell = cells[selected]
+		selected_cell.highlight = GridCellData.Highlight.SELECTED
+		_update_cell_visual(selected_cell)
+
+
 func set_occupant(coordinate: Vector2i, unit: Node) -> void:
 	if not is_inside(coordinate):
 		return
@@ -151,7 +162,9 @@ func get_neighbors(coordinate: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for offset: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
 		var neighbor := coordinate + offset
-		if is_inside(neighbor):
+		if offset.x != 0:
+			neighbor.x = posmod(neighbor.x, grid_size.x)
+		if is_inside(neighbor) and neighbor not in result:
 			result.append(neighbor)
 	return result
 
@@ -213,7 +226,8 @@ func find_path(start: Vector2i, goal: Vector2i, moving_unit: Node = null) -> Arr
 
 
 func manhattan_distance(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)
+	var horizontal_distance := absi(a.x - b.x)
+	return mini(horizontal_distance, grid_size.x - horizontal_distance) + absi(a.y - b.y)
 
 
 func has_line_of_sight(from: Vector2i, to: Vector2i) -> bool:
@@ -274,6 +288,34 @@ func _create_obstacle(cell: GridCell) -> void:
 	material.roughness = 0.95
 	obstacle.material_override = material
 	add_child(obstacle)
+
+
+func _create_wrap_seams() -> void:
+	var half_width := float(grid_size.x - 1) * 0.5 * CELL_SIZE + CELL_SIZE * 0.5
+	for side: int in [-1, 1]:
+		var seam := MeshInstance3D.new()
+		seam.name = "WrapSeam_%d" % side
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.09, 0.08, float(grid_size.y) * CELL_SIZE)
+		seam.mesh = mesh
+		seam.position = Vector3(float(side) * half_width, 0.015, 0.0)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("e0b45b")
+		material.emission_enabled = true
+		material.emission = Color("a66e2b")
+		material.emission_energy_multiplier = 0.8
+		material.metallic = 0.3
+		seam.material_override = material
+		add_child(seam)
+		var label := Label3D.new()
+		label.name = "WrapLabel_%d" % side
+		label.text = "LINK"
+		label.position = Vector3(float(side) * (half_width + 0.08), 0.18, 0.0)
+		label.font_size = 36
+		label.outline_size = 5
+		label.modulate = Color("ffe08a")
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		add_child(label)
 
 
 func _refresh_coordinate(coordinate: Vector2i) -> void:

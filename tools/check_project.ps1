@@ -21,8 +21,11 @@ function Invoke-GodotCheck {
     $LogPath = Join-Path $LogDirectory "$Name.log"
     Write-Host "`n=== $Name ===" -ForegroundColor Cyan
     Write-Host "$Godot $($Arguments -join ' ')"
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     & $Godot @Arguments 2>&1 | Tee-Object -FilePath $LogPath
     $ExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $PreviousErrorActionPreference
     if ($ExitCode -ne 0) {
         throw "$Name failed with exit code $ExitCode. See $LogPath"
     }

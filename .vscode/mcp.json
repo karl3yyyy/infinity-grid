@@ -1,0 +1,16 @@
+{
+	"servers": {
+		"godot": {
+			"type": "stdio",
+			"command": "${env:LOCALAPPDATA}/Microsoft/WinGet/Packages/OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe/node-v24.20.0-win-x64/node.exe",
+			"args": [
+				"${env:LOCALAPPDATA}/Microsoft/WinGet/Packages/OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe/node-v24.20.0-win-x64/node_modules/npm/bin/npx-cli.js",
+				"--yes",
+				"@coding-solo/godot-mcp@0.1.1"
+			],
+			"env": {
+				"GODOT_PATH": "${env:LOCALAPPDATA}/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe"
+			}
+		}
+	}
+}

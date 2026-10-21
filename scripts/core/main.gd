@@ -2,15 +2,11 @@ extends Node3D
 
 const GridManagerScript := preload("res://scripts/grid/grid_manager.gd")
 const TurnManagerScript := preload("res://scripts/battle/turn_manager.gd")
-const BattleManagerScript := preload("res://scripts/battle/battle_manager.gd")
+const BattleManagerScript := preload("res://scripts/battle/onitama_battle_manager.gd")
 const PlayerControllerScript := preload("res://scripts/controllers/player_controller.gd")
-const EnemyControllerScript := preload("res://scripts/controllers/enemy_controller.gd")
 const UnitMovementScript := preload("res://scripts/units/unit_movement.gd")
-const AttackActionScript := preload("res://scripts/battle/attack_action.gd")
-const RangedAttackActionScript := preload("res://scripts/battle/ranged_attack_action.gd")
-const HealActionScript := preload("res://scripts/battle/heal_action.gd")
 const CameraControllerScript := preload("res://scripts/camera/camera_controller.gd")
-const BattleUIScript := preload("res://scripts/ui/battle_ui.gd")
+const BattleUIScript := preload("res://scripts/ui/onitama_ui.gd")
 
 
 func _ready() -> void:
@@ -34,7 +30,7 @@ func _ready() -> void:
 	camera_controller.name = "CameraController"
 	add_child(camera_controller)
 
-	var battle_ui: BattleUI = BattleUIScript.new()
+	var battle_ui: OnitamaUI = BattleUIScript.new()
 	battle_ui.name = "BattleUI"
 	add_child(battle_ui)
 
@@ -44,46 +40,19 @@ func _ready() -> void:
 	var unit_movement: UnitMovement = UnitMovementScript.new()
 	unit_movement.name = "UnitMovement"
 	add_child(unit_movement)
-	var attack_action: AttackAction = AttackActionScript.new()
-	attack_action.name = "AttackAction"
-	attack_action.camera_controller = camera_controller
-	add_child(attack_action)
-	var ranged_attack_action: RangedAttackAction = RangedAttackActionScript.new()
-	ranged_attack_action.name = "RangedAttackAction"
-	ranged_attack_action.camera_controller = camera_controller
-	add_child(ranged_attack_action)
-	var heal_action: HealAction = HealActionScript.new()
-	heal_action.name = "HealAction"
-	add_child(heal_action)
 	var player_controller: PlayerController = PlayerControllerScript.new()
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
 	player_controller.setup(camera_controller, grid_manager)
-	var enemy_controller: EnemyController = EnemyControllerScript.new()
-	enemy_controller.name = "EnemyController"
-	add_child(enemy_controller)
-	enemy_controller.setup(
-		grid_manager,
-		unit_movement,
-		attack_action,
-		ranged_attack_action,
-		heal_action,
-		camera_controller
-	)
-	var battle_manager: BattleManager = BattleManagerScript.new()
+	var battle_manager: OnitamaBattleManager = BattleManagerScript.new()
 	battle_manager.name = "BattleManager"
 	add_child(battle_manager)
 	battle_manager.setup(
 		grid_manager,
 		turn_manager,
 		battle_ui,
-		camera_controller,
 		player_controller,
-		enemy_controller,
 		unit_movement,
-		attack_action,
-		ranged_attack_action,
-		heal_action,
 		units
 	)
 
@@ -131,7 +100,7 @@ func _build_environment() -> void:
 	var base := MeshInstance3D.new()
 	base.name = "BattlefieldBase"
 	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(16.0, 0.55, 16.0)
+	base_mesh.size = Vector3(10.3, 0.55, 10.3)
 	base.mesh = base_mesh
 	base.position.y = -0.39
 	var base_material := StandardMaterial3D.new()

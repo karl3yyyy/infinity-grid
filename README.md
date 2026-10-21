@@ -1,9 +1,10 @@
 # Tactical Slash
 
-Tactical Slash is a 3D turn-based tactical RPG built with Godot 4. Players
-command a Swordsman, Archer and Priest against an enemy squad with matching
-classes. The battle takes place on a 10x10 grid and uses animated 3D characters,
-class-specific actions, line of sight, healing, and class-aware enemy AI.
+Tactical Slash is a local two-player 3D strategy game built with Godot 4. Each
+player commands a Master and four Students on a 5x5 board whose left and right
+edges wrap around. Five movement cards are dealt between both players and a
+shared pass space; after each move, the used card trades places with the pass
+card. Capture the opposing Master to win.
 
 [**Play Online**](https://sion-rgb.github.io/tactical-slash/) ·
 [**Download for Windows**](https://github.com/sion-rgb/tactical-slash/releases/download/v0.2.0/TacticalSlash-Windows-x86_64.zip) ·
@@ -13,56 +14,48 @@ class-specific actions, line of sight, healing, and class-aware enemy AI.
 ## Play
 
 Open `project.godot` in Godot 4.7 stable and press F6 from
-`scenes/main.tscn`, or run the exported build.
+`scenes/main.tscn`, or run the exported build. The game is hot-seat multiplayer:
+both players take turns on the same device.
 
-1. Select a blue unit and click/tap a highlighted tile to move.
-2. Use **ATTACK** for a class attack, **HEAL** for a Priest ally, **WAIT** to
-   finish the selected unit, or **END TURN** to hand control to the AI.
-3. Swordsmen attack adjacent targets. Archers fire at range 2-5 with line of
-   sight. Priests cast Holy Bolt at range 2-4 and heal allies at range 1-4.
-4. Eliminate all three skeletons to win; losing all three heroes causes defeat.
+1. Choose one of your two movement cards.
+2. Select one of your five figures; highlighted fields show legal moves.
+3. Move onto an opponent's figure to capture it. Capturing the opposing Master
+  wins the game.
+4. The played card moves to the shared pass space; take the card that was there.
+5. Players alternate after every move. Gold lines mark the connected board edges.
 
 Desktop/Web controls:
 
-- **Left Click:** select, move, and choose a target.
+- **Left Click:** select cards, figures, and destination tiles.
 - **Right Click:** cancel.
 - **WASD / Arrow Keys:** pan the camera.
 - **Q / E:** rotate the camera.
 - **Mouse Wheel:** zoom.
 - **Escape:** pause or close the current menu.
-- **F11:** toggle fullscreen; **M:** toggle mute.
+- **F11:** toggle fullscreen.
 
 Android controls:
 
 - **Tap:** select and confirm.
 - **Drag:** pan the camera.
 - **Pinch:** zoom.
-- **UI Buttons:** rotate, cancel, and end the turn.
+- **UI Buttons:** select a movement card.
 - Two-finger rotate orbits the camera and long press cancels. The UI respects
   the platform safe area; Android Back closes the current mode/menu before
   exiting.
 
-## Classes
+## Movement Cards
 
-| Class | HP | ATK | DEF | MOVE | Actions |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Swordsman | 14 | 6 | 2 | 4 | Slash, range 1 |
-| Archer | 10 | 5 | 1 | 4 | Bow shot, range 2-5, line of sight |
-| Priest | 9 | 3 | 1 | 3 | Holy Bolt, range 2-4; Heal 6 HP, range 1-4 |
-
-- **Swordsman:** melee defense and Slash.
-- **Archer:** range 2-5 with line of sight.
-- **Priest:** Heal and Holy Bolt.
-
-Damage from arrows and spells is applied at projectile impact. Healing is
-clamped to maximum HP and cannot target enemies or defeated units. Enemy AI
-uses class-specific positioning and priorities; its Priest heals the lowest HP
-ratio ally below 50%, otherwise it attacks with Dark Bolt.
+The five shuffled cards are **Crane**, **Wave**, **Comet**, **Shell**, and
+**Vortex**. Each card defines three relative moves. Horizontal moves wrap around
+the board; moves past the top or bottom edge are invalid. Player 2's forward
+direction is mirrored. The HUD shows both hands and the shared pass card.
 
 ## Versions, Web, and licensing
 
 - Godot 4.7 stable with typed GDScript and the Compatibility renderer.
 - Blender 5.1.2 for the reproducible 3D asset preparation pipeline.
+- The workspace MCP server uses Node.js 24 and `@coding-solo/godot-mcp`.
 - The browser build uses the **Web Single-Threaded** preset without threads,
   SharedArrayBuffer, extensions, or GDExtension.
 - Character and environment assets are CC0 packs from KayKit and Kenney; the
@@ -74,11 +67,10 @@ ratio ally below 50%, otherwise it attacks with Dark Bolt.
 
 ## Architecture
 
-- `scripts/grid`: logical cells, occupancy, line of sight, BFS, and paths.
-- `scripts/units`: class data, unit state, GLB loading, animation mapping, and
-  tile-by-tile movement.
-- `scripts/battle`: turn flow plus melee, projectile, and healing actions.
-- `scripts/controllers`: desktop/touch input and bounded class-aware enemy AI.
+- `scripts/grid`: logical cells, occupancy, cylindrical neighbors, and paths.
+- `scripts/units`: unit state, GLB loading, animation mapping, and movement.
+- `scripts/battle`: movement cards, card exchange, turn flow, and capture rules.
+- `scripts/controllers`: desktop/touch input.
 - `scripts/camera`: smooth tactical pan, orbit, zoom, gesture input, and shake.
 - `scripts/ui`: responsive safe-area HUD, actions, menu, and results.
 - `scripts/effects`: hit, projectile, healing, and floating-number effects.
@@ -88,7 +80,7 @@ ratio ally below 50%, otherwise it attacks with Dark Bolt.
 
 `BattleUnit.grid_position` and `GridCell.occupant` are authoritative. Rendered
 `Node3D` positions never replace the `Vector2i` game state. Licensed visuals are
-loaded behind the unit API, so battle rules do not depend on model node names.
+loaded behind the unit API, so game rules do not depend on model node names.
 
 ## Validate
 

@@ -38,6 +38,7 @@ var heal_power: int = 0
 var unit_class_id: int = UnitClassData.UnitClass.SWORDSMAN
 var class_display_name: String = "Swordsman"
 var grid_position: Vector2i = Vector2i.ZERO
+var is_master: bool = false
 var has_moved: bool = false
 var has_attacked: bool = false
 var is_dead: bool = false
@@ -436,4 +437,5 @@ func _restore_materials() -> void:
 
 func _update_status_label() -> void:
 	if status_label != null:
-		status_label.text = "%s  %d/%d" % [unit_name, current_hp, max_hp]
+		var title := "MASTER" if is_master else "STUDENT"
+		status_label.text = "%s  %d/%d" % [title, current_hp, max_hp]

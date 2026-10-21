@@ -2,8 +2,11 @@ class_name OnitamaUI
 extends CanvasLayer
 
 signal card_selected(team_id: int, slot: int)
+signal bot_training_requested
 signal restart_pressed
 signal quit_pressed
+
+const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
 
 var round_label: Label
 var instruction_label: Label
@@ -19,11 +22,13 @@ var hud_root: Control
 var top_bar: ColorRect
 var card_layout: GridContainer
 var tray: PanelContainer
+var main_menu: MainMenu
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
+	_build_main_menu()
 	get_viewport().size_changed.connect(_apply_safe_area)
 	get_viewport().size_changed.connect(_apply_responsive_layout)
 
@@ -76,6 +81,7 @@ func set_opponent_bot(enabled: bool) -> void:
 
 func show_result(text_value: String) -> void:
 	menu_overlay.visible = false
+	main_menu.close_menu()
 	get_tree().paused = false
 	result_overlay.visible = true
 	result_label.text = text_value
@@ -186,6 +192,14 @@ func _build_ui() -> void:
 
 	_apply_safe_area()
 	_apply_responsive_layout()
+
+
+func _build_main_menu() -> void:
+	main_menu = MainMenuScript.new()
+	main_menu.name = "MainMenu"
+	add_child(main_menu)
+	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
+	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 
 func _add_hand(parent: GridContainer, team_id: int, title_text: String, team_color: Color) -> void:

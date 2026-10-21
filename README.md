@@ -15,8 +15,10 @@ the opposing Master to win.
 ## Play
 
 Open `project.godot` in Godot 4.7 stable and press F6 from
-`scenes/main.tscn`, or run the exported build. Player 2 is a simple local bot;
-online play is not implemented yet.
+`scenes/main.tscn`, or run the exported build. Select **Bot-Training** from the
+start menu to play locally. The profile name and avatar are saved on this
+device. Online menus are present, but matchmaking, friends, ranked, and shop
+services need a backend and are not connected yet.
 
 1. Choose one of your two movement cards.
 2. Select one of your five figures; highlighted fields show legal moves.

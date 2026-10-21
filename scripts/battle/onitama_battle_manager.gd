@@ -47,11 +47,12 @@ func setup(
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
+	battle_ui.bot_training_requested.connect(_start_bot_training)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
 	_spawn_armies()
-	call_deferred("_start_battle")
+	call_deferred("_show_title_menu")
 
 
 func _deal_cards() -> void:
@@ -87,7 +88,21 @@ func _spawn_armies() -> void:
 			unit.died.connect(_on_unit_died)
 
 
-func _start_battle() -> void:
+func _show_title_menu() -> void:
+	input_locked = true
+	player_controller.enabled = false
+	camera_controller.set_player_view(0)
+	turn_manager.set_state(TurnManager.BattleState.BATTLE_START)
+	_refresh_ui()
+	battle_ui.set_instruction("Choose a mode to begin.")
+
+
+func _start_bot_training() -> void:
+	if battle_over:
+		return
+	battle_ui.main_menu.close_menu()
+	bot_opponent_enabled = true
+	battle_ui.set_opponent_bot(true)
 	input_locked = false
 	player_controller.enabled = true
 	camera_controller.set_player_view(current_player)

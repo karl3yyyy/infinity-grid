@@ -6,6 +6,7 @@ const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 
 var grid_manager: GridManager
+var camera_controller: CameraController
 var turn_manager: TurnManager
 var battle_ui: OnitamaUI
 var player_controller: PlayerController
@@ -27,6 +28,7 @@ var battle_over: bool = false
 
 func setup(
 	grid: GridManager,
+	camera: CameraController,
 	turns: TurnManager,
 	ui: OnitamaUI,
 	player_input: PlayerController,
@@ -34,6 +36,7 @@ func setup(
 	unit_container: Node3D
 ) -> void:
 	grid_manager = grid
+	camera_controller = camera
 	turn_manager = turns
 	battle_ui = ui
 	player_controller = player_input
@@ -84,6 +87,7 @@ func _spawn_armies() -> void:
 func _start_battle() -> void:
 	input_locked = false
 	player_controller.enabled = true
+	camera_controller.set_player_view(current_player)
 	turn_manager.set_state(TurnManager.BattleState.PLAYER_SELECT_UNIT)
 	_refresh_ui()
 	battle_ui.set_instruction("Player 1: choose a movement card, then a figure and a highlighted destination.")
@@ -173,6 +177,7 @@ func _perform_move(destination: Vector2i) -> void:
 
 func _advance_turn() -> void:
 	current_player = 1 - current_player
+	camera_controller.set_player_view(current_player)
 	if current_player == 0:
 		round_number += 1
 	selected_card_slot = -1

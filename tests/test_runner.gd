@@ -20,9 +20,15 @@ func _run_tests() -> void:
 	var grid := main.get_node_or_null("BattleScene/GridManager") as GridManager
 	var battle := main.get_node_or_null("BattleManager") as OnitamaBattleManager
 	var ui := main.get_node_or_null("BattleUI") as OnitamaUI
+	var camera := main.get_node_or_null("CameraController") as CameraController
 	_expect(grid != null, "GridManager exists")
 	_expect(battle != null, "Onitama battle manager exists")
 	_expect(ui != null, "Card-selection UI exists")
+	_expect(camera != null and camera.projection == Camera3D.PROJECTION_ORTHOGONAL, "Board uses chess-style orthographic camera")
+	if ui != null:
+		ui._apply_responsive_layout(Vector2(390.0, 844.0))
+		_expect(ui.card_layout.columns == 1 and ui.tray.offset_top == -312.0, "Card HUD stacks for portrait mobile screens")
+		ui._apply_responsive_layout(Vector2(1280.0, 720.0))
 	if grid != null:
 		_expect(grid.cells.size() == 25, "Grid contains 25 cells")
 		_expect(Vector2i(4, 2) in grid.get_neighbors(Vector2i(0, 2)), "Left and right edges wrap")
@@ -35,6 +41,9 @@ func _run_tests() -> void:
 	_expect(Vector2i(2, 1) in deck[0].destinations(Vector2i(2, 2), 0, 5), "Player 1 card moves forward")
 	_expect(Vector2i(2, 3) in deck[0].destinations(Vector2i(2, 2), 1, 5), "Player 2 card is mirrored")
 	_expect(Vector2i(3, 2) in deck[1].destinations(Vector2i(0, 2), 0, 5), "Card targets wrap horizontally")
+	_expect(Vector2i(4, 2) in deck[3].destinations(Vector2i(0, 2), 0, 5), "Player 1 can move from the left edge to the right")
+	_expect(Vector2i(4, 2) in deck[3].destinations(Vector2i(0, 2), 1, 5), "Player 2's mirrored card uses the same shared board")
+	_expect(deck[0].move_summary(0) == deck[0].move_summary(1), "Both players read identical relative arrows from their own sides")
 
 	if battle != null:
 		_expect(battle.players.size() == 5 and battle.enemies.size() == 5, "Each player has five figures")
@@ -63,6 +72,32 @@ func _run_tests() -> void:
 			await battle._perform_move(move["destination"])
 			_expect(battle.hands[0][slot] == incoming_card and battle.pass_card == used_card, "Used card swaps with the pass card")
 			_expect(battle.current_player == 1, "Turn passes to Player 2 after one move")
+			_expect(is_equal_approx(camera.target_yaw, PI), "Player 2 sees the same board rotated 180 degrees")
+			var seam_attacker: BattleUnit = battle.players[0]
+			var seam_target: BattleUnit = battle.enemies[0]
+			var attacker_origin := seam_attacker.grid_position
+			var target_origin := seam_target.grid_position
+			var saved_card: MovementCard = battle.hands[0][0]
+			grid.remove_occupant(attacker_origin, seam_attacker)
+			grid.remove_occupant(target_origin, seam_target)
+			seam_attacker.grid_position = Vector2i(0, 2)
+			seam_target.grid_position = Vector2i(4, 2)
+			grid.set_occupant(seam_attacker.grid_position, seam_attacker)
+			grid.set_occupant(seam_target.grid_position, seam_target)
+			battle.current_player = 0
+			battle.hands[0][0] = MovementCard.new("Wrap Capture", [Vector2i(-1, 0)])
+			battle.selected_card_slot = 0
+			battle._select_unit(seam_attacker)
+			_expect(Vector2i(4, 2) in battle.movement_targets, "An enemy on the opposite edge can be captured on the shared board")
+			battle._deselect_unit()
+			grid.remove_occupant(seam_attacker.grid_position, seam_attacker)
+			grid.remove_occupant(seam_target.grid_position, seam_target)
+			seam_attacker.grid_position = attacker_origin
+			seam_target.grid_position = target_origin
+			grid.set_occupant(attacker_origin, seam_attacker)
+			grid.set_occupant(target_origin, seam_target)
+			battle.hands[0][0] = saved_card
+			battle.selected_card_slot = -1
 			var seam_unit: BattleUnit = battle.players[0]
 			var seam_start := Vector2i(0, 2)
 			var seam_end := Vector2i(4, 2)

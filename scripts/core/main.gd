@@ -49,6 +49,7 @@ func _ready() -> void:
 	add_child(battle_manager)
 	battle_manager.setup(
 		grid_manager,
+		camera_controller,
 		turn_manager,
 		battle_ui,
 		player_controller,
@@ -100,14 +101,25 @@ func _build_environment() -> void:
 	var base := MeshInstance3D.new()
 	base.name = "BattlefieldBase"
 	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(10.3, 0.55, 10.3)
+	base_mesh.size = Vector3(11.2, 0.55, 11.2)
 	base.mesh = base_mesh
 	base.position.y = -0.39
 	var base_material := StandardMaterial3D.new()
-	base_material.albedo_color = Color("172730")
+	base_material.albedo_color = Color("486b38")
 	base_material.roughness = 0.94
 	base.material_override = base_material
 	add_child(base)
+	var meadow := MeshInstance3D.new()
+	meadow.name = "MeadowGround"
+	var meadow_mesh := PlaneMesh.new()
+	meadow_mesh.size = Vector2(80.0, 80.0)
+	meadow.mesh = meadow_mesh
+	meadow.position.y = -0.72
+	var meadow_material := StandardMaterial3D.new()
+	meadow_material.albedo_color = Color("66834a")
+	meadow_material.roughness = 1.0
+	meadow.material_override = meadow_material
+	add_child(meadow)
 	_build_licensed_environment()
 
 
@@ -115,17 +127,14 @@ func _build_licensed_environment() -> void:
 	var environment_assets := Node3D.new()
 	environment_assets.name = "LicensedEnvironmentAssets"
 	add_child(environment_assets)
-	var placements: Array[Dictionary] = []
-	for x: int in range(-6, 7, 2):
-		placements.append({"path": "res://assets/environment/dungeon_wall.glb", "position": Vector3(float(x), 0.0, -7.25), "rotation": 0.0, "scale": 1.0})
-	for z: int in range(-4, 7, 3):
-		placements.append({"path": "res://assets/environment/dungeon_pillar.glb", "position": Vector3(-7.35, 0.0, float(z)), "rotation": 90.0, "scale": 1.0})
-	placements.append({"path": "res://assets/environment/dungeon_crate.glb", "position": Vector3(7.1, 0.0, -5.8), "rotation": 22.0, "scale": 1.15})
-	placements.append({"path": "res://assets/environment/dungeon_crate.glb", "position": Vector3(7.5, 0.0, -5.3), "rotation": -16.0, "scale": 0.85})
-	placements.append({"path": "res://assets/environment/nature_tree.glb", "position": Vector3(7.55, 0.0, 5.8), "rotation": -18.0, "scale": 1.8})
-	placements.append({"path": "res://assets/environment/nature_tree.glb", "position": Vector3(-7.65, 0.0, 6.3), "rotation": 26.0, "scale": 1.45})
-	placements.append({"path": "res://assets/environment/nature_rock.glb", "position": Vector3(7.45, 0.0, 2.5), "rotation": 38.0, "scale": 1.1})
-	placements.append({"path": "res://assets/environment/nature_bush.glb", "position": Vector3(6.9, 0.0, 4.6), "rotation": -12.0, "scale": 1.3})
+	var placements: Array[Dictionary] = [
+		{"path": "res://assets/environment/nature_tree.glb", "position": Vector3(-5.0, 0.0, -4.4), "rotation": -18.0, "scale": 1.25},
+		{"path": "res://assets/environment/nature_tree.glb", "position": Vector3(5.0, 0.0, 4.4), "rotation": 26.0, "scale": 1.2},
+		{"path": "res://assets/environment/nature_bush.glb", "position": Vector3(4.3, 0.0, -4.5), "rotation": -12.0, "scale": 0.85},
+		{"path": "res://assets/environment/nature_bush.glb", "position": Vector3(-4.3, 0.0, 4.5), "rotation": 18.0, "scale": 0.9},
+		{"path": "res://assets/environment/nature_rock.glb", "position": Vector3(5.0, 0.0, -4.5), "rotation": 38.0, "scale": 0.8},
+		{"path": "res://assets/environment/nature_rock.glb", "position": Vector3(-5.0, 0.0, 4.5), "rotation": -24.0, "scale": 0.75},
+	]
 	for placement: Dictionary in placements:
 		var resource_path: String = placement["path"]
 		if not ResourceLoader.exists(resource_path):

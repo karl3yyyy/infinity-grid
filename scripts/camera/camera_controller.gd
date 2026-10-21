@@ -3,11 +3,11 @@ extends Camera3D
 
 var focus_point: Vector3 = Vector3.ZERO
 var target_focus: Vector3 = Vector3.ZERO
-var distance: float = 16.5
-var target_distance: float = 16.5
-var yaw: float = deg_to_rad(45.0)
-var target_yaw: float = deg_to_rad(45.0)
-var pitch: float = deg_to_rad(55.0)
+var distance: float = 11.5
+var target_distance: float = 11.5
+var yaw: float = 0.0
+var target_yaw: float = 0.0
+var pitch: float = deg_to_rad(78.0)
 var pan_speed: float = 7.0
 var _shake_time: float = 0.0
 var _shake_strength: float = 0.0
@@ -15,9 +15,12 @@ var _shake_strength: float = 0.0
 
 func _ready() -> void:
 	current = true
+	projection = PROJECTION_ORTHOGONAL
 	fov = 48.0
 	near = 0.1
 	far = 100.0
+	get_viewport().size_changed.connect(_update_framing)
+	_update_framing()
 	_update_camera(1.0)
 
 
@@ -48,6 +51,11 @@ func focus_on(world_position: Vector3) -> void:
 	target_focus = Vector3(world_position.x, 0.0, world_position.z)
 
 
+func set_player_view(team_id: int) -> void:
+	target_focus = Vector3.ZERO
+	target_yaw = 0.0 if team_id == 0 else PI
+
+
 func shake(strength: float, duration: float) -> void:
 	_shake_strength = maxf(_shake_strength, strength)
 	_shake_time = maxf(_shake_time, duration)
@@ -74,6 +82,7 @@ func _update_camera(delta: float) -> void:
 	var weight := 1.0 if delta >= 1.0 else 1.0 - exp(-delta * 7.0)
 	focus_point = focus_point.lerp(target_focus, weight)
 	distance = lerpf(distance, target_distance, weight)
+	size = distance
 	yaw = lerp_angle(yaw, target_yaw, weight)
 	var horizontal_distance := cos(pitch) * distance
 	var offset := Vector3(
@@ -89,3 +98,12 @@ func _update_camera(delta: float) -> void:
 		_shake_strength = 0.0
 	global_position = focus_point + offset + shake_offset
 	look_at(focus_point + Vector3(0.0, 0.25, 0.0), Vector3.UP)
+
+
+func _update_framing() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var aspect_ratio := viewport_size.x / viewport_size.y
+	target_distance = maxf(11.5, 7.8 / aspect_ratio)
+	distance = target_distance

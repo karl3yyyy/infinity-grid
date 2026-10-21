@@ -13,9 +13,10 @@ func _init(new_name: String, new_offsets: Array[Vector2i]) -> void:
 func destinations(origin: Vector2i, team_id: int, grid_width: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for offset: Vector2i in offsets:
+		var horizontal_offset := -offset.x if team_id == 1 else offset.x
 		var forward_offset := offset.y if team_id == 1 else -offset.y
 		var destination := Vector2i(
-			posmod(origin.x + offset.x, grid_width),
+			posmod(origin.x + horizontal_offset, grid_width),
 			origin.y + forward_offset
 		)
 		if destination.y >= 0 and destination.y < 5 and destination not in result:
@@ -23,10 +24,10 @@ func destinations(origin: Vector2i, team_id: int, grid_width: int) -> Array[Vect
 	return result
 
 
-func move_summary(team_id: int = 0) -> String:
+func move_summary(_team_id: int = 0) -> String:
 	var labels: PackedStringArray = []
 	for offset: Vector2i in offsets:
-		var direction := Vector2i(offset.x, -offset.y if team_id == 0 else offset.y)
+		var direction := Vector2i(offset.x, -offset.y)
 		var symbol := ""
 		if direction.x == 0:
 			symbol = "↑" if direction.y < 0 else "↓"

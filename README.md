@@ -50,6 +50,9 @@ The five shuffled cards are **Crane**, **Wave**, **Comet**, **Shell**, and
 **Vortex**. Each card defines three relative moves. Horizontal moves wrap around
 the board; moves past the top or bottom edge are invalid. Player 2's forward
 direction is mirrored. The HUD shows both hands and the shared pass card.
+The camera switches to the opposite side of the same board after each move. On
+portrait screens, the card tray stacks vertically to keep the board and controls
+readable.
 
 ## Versions, Web, and licensing
 

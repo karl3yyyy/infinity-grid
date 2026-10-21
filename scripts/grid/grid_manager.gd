@@ -338,7 +338,9 @@ func _refresh_cell(cell: GridCell) -> void:
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
-	cell.material.albedo_color = _colors[cell.highlight]
+	var is_light_square := (cell.coordinate.x + cell.coordinate.y) % 2 == 0
+	var grass_color := Color("6f9651") if is_light_square else Color("527a40")
+	cell.material.albedo_color = grass_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
 	cell.material.emission_enabled = cell.highlight in [
 		GridCellData.Highlight.HOVER,
 		GridCellData.Highlight.SELECTED,

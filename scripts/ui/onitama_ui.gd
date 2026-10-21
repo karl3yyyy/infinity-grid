@@ -14,12 +14,16 @@ var result_overlay: ColorRect
 var result_label: Label
 var menu_overlay: ColorRect
 var hud_root: Control
+var top_bar: ColorRect
+var card_layout: GridContainer
+var tray: PanelContainer
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 	get_viewport().size_changed.connect(_apply_safe_area)
+	get_viewport().size_changed.connect(_apply_responsive_layout)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -35,7 +39,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func update_header(current_player: int, round_number: int) -> void:
-	round_label.text = "ROUND %02d    PLAYER %d TO MOVE" % [round_number, current_player + 1]
+	var narrow_view := get_viewport().get_visible_rect().size.x < 600.0
+	round_label.text = (
+		"ROUND %02d  •  P%d" % [round_number, current_player + 1]
+		if narrow_view else "ROUND %02d    PLAYER %d TO MOVE" % [round_number, current_player + 1]
+	)
 	round_label.modulate = Color("8fdff4") if current_player == 0 else Color("ff9b82")
 
 
@@ -82,7 +90,7 @@ func _build_ui() -> void:
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hud_root)
 
-	var top_bar := ColorRect.new()
+	top_bar = ColorRect.new()
 	top_bar.color = Color(0.025, 0.04, 0.065, 0.92)
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -107,22 +115,22 @@ func _build_ui() -> void:
 	instruction_label.modulate = Color("d0d9e4")
 	top_bar.add_child(instruction_label)
 
-	var tray := PanelContainer.new()
+	tray = PanelContainer.new()
 	tray.anchor_left = 0.0
 	tray.anchor_top = 1.0
 	tray.anchor_right = 1.0
 	tray.anchor_bottom = 1.0
-	tray.offset_top = -158.0
 	tray.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.04, 0.065, 0.94)))
 	tray.add_to_group("interactive_ui")
 	hud_root.add_child(tray)
-	var rows := HBoxContainer.new()
-	rows.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	rows.add_theme_constant_override("separation", 12)
-	tray.add_child(rows)
-	_add_hand(rows, 0, "PLAYER 1", Color("65bce8"))
-	_add_pass_card(rows)
-	_add_hand(rows, 1, "PLAYER 2", Color("ec806e"))
+	card_layout = GridContainer.new()
+	card_layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card_layout.add_theme_constant_override("h_separation", 12)
+	card_layout.add_theme_constant_override("v_separation", 6)
+	tray.add_child(card_layout)
+	_add_hand(card_layout, 0, "PLAYER 1", Color("65bce8"))
+	_add_pass_card(card_layout)
+	_add_hand(card_layout, 1, "PLAYER 2", Color("ec806e"))
 
 	result_overlay = ColorRect.new()
 	result_overlay.color = Color(0.01, 0.015, 0.025, 0.88)
@@ -170,9 +178,10 @@ func _build_ui() -> void:
 	restart_menu_button.pressed.connect(func() -> void: restart_pressed.emit())
 
 	_apply_safe_area()
+	_apply_responsive_layout()
 
 
-func _add_hand(parent: HBoxContainer, team_id: int, title_text: String, team_color: Color) -> void:
+func _add_hand(parent: GridContainer, team_id: int, title_text: String, team_color: Color) -> void:
 	var hand := VBoxContainer.new()
 	hand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hand.add_theme_constant_override("separation", 5)
@@ -196,7 +205,7 @@ func _add_hand(parent: HBoxContainer, team_id: int, title_text: String, team_col
 		card_buttons[team_id].append(button)
 
 
-func _add_pass_card(parent: HBoxContainer) -> void:
+func _add_pass_card(parent: GridContainer) -> void:
 	var pass_column := VBoxContainer.new()
 	pass_column.custom_minimum_size.x = 190.0
 	pass_column.add_theme_constant_override("separation", 5)
@@ -258,3 +267,32 @@ func _apply_safe_area() -> void:
 	hud_root.offset_top = float(safe_area.position.y) * logical_scale.y
 	hud_root.offset_right = -float(window_size.x - safe_area.end.x) * logical_scale.x
 	hud_root.offset_bottom = -float(window_size.y - safe_area.end.y) * logical_scale.y
+
+
+func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
+	if card_layout == null or tray == null or top_bar == null:
+		return
+	if viewport_size == Vector2.ZERO:
+		viewport_size = get_viewport().get_visible_rect().size
+	var portrait := viewport_size.x < viewport_size.y
+	card_layout.columns = 1 if portrait else 3
+	tray.offset_top = -312.0 if portrait else -158.0
+	top_bar.offset_bottom = 112.0 if portrait else 82.0
+	if portrait:
+		round_label.position = Vector2(16.0, 8.0)
+		round_label.add_theme_font_size_override("font_size", 18)
+		selection_label.position = Vector2(-148.0, 8.0)
+		selection_label.size = Vector2(132.0, 26.0)
+		selection_label.add_theme_font_size_override("font_size", 14)
+		instruction_label.position = Vector2(16.0, 40.0)
+		instruction_label.size = Vector2(maxf(0.0, viewport_size.x - 32.0), 66.0)
+		instruction_label.add_theme_font_size_override("font_size", 14)
+	else:
+		round_label.position = Vector2(24.0, 10.0)
+		round_label.add_theme_font_size_override("font_size", 23)
+		selection_label.position = Vector2(-280.0, 13.0)
+		selection_label.size = Vector2(250.0, 28.0)
+		selection_label.add_theme_font_size_override("font_size", 18)
+		instruction_label.position = Vector2(24.0, 43.0)
+		instruction_label.size = Vector2(maxf(0.0, viewport_size.x - 48.0), 30.0)
+		instruction_label.add_theme_font_size_override("font_size", 15)

@@ -340,6 +340,21 @@ func _build_model() -> void:
 	selection_ring.material_override = ring_material
 	selection_ring.visible = false
 	add_child(selection_ring)
+	if is_master:
+		var master_base := MeshInstance3D.new()
+		master_base.name = "MasterBase"
+		var master_base_mesh := CylinderMesh.new()
+		master_base_mesh.top_radius = 0.55
+		master_base_mesh.bottom_radius = 0.60
+		master_base_mesh.height = 0.07
+		master_base.mesh = master_base_mesh
+		master_base.position.y = 0.04
+		var master_material := StandardMaterial3D.new()
+		master_material.albedo_color = Color("e6b84f")
+		master_material.metallic = 0.58
+		master_material.roughness = 0.35
+		master_base.material_override = master_material
+		add_child(master_base)
 
 	status_label = Label3D.new()
 	status_label.name = "StatusLabel"

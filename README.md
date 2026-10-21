@@ -97,6 +97,25 @@ The PC (`tools/lan_host.gd`) serves the page on port 8060 and relays moves on
 8061 (`scripts/network/`). Both phones apply the rules themselves. The GitHub
 Pages build cannot use this mode because it is served over HTTPS.
 
+## Online play (room codes)
+
+**Multiplayer > Online** lets one player create a game and share the four-digit
+room code; the other enters it. The relay is a Cloudflare Worker with one
+Durable Object per room (`server/online/`, free Workers plan). It speaks the
+same protocol as the PC host, which can stand in for tests:
+`INFINITY_GRID_ONLINE=ws://127.0.0.1:8061` on desktop.
+
+Deploy once (needs Node.js and a Cloudflare account):
+
+```
+cd server/online
+npx wrangler deploy
+```
+
+Then put the printed address as `wss://...workers.dev` into
+`ONLINE_SERVER_URL` in `scripts/network/match_client.gd`, rebuild the web
+export and publish `site/`. The menu shows Online only when that address is set.
+
 ## Tools, Web, and licensing
 
 - Godot 4.7 stable with typed GDScript and the Compatibility renderer.

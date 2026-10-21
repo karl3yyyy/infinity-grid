@@ -5,6 +5,8 @@ signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
 signal lan_match_requested
+signal online_create_requested
+signal online_join_requested(code: String)
 signal restart_pressed
 signal quit_pressed
 signal board_insets_changed(top_pixels: float, bottom_pixels: float)
@@ -281,6 +283,8 @@ func _build_main_menu() -> void:
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
+	main_menu.online_create_requested.connect(func() -> void: online_create_requested.emit())
+	main_menu.online_join_requested.connect(func(code: String) -> void: online_join_requested.emit(code))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 

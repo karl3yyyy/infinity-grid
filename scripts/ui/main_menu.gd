@@ -4,6 +4,8 @@ extends Control
 signal bot_training_requested
 signal local_multiplayer_requested
 signal lan_match_requested
+signal online_create_requested
+signal online_join_requested(code: String)
 signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
@@ -135,7 +137,8 @@ func _show_home() -> void:
 	quit_button.custom_minimum_size = Vector2(110.0, 42.0)
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	footer.add_child(quit_button)
-	_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, UITheme.GOLD))
+	if not MatchClient.is_online_available():
+		_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, UITheme.GOLD))
 
 
 func _show_difficulty() -> void:
@@ -161,12 +164,43 @@ func _show_multiplayer() -> void:
 	_content.add_child(_make_label("Wähle, wie ihr spielen möchtet.", 15, Color("b9b3cc")))
 	_add_menu_button(_content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person spielen", _start_local_multiplayer)
 	_add_menu_button(_content, "IM WLAN SPIELEN", "Zwei Handys, der PC ist Gastgeber", _start_lan_match)
-	_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
+	if MatchClient.is_online_available():
+		_add_menu_button(_content, "ONLINE", "Mit einem Raum-Code gegen Freunde", _show_online_play)
+	else:
+		_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
 
+func _show_online_play() -> void:
+	_clear_content()
+	_content.add_child(_make_label("ONLINE", 26, UITheme.GOLD_LIGHT))
+	_content.add_child(_make_label("Erstelle ein Spiel und schick den Raum-Code an deinen Gegner – oder gib seinen Code ein.", 15, Color("b9b3cc")))
+	_add_menu_button(_content, "SPIEL ERSTELLEN", "Du bekommst einen Raum-Code", func() -> void:
+		close_menu()
+		online_create_requested.emit())
+	var code_input := LineEdit.new()
+	code_input.placeholder_text = "Raum-Code, z. B. 4821"
+	code_input.max_length = 4
+	code_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	code_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	code_input.custom_minimum_size.y = 52.0
+	code_input.add_theme_font_size_override("font_size", 22)
+	_content.add_child(code_input)
+	var join := func() -> void:
+		var code := code_input.text.strip_edges()
+		if code.length() != 4 or not code.is_valid_int():
+			code_input.placeholder_text = "Bitte 4 Ziffern eingeben"
+			code_input.text = ""
+			return
+		close_menu()
+		online_join_requested.emit(code)
+	code_input.text_submitted.connect(func(_text: String) -> void: join.call())
+	_add_menu_button(_content, "BEITRETEN", "Mit dem Code deines Gegners", join)
+	_add_menu_button(_content, "ZURÜCK", "", _show_multiplayer)
+
+
 func _start_lan_match() -> void:
-	if not LanClient.is_available():
+	if not MatchClient.is_lan_available():
 		_show_lan_help()
 		return
 	close_menu()

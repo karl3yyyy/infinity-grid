@@ -4,7 +4,7 @@ extends SceneTree
 ## manager replays a received opponent move.
 
 const LanHostServerScript := preload("res://scripts/network/lan_host_server.gd")
-const LanClientScript := preload("res://scripts/network/lan_client.gd")
+const MatchClientScript := preload("res://scripts/network/match_client.gd")
 const MainScene := preload("res://scenes/main.tscn")
 const TEST_PORT: int = 18060
 
@@ -44,8 +44,8 @@ func _run_tests() -> void:
 		var patched := LanHostServer.allow_plain_http(original)
 		_expect(patched.contains("lanFeatureCheck") and patched.contains("\"--audio-driver\",\"Dummy\""), "The plain-HTTP patch matches the current web export")
 
-	var first: LanClient = LanClientScript.new()
-	var second: LanClient = LanClientScript.new()
+	var first: MatchClient = MatchClientScript.new()
+	var second: MatchClient = MatchClientScript.new()
 	root.add_child(first)
 	root.add_child(second)
 	var starts: Array = []
@@ -55,7 +55,7 @@ func _run_tests() -> void:
 	second.match_started.connect(func(team: int, cards: Array) -> void: starts.append([1, team, cards]))
 	second.opponent_moved.connect(func(message: Dictionary) -> void: received.append(message))
 	second.opponent_left.connect(func() -> void: left.append(true))
-	var url := "ws://127.0.0.1:%d" % (TEST_PORT + 1)
+	var url := "ws://127.0.0.1:%d/play?mode=quick" % (TEST_PORT + 1)
 	first.connect_to_host(url)
 	await _wait_until(func() -> bool: return _server.waiting_player_count() == 1)
 	second.connect_to_host(url)
@@ -76,8 +76,10 @@ func _run_tests() -> void:
 	await _wait_until(func() -> bool: return left.size() == 1)
 	_expect(left.size() == 1, "The opponent learns when a player leaves")
 	second.disconnect_from_host()
+	await _test_room_codes(first, second)
 	_server.stop()
 	_server = null
+	_test_online_server_cards()
 
 	await _test_remote_move_replay()
 
@@ -88,6 +90,43 @@ func _run_tests() -> void:
 			push_error(failure)
 		print("TEST RESULT: FAIL (%d failures)" % failures.size())
 	quit(0 if failures.is_empty() else 1)
+
+
+## Online protocol (also spoken by the PC host): create a room, join by code.
+func _test_room_codes(host: MatchClient, guest: MatchClient) -> void:
+	var base := "ws://127.0.0.1:%d" % (TEST_PORT + 1)
+	var codes: Array = []
+	var rejections: Array = []
+	var starts: Array = []
+	host.room_created.connect(func(code: String) -> void: codes.append(code))
+	host.match_started.connect(func(team: int, _cards: Array) -> void: starts.append(["host", team]))
+	guest.match_started.connect(func(team: int, _cards: Array) -> void: starts.append(["guest", team]))
+	guest.rejected.connect(func(reason: String) -> void: rejections.append(reason))
+
+	guest.connect_to_host(base + "/play?mode=join&code=0000")
+	await _wait_until(func() -> bool: return rejections.size() == 1)
+	_expect(rejections == ["not_found"], "Joining an unknown room code is rejected")
+
+	host.connect_to_host(base + "/play?mode=create")
+	await _wait_until(func() -> bool: return codes.size() == 1)
+	_expect(codes.size() == 1 and str(codes[0]).length() == 4 and str(codes[0]).is_valid_int(), "Creating a game hands out a four-digit room code")
+	if codes.is_empty():
+		return
+	guest.connect_to_host(base + "/play?mode=join&code=" + str(codes[0]))
+	await _wait_until(func() -> bool: return starts.size() == 2)
+	starts.sort_custom(func(a: Array, b: Array) -> bool: return str(a[0]) < str(b[0]))
+	_expect(starts == [["guest", 1], ["host", 0]], "The room creator plays first, the guest second")
+	host.disconnect_from_host()
+	guest.disconnect_from_host()
+
+
+func _test_online_server_cards() -> void:
+	var worker := FileAccess.get_file_as_string("res://server/online/worker.js")
+	var missing: Array[String] = []
+	for card: MovementCard in MovementCard.create_deck():
+		if not worker.contains("\"%s\"" % card.card_name):
+			missing.append(card.card_name)
+	_expect(not worker.is_empty() and missing.is_empty(), "The online server deals from the same card pool (missing: %s)" % ", ".join(missing))
 
 
 func _test_remote_move_replay() -> void:
@@ -103,7 +142,7 @@ func _test_remote_move_replay() -> void:
 	grid.get_parent().visible = true
 	battle.bot_opponent_enabled = false
 	ui.set_opponent_remote(true)
-	battle._on_lan_match_started(1, ["Crane", "Wave", "Comet", "Shell", "Vortex"])
+	battle._on_network_match_started(1, ["Crane", "Wave", "Comet", "Shell", "Vortex"])
 	_expect(battle.network_team == 1 and battle.input_locked and not battle.player_controller.enabled, "Second player waits while the first one moves")
 	_expect(battle.hands[0][0].card_name == "Crane" and battle.pass_card.card_name == "Vortex", "Cards are dealt as the host decided")
 	_expect(ui.hand_titles[0].text == "DU" and ui.hand_titles[1].text == "GEGNER", "Own hand is at the bottom, the opponent's on top")
@@ -113,7 +152,7 @@ func _test_remote_move_replay() -> void:
 	_expect(grid.get_unit_at(Vector2i(0, 3)) != null and grid.get_unit_at(Vector2i(0, 4)) == null, "The opponent's move is replayed on this board")
 	_expect(battle.hands[0][0].card_name == "Vortex" and battle.pass_card.card_name == "Crane", "The replayed move swaps cards like a local move")
 	_expect(not battle.input_locked and battle.player_controller.enabled, "After the opponent's move it is this player's turn")
-	battle._on_lan_ended("GEGNER IST WEG")
+	battle._on_network_ended("GEGNER IST WEG")
 	_expect(battle.battle_over and ui.result_label.text == "GEGNER IST WEG", "A lost opponent ends the match with a message")
 	main.queue_free()
 	await process_frame

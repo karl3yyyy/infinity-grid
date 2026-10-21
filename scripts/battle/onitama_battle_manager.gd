@@ -5,7 +5,7 @@ const PlayerUnitScript := preload("res://scripts/units/player_unit.gd")
 const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
-const LanClientScript := preload("res://scripts/network/lan_client.gd")
+const MatchClientScript := preload("res://scripts/network/match_client.gd")
 ## The same position with the same side to move ends the match in a draw on this count.
 const DRAW_REPETITIONS: int = 3
 
@@ -35,7 +35,7 @@ var must_pass: bool = false
 var position_counts: Dictionary = {}
 ## Team this device controls in a Wi-Fi match; -1 outside of one.
 var network_team: int = -1
-var lan_client: LanClient
+var match_client: MatchClient
 ## Opponent moves that arrived while a local animation was still running.
 var _remote_moves: Array[Dictionary] = []
 var _playing_remote_move: bool = false
@@ -67,6 +67,8 @@ func setup(
 	battle_ui.bot_training_requested.connect(_start_bot_training)
 	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
 	battle_ui.lan_match_requested.connect(_start_lan_match)
+	battle_ui.online_create_requested.connect(_start_online_create)
+	battle_ui.online_join_requested.connect(_start_online_join)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
@@ -150,6 +152,18 @@ func _start_local_multiplayer() -> void:
 
 
 func _start_lan_match() -> void:
+	_start_network_match(MatchClient.lan_url(), "Verbinde mit dem PC ...", "Verbunden. Warte auf eine zweite Person ...")
+
+
+func _start_online_create() -> void:
+	_start_network_match(MatchClient.online_create_url(), "Erstelle ein Spiel ...", "Verbunden. Gleich gibt es einen Raum-Code ...")
+
+
+func _start_online_join(code: String) -> void:
+	_start_network_match(MatchClient.online_join_url(code), "Suche Raum %s ..." % code, "Verbunden. Trete Raum %s bei ..." % code)
+
+
+func _start_network_match(url: String, connecting_text: String, connected_text: String) -> void:
 	if battle_over:
 		return
 	battle_ui.main_menu.close_menu()
@@ -159,26 +173,41 @@ func _start_lan_match() -> void:
 	battle_ui.set_opponent_remote(true)
 	input_locked = true
 	player_controller.enabled = false
-	lan_client = LanClientScript.new()
-	lan_client.name = "LanClient"
+	match_client = MatchClientScript.new()
+	match_client.name = "MatchClient"
 	# Keep the connection alive while the pause menu is open.
-	lan_client.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(lan_client)
-	lan_client.connected.connect(func() -> void: battle_ui.set_instruction("Verbunden. Warte auf eine zweite Person ..."))
-	lan_client.match_started.connect(_on_lan_match_started)
-	lan_client.opponent_moved.connect(_on_opponent_moved)
-	lan_client.opponent_left.connect(_on_lan_ended.bind("GEGNER IST WEG"))
-	lan_client.connection_lost.connect(_on_lan_ended.bind("KEINE VERBINDUNG"))
+	match_client.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(match_client)
+	match_client.connected.connect(func() -> void: battle_ui.set_instruction(connected_text))
+	match_client.room_created.connect(func(code: String) -> void:
+		battle_ui.set_instruction("Raum-Code: %s  –  schick ihn deinem Gegner und warte." % code))
+	match_client.match_started.connect(_on_network_match_started)
+	match_client.opponent_moved.connect(_on_opponent_moved)
+	match_client.opponent_left.connect(_on_network_ended.bind("GEGNER IST WEG"))
+	match_client.rejected.connect(_on_network_rejected)
+	match_client.connection_lost.connect(_on_network_ended.bind("KEINE VERBINDUNG"))
 	_refresh_ui()
-	battle_ui.set_instruction("Verbinde mit dem PC ...")
-	if lan_client.connect_to_host() != OK:
-		_on_lan_ended("KEINE VERBINDUNG")
+	battle_ui.set_instruction(connecting_text)
+	if match_client.connect_to_host(url) != OK:
+		_on_network_ended("KEINE VERBINDUNG")
 
 
-func _on_lan_match_started(team: int, card_names: Array) -> void:
+func _on_network_rejected(reason: String) -> void:
+	match reason:
+		"not_found":
+			_on_network_ended("RAUM NICHT GEFUNDEN")
+		"full":
+			_on_network_ended("RAUM IST VOLL")
+		"code_taken":
+			_on_network_ended("BITTE NOCHMAL VERSUCHEN")
+		_:
+			_on_network_ended("VERBINDUNG ABGELEHNT")
+
+
+func _on_network_match_started(team: int, card_names: Array) -> void:
 	var cards := MovementCardScript.cards_from_names(card_names)
 	if cards.size() != 5 or team < 0 or team > 1:
-		_on_lan_ended("FEHLER BEIM START")
+		_on_network_ended("FEHLER BEIM START")
 		return
 	network_team = team
 	match_cards = cards.duplicate()
@@ -219,20 +248,20 @@ func _play_queued_remote_move() -> void:
 	var unit := grid_manager.get_unit_at(Vector2i(int(from_values[0]), int(from_values[1]))) as BattleUnit
 	var destination := Vector2i(int(to_values[0]), int(to_values[1]))
 	if unit == null or unit.team_id != current_player:
-		_on_lan_ended("SPIELSTAND WEICHT AB")
+		_on_network_ended("SPIELSTAND WEICHT AB")
 		return
 	_playing_remote_move = true
 	selected_card_slot = slot
 	_select_unit(unit)
 	if destination not in movement_targets:
 		_playing_remote_move = false
-		_on_lan_ended("SPIELSTAND WEICHT AB")
+		_on_network_ended("SPIELSTAND WEICHT AB")
 		return
 	await _perform_move(destination)
 	_playing_remote_move = false
 
 
-func _on_lan_ended(reason: String) -> void:
+func _on_network_ended(reason: String) -> void:
 	if battle_over:
 		return
 	battle_over = true
@@ -245,8 +274,8 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 	if input_locked or battle_over or team_id != current_player or slot < 0 or slot >= 2:
 		return
 	if must_pass:
-		if lan_client != null:
-			lan_client.send_pass(slot)
+		if match_client != null:
+			match_client.send_pass(slot)
 		_pass_turn(slot)
 		return
 	selected_card_slot = slot
@@ -271,8 +300,8 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		_select_unit(clicked_unit)
 		return
 	if selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
-		if lan_client != null:
-			lan_client.send_move(selected_unit.grid_position, selected_card_slot, coordinate)
+		if match_client != null:
+			match_client.send_move(selected_unit.grid_position, selected_card_slot, coordinate)
 		await _perform_move(coordinate)
 	elif selected_card_slot < 0:
 		battle_ui.set_instruction("Wähle zuerst eine deiner zwei Karten.")

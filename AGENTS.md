@@ -79,6 +79,8 @@ Do not implement internet networking, shop transactions, ranked services, or
 online profiles without an explicit backend milestone. Their menu entries are
 status pages only; the local profile name/avatar is stored on-device.
 
-Approved exception: Wi-Fi play. `tools/lan_host.gd` runs on a PC in the same
-network, serves the web export and relays moves between two browsers
-(`scripts/network/`). It stays a relay; every client runs the rules itself.
+Approved exceptions: Wi-Fi play and online room codes. `tools/lan_host.gd`
+runs on a PC in the same network, serves the web export and relays moves
+between two browsers; `server/online/worker.js` (Cloudflare Worker) relays
+moves for rooms joined by code. Both speak one protocol (`scripts/network/`)
+and stay relays; every client runs the rules itself.

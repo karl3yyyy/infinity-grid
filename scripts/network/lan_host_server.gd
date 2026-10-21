@@ -56,7 +56,7 @@ func poll() -> void:
 
 
 func waiting_player_count() -> int:
-	return _players.filter(func(player: Dictionary) -> bool: return int(player["partner"]) < 0).size()
+	return _players.filter(func(player: Dictionary) -> bool: return not str(player["mode"]).is_empty() and int(player["partner"]) < 0).size()
 
 
 ## Private IPv4 addresses phones in the same Wi-Fi can reach.
@@ -174,18 +174,48 @@ func _poll_websockets() -> void:
 	while _websocket_server.is_connection_available():
 		var socket := WebSocketPeer.new()
 		socket.accept_stream(_websocket_server.take_connection())
-		_players.append({"id": _next_player_id, "socket": socket, "partner": -1})
+		_players.append({"id": _next_player_id, "socket": socket, "partner": -1, "mode": "", "code": ""})
 		_next_player_id += 1
 	for player: Dictionary in _players.duplicate():
 		var socket := player["socket"] as WebSocketPeer
 		socket.poll()
 		match socket.get_ready_state():
 			WebSocketPeer.STATE_OPEN:
+				if str(player["mode"]).is_empty():
+					_on_player_joined(player, socket.get_requested_url())
 				while socket.get_available_packet_count() > 0:
 					_on_player_message(player, socket.get_packet().get_string_from_utf8())
 			WebSocketPeer.STATE_CLOSED:
 				_remove_player(player)
-	_pair_waiting_players()
+	_pair_quick_players()
+
+
+## Same protocol as the online server: /play?mode=quick | create | join&code=1234.
+func _on_player_joined(player: Dictionary, requested_url: String) -> void:
+	var query := parse_query(requested_url)
+	var mode := str(query.get("mode", "quick"))
+	player["mode"] = mode
+	match mode:
+		"quick":
+			pass
+		"create":
+			player["code"] = _unused_room_code()
+			_send(player, {"type": "room", "code": player["code"]})
+		"join":
+			var host := _find_open_room(str(query.get("code", "")))
+			if host.is_empty():
+				_reject(player, "not_found")
+			else:
+				_start_match(host, player)
+		_:
+			_reject(player, "bad_request")
+
+
+static func parse_query(requested_url: String) -> Dictionary:
+	var result := {}
+	for pair: String in requested_url.get_slice("?", 1).split("&", false):
+		result[pair.get_slice("=", 0).uri_decode()] = pair.get_slice("=", 1).uri_decode()
+	return result
 
 
 func _on_player_message(player: Dictionary, text: String) -> void:
@@ -198,22 +228,47 @@ func _on_player_message(player: Dictionary, text: String) -> void:
 			_send(partner, message)
 
 
-func _pair_waiting_players() -> void:
+func _pair_quick_players() -> void:
 	var waiting: Array[Dictionary] = []
 	for player: Dictionary in _players:
-		if int(player["partner"]) < 0 and (player["socket"] as WebSocketPeer).get_ready_state() == WebSocketPeer.STATE_OPEN:
+		if player["mode"] == "quick" and int(player["partner"]) < 0:
 			waiting.append(player)
 	while waiting.size() >= 2:
-		var first: Dictionary = waiting.pop_front()
-		var second: Dictionary = waiting.pop_front()
-		first["partner"] = second["id"]
-		second["partner"] = first["id"]
-		var card_names: Array[String] = []
-		for card: MovementCard in MovementCardScript.draw_match_cards(5):
-			card_names.append(card.card_name)
-		_send(first, {"type": "start", "team": 0, "cards": card_names})
-		_send(second, {"type": "start", "team": 1, "cards": card_names})
-		match_count += 1
+		_start_match(waiting.pop_front(), waiting.pop_front())
+
+
+## first plays team 0 and moves first.
+func _start_match(first: Dictionary, second: Dictionary) -> void:
+	first["partner"] = second["id"]
+	second["partner"] = first["id"]
+	var card_names: Array[String] = []
+	for card: MovementCard in MovementCardScript.draw_match_cards(5):
+		card_names.append(card.card_name)
+	_send(first, {"type": "start", "team": 0, "cards": card_names})
+	_send(second, {"type": "start", "team": 1, "cards": card_names})
+	match_count += 1
+
+
+func _find_open_room(code: String) -> Dictionary:
+	for player: Dictionary in _players:
+		if player["mode"] == "create" and player["code"] == code and int(player["partner"]) < 0:
+			return player
+	return {}
+
+
+func _unused_room_code() -> String:
+	while true:
+		var code := "%04d" % randi_range(0, 9999)
+		if _players.all(func(player: Dictionary) -> bool: return player["code"] != code):
+			return code
+	return ""
+
+
+func _reject(player: Dictionary, reason: String) -> void:
+	_send(player, {"type": "error", "reason": reason})
+	# Never paired from now on. The client closes the socket once it has read
+	# the reason; closing here right after the handshake would drop the message.
+	player["partner"] = 0
 
 
 func _remove_player(player: Dictionary) -> void:

@@ -58,6 +58,16 @@ around the board; moves past the top or bottom edge are invalid.
 The game runs in portrait format: opponent cards on top, the board in the
 middle, your own cards and the next (pass) card at the bottom.
 
+## Look
+
+The board is a carved wooden game board (maple/walnut inlay, oak rails, brass
+corners) on an old candle-lit table. A hooded horned creature sits across the
+table as the bot opponent. Pieces are procedural creature figurines
+(`scripts/units/creature_figure.gd`): the Celestial Order (moon owls and a
+winged seraph) against the Abyssal Horde (imps and an abyss lord). Wood grain is
+generated with noise in `scripts/core/wood_materials.gd`, so no extra textures
+are shipped. The KayKit character GLBs are no longer used in matches.
+
 ## Bot difficulty
 
 Quick play asks for a difficulty, saved with the local profile:

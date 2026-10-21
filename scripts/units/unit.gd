@@ -7,6 +7,7 @@ const MODEL_PATHS: Dictionary = {
 	0: "res://assets/characters/player/player_swordsman.glb",
 	1: "res://assets/characters/enemy/enemy_swordsman.glb",
 }
+const CreatureFigureScript := preload("res://scripts/units/creature_figure.gd")
 const ANIMATION_MAP: Dictionary = {
 	&"idle": [&"Idle", &"idle", &"Rig|Idle"],
 	&"walk": [&"Walking_A", &"Walk", &"walk", &"Rig|Walking_A"],
@@ -18,6 +19,8 @@ var team_id: int = 0
 var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
 var is_dead: bool = false
+## Yaw the figure returns to after moving (faces the opposing side).
+var rest_yaw: float = 0.0
 var animation_state: StringName = &"idle"
 
 var visual_root: Node3D
@@ -40,7 +43,6 @@ var _base_colors: Array[Color] = []
 var _idle_time: float = 0.0
 var _placeholder_root: Node3D
 var _wrap_projections: Array[Dictionary] = []
-var _crown_gem: Node3D
 
 
 func configure(
@@ -68,9 +70,6 @@ func _process(delta: float) -> void:
 	if is_dead:
 		return
 	_idle_time += delta
-	if _crown_gem != null:
-		_crown_gem.rotation.y += delta * 1.5
-		_crown_gem.position.y = 2.25 + sin(_idle_time * 2.0) * 0.06
 	if animation_state == &"idle":
 		visual_root.position.y = sin(_idle_time * 2.2) * 0.025
 		sword_pivot.rotation_degrees.z = sin(_idle_time * 1.7) * 2.0
@@ -274,10 +273,19 @@ func _build_model() -> void:
 	status_label.modulate = _accent_color
 	add_child(status_label)
 
-	# Role is shown by the aura and crown gem instead of floating text.
+	# Role is shown by the creature shape and aura instead of floating text.
 	status_label.visible = false
-	using_licensed_model = _load_licensed_model()
-	_placeholder_root.visible = not using_licensed_model
+	# Mystical creature figurines replace the humanoid models; the procedural
+	# placeholder rig stays (hidden) so the existing animation hooks still work.
+	using_licensed_model = false
+	_placeholder_root.visible = false
+	var creature: CreatureFigure = CreatureFigureScript.new()
+	creature.name = "Creature"
+	creature.configure(team_id, is_master)
+	visual_root.add_child(creature)
+	for material: StandardMaterial3D in creature.body_materials:
+		_materials.append(material)
+		_base_colors.append(material.albedo_color)
 	_build_team_aura()
 
 
@@ -285,7 +293,7 @@ func _aura_color() -> Color:
 	return Color("3fa9ff") if team_id == 0 else Color("ff4f3a")
 
 
-## Glowing team ring under every figure; masters get a gold ring and a crown gem.
+## Glowing team ring under every figure; masters also get a gold ring.
 func _build_team_aura() -> void:
 	var aura := Node3D.new()
 	aura.name = "TeamAura"
@@ -329,26 +337,7 @@ func _build_team_aura() -> void:
 	gold.emission_energy_multiplier = 1.2
 	ring.material_override = gold
 	aura.add_child(ring)
-	_crown_gem = Node3D.new()
-	_crown_gem.name = "CrownGem"
-	_crown_gem.position.y = 2.25
-	aura.add_child(_crown_gem)
-	var gem_material := StandardMaterial3D.new()
-	gem_material.albedo_color = color.lightened(0.2)
-	gem_material.emission_enabled = true
-	gem_material.emission = color
-	gem_material.emission_energy_multiplier = 2.6
-	gem_material.metallic = 0.4
-	gem_material.roughness = 0.1
-	for flip: float in [1.0, -1.0]:
-		var half := MeshInstance3D.new()
-		var prism := PrismMesh.new()
-		prism.size = Vector3(0.3, 0.28, 0.3)
-		half.mesh = prism
-		half.position.y = 0.14 * flip
-		half.rotation_degrees.x = 0.0 if flip > 0.0 else 180.0
-		half.material_override = gem_material
-		_crown_gem.add_child(half)
+
 
 
 func _load_licensed_model() -> bool:

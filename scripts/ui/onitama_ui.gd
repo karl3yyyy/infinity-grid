@@ -12,6 +12,10 @@ const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
 const CardViewScript := preload("res://scripts/ui/card_view.gd")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
+## Opponent cards are drawn smaller, like a hand seen across the table.
+const OPPONENT_CARD_SCALE: float = 0.64
+## Screen share kept free above the board for the opponent creature at the table.
+const CREATURE_SPACE_RATIO: float = 0.17
 
 var round_label: Label
 var instruction_label: Label
@@ -24,6 +28,7 @@ var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
 var opponent_label: String = "BOT"
 var viewer_team: int = 0
+var creature_space: float = 0.0
 var result_overlay: ColorRect
 var result_label: Label
 var menu_overlay: ColorRect
@@ -365,12 +370,12 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	# Two hand cards plus a slightly smaller next card share one row.
 	var usable := column_width - 24.0 - 20.0
 	var card_width := clampf(usable / 2.8, 90.0, 230.0)
-	var card_height := clampf(card_width * 1.08, 100.0, minf(250.0, viewport_size.y * 0.19))
-	var next_width := card_width * 0.8
+	var card_height := clampf(card_width * 1.08, 100.0, minf(240.0, viewport_size.y * 0.17))
 	for position: int in range(2):
+		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
 		for view: CardView in card_views[position]:
-			view.custom_minimum_size = Vector2(card_width, card_height)
-		next_views[position].custom_minimum_size = Vector2(next_width, card_height * 0.86)
+			view.custom_minimum_size = Vector2(card_width, card_height) * factor
+		next_views[position].custom_minimum_size = Vector2(card_width * 0.8, card_height * 0.86) * factor
 	top_tray.offset_left = 0.0
 	top_tray.offset_right = 0.0
 	bottom_tray.offset_left = 0.0
@@ -379,10 +384,12 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	top_tray.offset_bottom = top_tray.get_combined_minimum_size().y
 	bottom_tray.offset_bottom = 0.0
 	bottom_tray.offset_top = -bottom_tray.get_combined_minimum_size().y
-	board_insets_changed.emit(top_tray.offset_bottom + hud_root.offset_top, -bottom_tray.offset_top - hud_root.offset_bottom)
+	creature_space = viewport_size.y * CREATURE_SPACE_RATIO
+	var insets := get_board_insets()
+	board_insets_changed.emit(insets.x, insets.y)
 
 
 func get_board_insets() -> Vector2:
 	if top_tray == null:
 		return Vector2.ZERO
-	return Vector2(top_tray.offset_bottom + hud_root.offset_top, -bottom_tray.offset_top - hud_root.offset_bottom)
+	return Vector2(top_tray.offset_bottom + hud_root.offset_top + creature_space, -bottom_tray.offset_top - hud_root.offset_bottom)

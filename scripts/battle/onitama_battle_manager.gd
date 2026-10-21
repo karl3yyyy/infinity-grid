@@ -82,8 +82,10 @@ func _spawn_armies() -> void:
 			else:
 				unit = EnemyUnitScript.new()
 				unit.setup_enemy(display_name, coordinate)
-				unit.rotation_degrees.y = 180.0
 			unit.is_master = is_master
+			# Figurines face the opposing side, like pieces on a real board.
+			unit.rest_yaw = PI if team_id == 0 else 0.0
+			unit.rotation.y = unit.rest_yaw
 			unit.scale = Vector3.ONE * (1.18 if is_master else 1.0)
 			units_parent.add_child(unit)
 			unit.position = grid_manager.grid_to_world(coordinate)
@@ -109,6 +111,7 @@ func _start_bot_training() -> void:
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = true
+	_set_creature_visible(true)
 	bot_difficulty = battle_ui.main_menu.bot_difficulty
 	battle_ui.set_opponent_bot(true, BotAI.label_for(bot_difficulty))
 	input_locked = false
@@ -124,6 +127,8 @@ func _start_local_multiplayer() -> void:
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = false
+	# The table creature would block the board once the camera turns around.
+	_set_creature_visible(false)
 	battle_ui.set_opponent_bot(false)
 	input_locked = false
 	player_controller.enabled = true
@@ -325,6 +330,12 @@ func _refresh_ui() -> void:
 	battle_ui.update_header(current_player, round_number)
 	battle_ui.update_hands(hands, pass_card, current_player, selected_card_slot, _viewer_team())
 	battle_ui.update_selection(selected_unit)
+
+
+func _set_creature_visible(value: bool) -> void:
+	var arena := get_parent().get_node_or_null("Arena") as ArenaEnvironment
+	if arena != null:
+		arena.set_opponent_creature_visible(value)
 
 
 func _viewer_team() -> int:

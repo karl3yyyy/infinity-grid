@@ -23,6 +23,9 @@ func move_unit(unit: BattleUnit, path: Array[Vector2i], grid: GridManager) -> vo
 			await tween.finished
 			unit.position = target_position
 	unit.play_idle()
+	var turn_back := unit.create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	turn_back.tween_property(unit, "rotation:y", unit.rest_yaw, 0.18)
+	await turn_back.finished
 	movement_finished.emit(unit)
 
 

@@ -14,11 +14,11 @@ var _wrap_materials: Dictionary = {}
 
 var _colors: Dictionary = {
 	GridCellData.Highlight.NORMAL: Color("35545b"),
-	GridCellData.Highlight.HOVER: Color("6a7fb0"),
+	GridCellData.Highlight.HOVER: Color("ffe2b0"),
 	GridCellData.Highlight.SELECTED: Color("ffcf5a"),
 	GridCellData.Highlight.MOVE: Color("3fb8ff"),
 	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
-	GridCellData.Highlight.OCCUPIED: Color("4a4562"),
+	GridCellData.Highlight.OCCUPIED: Color("f0e6dc"),
 }
 
 
@@ -154,9 +154,7 @@ func _create_cell_visual(cell: GridCell) -> void:
 	box.size = Vector3(CELL_SIZE * 0.94, 0.12, CELL_SIZE * 0.94)
 	mesh_instance.mesh = box
 	mesh_instance.position = cell.world_position + Vector3(0.0, -0.08, 0.0)
-	var material := StandardMaterial3D.new()
-	material.roughness = 0.62
-	material.metallic = 0.12
+	var material := _tile_material(cell.coordinate)
 	mesh_instance.material_override = material
 	add_child(mesh_instance)
 	cell.visual = mesh_instance
@@ -182,9 +180,7 @@ func _create_wrap_tile(coordinate: Vector2i, horizontal_offset: float, opacity: 
 	box.size = Vector3(CELL_SIZE * 0.94, 0.12, CELL_SIZE * 0.94)
 	projection.mesh = box
 	projection.position = source_cell.world_position + Vector3(horizontal_offset, -0.08, 0.0)
-	var material := StandardMaterial3D.new()
-	material.roughness = 0.86
-	material.metallic = 0.05
+	var material := _tile_material(coordinate)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	projection.material_override = material
 	add_child(projection)
@@ -239,6 +235,12 @@ func _create_wrap_seams() -> void:
 		add_child(seam)
 
 
+## Inlaid wood: light maple and dark walnut squares with alternating grain.
+func _tile_material(coordinate: Vector2i) -> StandardMaterial3D:
+	var is_light_square := (coordinate.x + coordinate.y) % 2 == 0
+	return WoodMaterials.material("maple" if is_light_square else "walnut", is_light_square, 0.5)
+
+
 func _refresh_coordinate(coordinate: Vector2i) -> void:
 	if is_inside(coordinate):
 		_refresh_cell(cells[coordinate])
@@ -258,8 +260,9 @@ func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
 	var is_light_square := (cell.coordinate.x + cell.coordinate.y) % 2 == 0
-	var stone_color := Color("4d4b5c") if is_light_square else Color("33323f")
-	var tile_color: Color = stone_color if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
+	# Normal tiles show the wood texture untinted; highlights tint and glow.
+	var wood_tint := Color.WHITE if is_light_square else Color(0.92, 0.9, 0.88)
+	var tile_color: Color = wood_tint if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
 	var is_emissive := cell.highlight in [
 		GridCellData.Highlight.HOVER,
 		GridCellData.Highlight.SELECTED,

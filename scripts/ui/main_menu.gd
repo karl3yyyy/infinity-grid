@@ -6,6 +6,12 @@ signal local_multiplayer_requested
 signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
+const CardViewScript := preload("res://scripts/ui/card_view.gd")
+const DIFFICULTY_OPTIONS: Array[Dictionary] = [
+	{"title": "LEICHT", "subtitle": "Zum Reinkommen – macht auch mal Fehler"},
+	{"title": "MITTEL", "subtitle": "Denkt einen Zug voraus"},
+	{"title": "SCHWER", "subtitle": "Rechnet mehrere Züge tief"},
+]
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
 const AVATAR_COLORS: Array[Color] = [
 	Color("55b8d4"), Color("e78b62"), Color("7ca77a"), Color("cfaa55"), Color("a287c2"),
@@ -13,6 +19,8 @@ const AVATAR_COLORS: Array[Color] = [
 
 var profile_name: String = "Spieler"
 var avatar_index: int = 0
+## BotAI.Difficulty value chosen for quick play; saved with the profile.
+var bot_difficulty: int = 1
 var _panel: PanelContainer
 var _content: VBoxContainer
 var _profile_button: Button
@@ -93,7 +101,7 @@ func _show_home() -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 22.0
 	_content.add_child(spacer)
-	_add_menu_button(_content, "SCHNELLES SPIEL", "Sofort gegen einen Bot", _start_bot_training)
+	_add_menu_button(_content, "SCHNELLES SPIEL", "Gegen den Bot – Schwierigkeit wählen", _show_difficulty)
 	_add_menu_button(_content, "MULTIPLAYER", "Lokal auf einem Gerät oder online", _show_multiplayer)
 	_add_menu_button(_content, "SAMMLUNG", "Deine Bewegungskarten", _show_collection)
 	_add_menu_button(_content, "SHOP", "Kosmetik und Kartenrücken", _show_online_page.bind("SHOP"))
@@ -109,6 +117,23 @@ func _show_home() -> void:
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	footer.add_child(quit_button)
 	_content.add_child(_make_label("Online-Funktionen benötigen noch einen Spielserver.", 12, Color("d9a07c")))
+
+
+func _show_difficulty() -> void:
+	_clear_content()
+	_content.add_child(_make_label("SCHWIERIGKEIT", 26, Color("f0f4df")))
+	_content.add_child(_make_label("Wie stark soll der Bot spielen?", 15, Color("afc2b6")))
+	for level: int in range(DIFFICULTY_OPTIONS.size()):
+		var option: Dictionary = DIFFICULTY_OPTIONS[level]
+		var marker := "  ●" if level == bot_difficulty else ""
+		_add_menu_button(_content, str(option["title"]) + marker, str(option["subtitle"]), _choose_difficulty.bind(level))
+	_add_menu_button(_content, "ZURÜCK", "", _show_home)
+
+
+func _choose_difficulty(level: int) -> void:
+	bot_difficulty = level
+	_save_profile()
+	_start_bot_training()
 
 
 func _show_multiplayer() -> void:
@@ -176,19 +201,26 @@ func _show_profile() -> void:
 
 func _show_collection() -> void:
 	_clear_content()
+	var deck := MovementCardScript.create_deck()
 	_content.add_child(_make_label("KARTENSAMMLUNG", 26, Color("f0f4df")))
-	_content.add_child(_make_label("Alle fünf Grundkarten sind freigeschaltet.", 14, Color("afc2b6")))
-	for card: MovementCard in MovementCardScript.create_deck():
-		var row := PanelContainer.new()
-		row.add_theme_stylebox_override("panel", _panel_style(Color("203b39")))
-		var row_margin := MarginContainer.new()
-		row_margin.add_theme_constant_override("margin_left", 12)
-		row_margin.add_theme_constant_override("margin_right", 12)
-		row_margin.add_theme_constant_override("margin_top", 8)
-		row_margin.add_theme_constant_override("margin_bottom", 8)
-		row.add_child(row_margin)
-		row_margin.add_child(_make_label("%s     %s" % [card.card_name, card.move_summary()], 16, Color("e5e8cf")))
-		_content.add_child(row)
+	_content.add_child(_make_label("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), 14, Color("afc2b6")))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size.y = 380.0
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_content.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(grid)
+	var card_width := floorf((_content.custom_minimum_size.x - 40.0) / 3.0)
+	for card: MovementCard in deck:
+		var view: CardView = CardViewScript.new()
+		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
+		view.show_card(card, false, Color("3f8fd2"), false)
+		grid.add_child(view)
 	_add_menu_button(_content, "ZURÜCK", "", _show_home)
 
 
@@ -236,12 +268,14 @@ func _load_profile() -> void:
 		return
 	profile_name = str(config.get_value("profile", "name", profile_name))
 	avatar_index = clampi(int(config.get_value("profile", "avatar", avatar_index)), 0, AVATAR_COLORS.size() - 1)
+	bot_difficulty = clampi(int(config.get_value("profile", "bot_difficulty", bot_difficulty)), 0, DIFFICULTY_OPTIONS.size() - 1)
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "name", profile_name)
 	config.set_value("profile", "avatar", avatar_index)
+	config.set_value("profile", "bot_difficulty", bot_difficulty)
 	config.save(PROFILE_PATH)
 
 

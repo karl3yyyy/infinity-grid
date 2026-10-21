@@ -4,6 +4,7 @@ extends Node
 const PlayerUnitScript := preload("res://scripts/units/player_unit.gd")
 const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
+const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
 
 var grid_manager: GridManager
 var camera_controller: CameraController
@@ -24,6 +25,9 @@ var round_number: int = 1
 var input_locked: bool = true
 var battle_over: bool = false
 var bot_opponent_enabled: bool = true
+var bot_difficulty: int = BotAI.Difficulty.MEDIUM
+## Cards dealt for this match (hands + pass); the bot indexes into this list.
+var match_cards: Array[MovementCard] = []
 
 
 func setup(
@@ -38,6 +42,9 @@ func setup(
 	camera_controller = camera
 	battle_ui = ui
 	battle_ui.set_opponent_bot(bot_opponent_enabled)
+	battle_ui.board_insets_changed.connect(camera_controller.set_board_insets)
+	var insets := battle_ui.get_board_insets()
+	camera_controller.set_board_insets(insets.x, insets.y)
 	player_controller = player_input
 	unit_movement = movement
 	units_parent = unit_container
@@ -54,8 +61,8 @@ func setup(
 
 
 func _deal_cards() -> void:
-	var deck := MovementCardScript.create_deck()
-	deck.shuffle()
+	var deck := MovementCardScript.draw_match_cards(5)
+	match_cards = deck.duplicate()
 	hands[0] = [deck[0], deck[1]]
 	hands[1] = [deck[2], deck[3]]
 	pass_card = deck[4]
@@ -93,7 +100,7 @@ func _show_title_menu() -> void:
 	battle_ui.main_menu.open_menu(false)
 	camera_controller.set_player_view(0)
 	_refresh_ui()
-	battle_ui.set_instruction("Choose a mode to begin.")
+	battle_ui.set_instruction("Wähle einen Spielmodus.")
 
 
 func _start_bot_training() -> void:
@@ -102,12 +109,13 @@ func _start_bot_training() -> void:
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = true
-	battle_ui.set_opponent_bot(true)
+	bot_difficulty = battle_ui.main_menu.bot_difficulty
+	battle_ui.set_opponent_bot(true, BotAI.label_for(bot_difficulty))
 	input_locked = false
 	player_controller.enabled = true
 	camera_controller.set_player_view(current_player)
 	_refresh_ui()
-	battle_ui.set_instruction("Player 1: choose a movement card, then a figure and a highlighted destination.")
+	battle_ui.set_instruction("Wähle eine Karte und eine Figur, dann ein leuchtendes Feld.")
 
 
 func _start_local_multiplayer() -> void:
@@ -121,7 +129,7 @@ func _start_local_multiplayer() -> void:
 	player_controller.enabled = true
 	camera_controller.set_player_view(0)
 	_refresh_ui()
-	battle_ui.set_instruction("Player 1: choose a movement card, then pass the device after your move.")
+	battle_ui.set_instruction("Spieler 1 beginnt. Nach jedem Zug das Gerät weitergeben.")
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:
@@ -131,11 +139,11 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 	_refresh_targets()
 	_refresh_ui()
 	if selected_unit == null:
-		battle_ui.set_instruction("Select one of your figures to preview this card's moves.")
+		battle_ui.set_instruction("Wähle jetzt eine deiner Figuren.")
 	elif movement_targets.is_empty():
-		battle_ui.set_instruction("That card has no legal move for this figure.")
+		battle_ui.set_instruction("Mit dieser Karte kann die Figur nicht ziehen.")
 	else:
-		battle_ui.set_instruction("Choose a highlighted destination. The gold edge marks the wraparound.")
+		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Die goldene Kante ist der Übergang.")
 
 
 func _on_cell_clicked(coordinate: Vector2i) -> void:
@@ -148,9 +156,9 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 	if selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
 		await _perform_move(coordinate)
 	elif selected_card_slot < 0:
-		battle_ui.set_instruction("Choose one of your two movement cards first.")
+		battle_ui.set_instruction("Wähle zuerst eine deiner zwei Karten.")
 	else:
-		battle_ui.set_instruction("That field is not a legal move for the selected card.")
+		battle_ui.set_instruction("Dieses Feld erlaubt die Karte nicht.")
 
 
 func _select_unit(unit: BattleUnit) -> void:
@@ -161,11 +169,11 @@ func _select_unit(unit: BattleUnit) -> void:
 	_refresh_targets()
 	_refresh_ui()
 	if selected_card_slot < 0:
-		battle_ui.set_instruction("Now choose one of your two movement cards.")
+		battle_ui.set_instruction("Wähle jetzt eine deiner zwei Karten.")
 	elif movement_targets.is_empty():
-		battle_ui.set_instruction("This figure has no legal destination with that card.")
+		battle_ui.set_instruction("Diese Figur hat mit der Karte kein Zielfeld.")
 	else:
-		battle_ui.set_instruction("Choose a highlighted destination. Capturing the master wins the game.")
+		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Wer den Meister schlägt, gewinnt.")
 
 
 func _refresh_targets() -> void:
@@ -217,21 +225,23 @@ func _advance_turn() -> void:
 	player_controller.enabled = not bot_turn
 	_refresh_ui()
 	if bot_turn:
-		battle_ui.set_instruction("The bot is thinking...")
+		battle_ui.set_instruction("Der Bot denkt nach ...")
 		call_deferred("_run_bot_turn")
 	else:
-		battle_ui.set_instruction("Player %d: choose a movement card, then a figure and a highlighted destination." % (current_player + 1))
+		battle_ui.set_instruction("Wähle eine Karte und eine Figur." if bot_opponent_enabled else "Spieler %d: Wähle eine Karte und eine Figur." % (current_player + 1))
 
 
 func _run_bot_turn() -> void:
 	await get_tree().create_timer(0.4).timeout
 	if battle_over or current_player != 1 or not bot_opponent_enabled:
 		return
+	# Let the "thinking" text render before the search blocks the frame.
+	await get_tree().process_frame
 	var choice := _choose_bot_move()
 	if choice.is_empty():
 		input_locked = false
 		player_controller.enabled = true
-		battle_ui.set_instruction("The bot has no legal move. Select a figure to continue.")
+		battle_ui.set_instruction("Der Bot kann nicht ziehen. Du bist wieder dran.")
 		return
 	selected_card_slot = int(choice["slot"])
 	_select_unit(choice["unit"] as BattleUnit)
@@ -241,34 +251,45 @@ func _run_bot_turn() -> void:
 
 
 func _choose_bot_move() -> Dictionary:
-	var player_master := _find_master(players)
-	if player_master == null:
+	var ai: BotAI = BotAIScript.new(bot_difficulty)
+	var result := ai.choose_move(build_ai_state(), 1)
+	if result.is_empty():
 		return {}
-	var best_score := -INF
-	var best_moves: Array[Dictionary] = []
-	for unit: BattleUnit in enemies:
-		if unit.is_dead:
-			continue
-		for slot: int in range(2):
-			var card: MovementCard = hands[1][slot]
-			for destination: Vector2i in card.destinations(unit.grid_position, 1, grid_manager.grid_size.x):
-				var target := grid_manager.get_unit_at(destination) as BattleUnit
-				if target != null and target.team_id == 1:
-					continue
-				var old_distance := grid_manager.manhattan_distance(unit.grid_position, player_master.grid_position)
-				var new_distance := grid_manager.manhattan_distance(destination, player_master.grid_position)
-				var score := float(old_distance - new_distance) * 20.0 + randf()
-				if target == player_master:
-					score += 10000.0
-				elif target != null:
-					score += 250.0
-				if score > best_score:
-					best_score = score
-					best_moves.clear()
-					best_moves.append({"unit": unit, "slot": slot, "destination": destination})
-				elif is_equal_approx(score, best_score):
-					best_moves.append({"unit": unit, "slot": slot, "destination": destination})
-	return best_moves.pick_random() if not best_moves.is_empty() else {}
+	var unit := grid_manager.get_unit_at(result["from"]) as BattleUnit
+	if unit == null:
+		return {}
+	return {"unit": unit, "slot": int(result["slot"]), "destination": result["to"]}
+
+
+## Compact copy of the match for BotAI; never shares scene nodes.
+func build_ai_state() -> Dictionary:
+	var pieces := PackedInt32Array()
+	var teams := PackedInt32Array()
+	pieces.resize(25)
+	teams.resize(25)
+	for team: Array[BattleUnit] in [players, enemies]:
+		for unit: BattleUnit in team:
+			if unit.is_dead:
+				continue
+			var cell := unit.grid_position.y * 5 + unit.grid_position.x
+			pieces[cell] = 2 if unit.is_master else 1
+			teams[cell] = unit.team_id
+	var cards: Array[MovementCard] = []
+	for card: MovementCard in match_cards:
+		cards.append(card)
+	for card: MovementCard in [hands[0][0], hands[0][1], hands[1][0], hands[1][1], pass_card]:
+		if card not in cards:
+			cards.append(card)
+	return {
+		"pieces": pieces,
+		"teams": teams,
+		"hands": [
+			[cards.find(hands[0][0]), cards.find(hands[0][1])],
+			[cards.find(hands[1][0]), cards.find(hands[1][1])],
+		],
+		"pass": cards.find(pass_card),
+		"cards": cards,
+	}
 
 
 func _find_master(team: Array[BattleUnit]) -> BattleUnit:
@@ -294,13 +315,20 @@ func _finish_battle(winner: int) -> void:
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
-	battle_ui.show_result("PLAYER %d WINS" % (winner + 1))
+	if bot_opponent_enabled:
+		battle_ui.show_result("SIEG!" if winner == 0 else "NIEDERLAGE")
+	else:
+		battle_ui.show_result("SPIELER %d GEWINNT" % (winner + 1))
 
 
 func _refresh_ui() -> void:
 	battle_ui.update_header(current_player, round_number)
-	battle_ui.update_hands(hands, pass_card, current_player, selected_card_slot)
+	battle_ui.update_hands(hands, pass_card, current_player, selected_card_slot, _viewer_team())
 	battle_ui.update_selection(selected_unit)
+
+
+func _viewer_team() -> int:
+	return current_player if not bot_opponent_enabled else 0
 
 
 func _on_cancel_requested() -> void:
@@ -309,7 +337,7 @@ func _on_cancel_requested() -> void:
 	if selected_unit != null:
 		_deselect_unit()
 		_refresh_ui()
-		battle_ui.set_instruction("Selection cleared. Choose a card and figure.")
+		battle_ui.set_instruction("Auswahl aufgehoben. Wähle Karte und Figur.")
 	else:
 		battle_ui.toggle_menu(true)
 

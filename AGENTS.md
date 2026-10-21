@@ -7,13 +7,14 @@ Build Infinity Grid, a playable 3D turn-based card strategy game in Godot 4 usin
 The first playable prototype must contain:
 
 - One 5x5 board with horizontal wraparound; top and bottom edges stay closed.
-- Five movement cards, two cards per side, and one shared pass card.
+- A pool of movement cards; five are drawn per match, two per side plus one shared pass card.
 - A Master and four Students per side.
 - Card-based legal-move highlighting and capture.
 - Capturing the opposing Master wins the match.
 - A local bot opponent for Bot Training.
 - Render-only side projections that map back to the same logical cells and units.
-- An oblique player-side camera and responsive main menu.
+- An oblique player-side camera, portrait layout and responsive main menu.
+- Bot difficulty levels (easy, medium, hard).
 
 ## Technical requirements
 

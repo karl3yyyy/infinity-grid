@@ -6,23 +6,32 @@ signal bot_training_requested
 signal local_multiplayer_requested
 signal restart_pressed
 signal quit_pressed
+signal board_insets_changed(top_pixels: float, bottom_pixels: float)
 
 const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
+const CardViewScript := preload("res://scripts/ui/card_view.gd")
+const TEAM_COLORS: Array[Color] = [Color("3f8fd2"), Color("d8644f")]
+const MAX_COLUMN_WIDTH: float = 760.0
 
 var round_label: Label
 var instruction_label: Label
 var selection_label: Label
-var pass_label: Label
-var card_buttons: Array = [[], []]
+## card_views[position][slot]; position 0 = bottom (viewer), 1 = top (opponent).
+var card_views: Array = [[], []]
+## Next-card slot per position; only the side about to move shows the pass card.
+var next_views: Array[CardView] = [null, null]
 var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
+var opponent_label: String = "BOT"
+var viewer_team: int = 0
 var result_overlay: ColorRect
 var result_label: Label
 var menu_overlay: ColorRect
 var hud_root: Control
-var top_bar: ColorRect
-var card_layout: GridContainer
-var tray: PanelContainer
+var hud_column: Control
+var top_tray: PanelContainer
+var bottom_tray: PanelContainer
+var menu_button: Button
 var main_menu: MainMenu
 
 
@@ -47,23 +56,33 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func update_header(current_player: int, round_number: int) -> void:
-	var narrow_view := get_viewport().get_visible_rect().size.x < 600.0
-	var player_name := "BOT" if opponent_is_bot and current_player == 1 else "PLAYER %d" % (current_player + 1)
-	var compact_name := "BOT" if opponent_is_bot and current_player == 1 else "P%d" % (current_player + 1)
-	round_label.text = "ROUND %02d  •  %s" % [round_number, compact_name] if narrow_view else "ROUND %02d    %s TO MOVE" % [round_number, player_name]
-	round_label.modulate = Color("8fdff4") if current_player == 0 else Color("ff9b82")
+	var mover := "%s AM ZUG" % _team_name(current_player)
+	round_label.text = "RUNDE %02d  •  %s" % [round_number, mover]
+	round_label.modulate = TEAM_COLORS[current_player].lightened(0.35)
 
 
-func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int) -> void:
-	for team_id: int in range(2):
+func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
+	viewer_team = viewing_team
+	for position: int in range(2):
+		var team_id := _team_at(position)
+		var rotated := position == 1
+		var bot_hand := opponent_is_bot and team_id == 1
 		for slot: int in range(2):
-			var button: Button = card_buttons[team_id][slot]
+			var view: CardView = card_views[position][slot]
 			var card: MovementCard = hands[team_id][slot]
-			button.text = "%s\n%s" % [card.card_name, card.move_summary(team_id)]
-			button.tooltip_text = card.move_summary(team_id)
-			button.disabled = team_id != current_player or (opponent_is_bot and team_id == 1)
-			button.modulate = Color("ffe08a") if team_id == current_player and slot == selected_slot else Color.WHITE
-	pass_label.text = "PASS\n%s\n%s" % [pass_card.card_name, pass_card.move_summary(current_player)]
+			var selected := team_id == current_player and slot == selected_slot
+			view.disabled = team_id != current_player or bot_hand
+			view.dimmed = team_id != current_player
+			view.show_card(card, rotated, TEAM_COLORS[team_id], selected)
+		var next_view: CardView = next_views[position]
+		next_view.disabled = true
+		next_view.dimmed = false
+		if team_id == current_player:
+			next_view.show_card(pass_card, rotated, Color("c9a648"), false, "NÄCHSTE")
+		else:
+			next_view.show_card(null, rotated, Color("c9a648"), false)
+		hand_titles[position].text = _team_name(team_id)
+		hand_titles[position].modulate = TEAM_COLORS[team_id].lightened(0.3)
 
 
 func update_selection(unit: BattleUnit) -> void:
@@ -74,10 +93,23 @@ func set_instruction(text_value: String) -> void:
 	instruction_label.text = text_value
 
 
-func set_opponent_bot(enabled: bool) -> void:
+func set_opponent_bot(enabled: bool, difficulty_label: String = "") -> void:
 	opponent_is_bot = enabled
+	opponent_label = "BOT" if difficulty_label.is_empty() else "BOT · %s" % difficulty_label
 	if hand_titles.size() > 1:
-		hand_titles[1].text = "BOT" if enabled else "PLAYER 2"
+		hand_titles[1].text = _team_name(_team_at(1))
+
+
+func _team_at(position: int) -> int:
+	return viewer_team if position == 0 else 1 - viewer_team
+
+
+func _team_name(team_id: int) -> String:
+	if team_id == 1 and opponent_is_bot:
+		return opponent_label
+	if opponent_is_bot:
+		return "DU"
+	return "SPIELER %d" % (team_id + 1)
 
 
 func show_result(text_value: String) -> void:
@@ -103,48 +135,58 @@ func _build_ui() -> void:
 	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hud_root)
+	hud_column = Control.new()
+	hud_column.anchor_left = 0.5
+	hud_column.anchor_right = 0.5
+	hud_column.anchor_bottom = 1.0
+	hud_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(hud_column)
 
-	top_bar = ColorRect.new()
-	top_bar.color = Color(0.025, 0.04, 0.065, 0.92)
-	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_bar.offset_bottom = 82.0
-	hud_root.add_child(top_bar)
-
+	# Opponent side: header, name and their two cards (rotated towards them).
+	top_tray = _make_tray()
+	top_tray.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	hud_column.add_child(top_tray)
+	var top_box := VBoxContainer.new()
+	top_box.add_theme_constant_override("separation", 4)
+	top_tray.add_child(top_box)
+	var header := HBoxContainer.new()
+	top_box.add_child(header)
 	round_label = Label.new()
-	round_label.position = Vector2(24.0, 10.0)
-	round_label.add_theme_font_size_override("font_size", 23)
-	top_bar.add_child(round_label)
+	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	round_label.add_theme_font_size_override("font_size", 20)
+	header.add_child(round_label)
 	selection_label = Label.new()
-	selection_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	selection_label.position = Vector2(-280.0, 13.0)
-	selection_label.size = Vector2(250.0, 28.0)
-	selection_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	selection_label.add_theme_font_size_override("font_size", 18)
-	top_bar.add_child(selection_label)
-	instruction_label = Label.new()
-	instruction_label.position = Vector2(24.0, 43.0)
-	instruction_label.size = Vector2(900.0, 30.0)
-	instruction_label.add_theme_font_size_override("font_size", 15)
-	instruction_label.modulate = Color("d0d9e4")
-	top_bar.add_child(instruction_label)
+	selection_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	selection_label.add_theme_font_size_override("font_size", 15)
+	selection_label.modulate = Color("c7d3dd")
+	header.add_child(selection_label)
+	menu_button = _make_button("☰", header)
+	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
+	menu_button.add_theme_font_size_override("font_size", 22)
+	menu_button.pressed.connect(func() -> void: toggle_menu(true))
+	_add_hand_row(top_box, 1)
+	_add_hand_title(top_box, 1)
 
-	tray = PanelContainer.new()
-	tray.anchor_left = 0.0
-	tray.anchor_top = 1.0
-	tray.anchor_right = 1.0
-	tray.anchor_bottom = 1.0
-	tray.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.04, 0.065, 0.94)))
-	tray.add_to_group("interactive_ui")
-	hud_root.add_child(tray)
-	card_layout = GridContainer.new()
-	card_layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card_layout.add_theme_constant_override("h_separation", 12)
-	card_layout.add_theme_constant_override("v_separation", 6)
-	tray.add_child(card_layout)
-	_add_hand(card_layout, 0, "PLAYER 1", Color("65bce8"))
-	_add_pass_card(card_layout)
-	_add_hand(card_layout, 1, "PLAYER 2", Color("ec806e"))
+	# Viewer side: instruction text and own cards.
+	bottom_tray = _make_tray()
+	bottom_tray.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_tray.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	hud_column.add_child(bottom_tray)
+	var bottom_box := VBoxContainer.new()
+	bottom_box.add_theme_constant_override("separation", 6)
+	bottom_tray.add_child(bottom_box)
+	instruction_label = Label.new()
+	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instruction_label.custom_minimum_size.y = 42.0
+	instruction_label.add_theme_font_size_override("font_size", 16)
+	instruction_label.modulate = Color("e3e9ef")
+	bottom_box.add_child(instruction_label)
+	_add_hand_title(bottom_box, 0)
+	_add_hand_row(bottom_box, 0)
+	# Titles were appended bottom-last; keep index = position.
+	hand_titles.reverse()
 
 	result_overlay = ColorRect.new()
 	result_overlay.color = Color(0.01, 0.015, 0.025, 0.88)
@@ -204,50 +246,49 @@ func _build_main_menu() -> void:
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 
-func _add_hand(parent: GridContainer, team_id: int, title_text: String, team_color: Color) -> void:
-	var hand := VBoxContainer.new()
-	hand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hand.add_theme_constant_override("separation", 5)
-	parent.add_child(hand)
+func _make_tray() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.04, 0.065, 0.86)))
+	panel.add_to_group("interactive_ui")
+	return panel
+
+
+func _add_hand_title(parent: Control, position: int) -> void:
 	var title := Label.new()
-	title.text = title_text
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.modulate = team_color
-	title.add_theme_font_size_override("font_size", 14)
-	hand.add_child(title)
+	title.add_theme_font_size_override("font_size", 15)
+	title.text = "DU" if position == 0 else "BOT"
+	parent.add_child(title)
 	hand_titles.append(title)
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 8)
-	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hand.add_child(cards)
+
+
+func _add_hand_row(parent: Control, position: int) -> void:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	parent.add_child(row)
+	var views: Array = []
 	for slot: int in range(2):
-		var button := _make_button("CARD", cards)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 13)
-		button.pressed.connect(_emit_card_selected.bind(team_id, slot))
-		card_buttons[team_id].append(button)
+		var view: CardView = CardViewScript.new()
+		view.pressed.connect(_on_card_view_pressed.bind(position, slot))
+		views.append(view)
+	var next_view: CardView = CardViewScript.new()
+	next_view.disabled = true
+	# Opponent row mirrors the order so the next card sits on the same screen side.
+	if position == 0:
+		row.add_child(views[0])
+		row.add_child(views[1])
+		row.add_child(next_view)
+	else:
+		row.add_child(next_view)
+		row.add_child(views[1])
+		row.add_child(views[0])
+	card_views[position] = views
+	next_views[position] = next_view
 
 
-func _add_pass_card(parent: GridContainer) -> void:
-	var pass_column := VBoxContainer.new()
-	pass_column.custom_minimum_size.x = 190.0
-	pass_column.add_theme_constant_override("separation", 5)
-	parent.add_child(pass_column)
-	var title := Label.new()
-	title.text = "SHARED"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.modulate = Color("ffe08a")
-	title.add_theme_font_size_override("font_size", 14)
-	pass_column.add_child(title)
-	pass_label = Label.new()
-	pass_label.custom_minimum_size = Vector2(190.0, 88.0)
-	pass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pass_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pass_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pass_label.add_theme_font_size_override("font_size", 13)
-	pass_label.add_theme_color_override("font_color", Color("ffe08a"))
-	pass_column.add_child(pass_label)
+func _on_card_view_pressed(position: int, slot: int) -> void:
+	_emit_card_selected(_team_at(position), slot)
 
 
 func _emit_card_selected(team_id: int, slot: int) -> void:
@@ -294,29 +335,34 @@ func _apply_safe_area() -> void:
 
 
 func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
-	if card_layout == null or tray == null or top_bar == null:
+	if hud_column == null or top_tray == null or bottom_tray == null:
 		return
 	if viewport_size == Vector2.ZERO:
 		viewport_size = get_viewport().get_visible_rect().size
-	var portrait := viewport_size.x < viewport_size.y
-	card_layout.columns = 1 if portrait else 3
-	tray.offset_top = -312.0 if portrait else -158.0
-	top_bar.offset_bottom = 112.0 if portrait else 82.0
-	if portrait:
-		round_label.position = Vector2(16.0, 8.0)
-		round_label.add_theme_font_size_override("font_size", 18)
-		selection_label.position = Vector2(-148.0, 8.0)
-		selection_label.size = Vector2(132.0, 26.0)
-		selection_label.add_theme_font_size_override("font_size", 14)
-		instruction_label.position = Vector2(16.0, 40.0)
-		instruction_label.size = Vector2(maxf(0.0, viewport_size.x - 32.0), 66.0)
-		instruction_label.add_theme_font_size_override("font_size", 14)
-	else:
-		round_label.position = Vector2(24.0, 10.0)
-		round_label.add_theme_font_size_override("font_size", 23)
-		selection_label.position = Vector2(-280.0, 13.0)
-		selection_label.size = Vector2(250.0, 28.0)
-		selection_label.add_theme_font_size_override("font_size", 18)
-		instruction_label.position = Vector2(24.0, 43.0)
-		instruction_label.size = Vector2(maxf(0.0, viewport_size.x - 48.0), 30.0)
-		instruction_label.add_theme_font_size_override("font_size", 15)
+	var column_width := minf(viewport_size.x, MAX_COLUMN_WIDTH)
+	hud_column.offset_left = -column_width * 0.5
+	hud_column.offset_right = column_width * 0.5
+	# Two hand cards plus a slightly smaller next card share one row.
+	var usable := column_width - 24.0 - 20.0
+	var card_width := clampf(usable / 2.8, 90.0, 230.0)
+	var card_height := clampf(card_width * 1.08, 100.0, minf(250.0, viewport_size.y * 0.19))
+	var next_width := card_width * 0.8
+	for position: int in range(2):
+		for view: CardView in card_views[position]:
+			view.custom_minimum_size = Vector2(card_width, card_height)
+		next_views[position].custom_minimum_size = Vector2(next_width, card_height * 0.86)
+	top_tray.offset_left = 0.0
+	top_tray.offset_right = 0.0
+	bottom_tray.offset_left = 0.0
+	bottom_tray.offset_right = 0.0
+	top_tray.offset_top = 0.0
+	top_tray.offset_bottom = top_tray.get_combined_minimum_size().y
+	bottom_tray.offset_bottom = 0.0
+	bottom_tray.offset_top = -bottom_tray.get_combined_minimum_size().y
+	board_insets_changed.emit(top_tray.offset_bottom + hud_root.offset_top, -bottom_tray.offset_top - hud_root.offset_bottom)
+
+
+func get_board_insets() -> Vector2:
+	if top_tray == null:
+		return Vector2.ZERO
+	return Vector2(top_tray.offset_bottom + hud_root.offset_top, -bottom_tray.offset_top - hud_root.offset_bottom)

@@ -47,12 +47,27 @@ Android controls:
 
 ## Movement Cards
 
-The five shuffled cards are **Crane**, **Wave**, **Comet**, **Shell**, and
-**Vortex**. Each card defines three relative moves. Horizontal moves wrap around
-the board; moves past the top or bottom edge are invalid. Player 2's forward
-direction is mirrored. The HUD shows both hands and the shared pass card.
-During bot training, the camera stays behind the player. On portrait screens,
-the card tray stacks vertically to keep the board and controls readable.
+The pool contains 19 cards (Crane, Wave, Comet, Shell, Vortex, Nova, Tide,
+Orbit, Rift, Halo, Ember, Drift, Zephyr, Eclipse, Prism, Pulse, Echo, Serpent,
+Viper). Every match draws five at random. Cards are shown like classic
+Onitama cards: a 5x5 diagram where the dark square is the figure and the
+coloured squares are its targets. Opponent cards are rotated towards the
+opponent so their diagrams match the board on screen. Horizontal moves wrap
+around the board; moves past the top or bottom edge are invalid.
+
+The game runs in portrait format: opponent cards on top, the board in the
+middle, your own cards and the next (pass) card at the bottom.
+
+## Bot difficulty
+
+Quick play asks for a difficulty, saved with the local profile:
+
+- **Leicht:** captures an exposed master, otherwise often plays loosely.
+- **Mittel:** two-ply search.
+- **Schwer:** iterative alpha-beta search up to five plies (~1.4 s budget).
+
+The search lives in `scripts/battle/bot_ai.gd` and works on a compact copy
+of the match state, separate from scene nodes.
 
 ## Tools, Web, and licensing
 

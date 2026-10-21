@@ -39,9 +39,11 @@ func _run_tests() -> void:
 		await process_frame
 		_expect(not ui.main_menu.visible and battle.bot_opponent_enabled and grid.get_parent().visible, "Quick play starts a visible bot match")
 	if ui != null:
-		ui._apply_responsive_layout(Vector2(390.0, 844.0))
-		_expect(ui.card_layout.columns == 1 and ui.tray.offset_top == -312.0, "Card HUD stacks for portrait mobile screens")
-		ui._apply_responsive_layout(Vector2(1280.0, 720.0))
+		ui._apply_responsive_layout(Vector2(720.0, 1280.0))
+		var insets := ui.get_board_insets()
+		_expect(insets.x > 150.0 and insets.y > 150.0 and insets.x + insets.y < 1280.0 * 0.62, "Portrait HUD keeps opponent cards on top, own cards below and room for the board")
+		_expect(ui.card_views[0].size() == 2 and ui.card_views[1].size() == 2 and ui.next_views.size() == 2, "Each side shows two card diagrams plus a next-card slot")
+		_expect(ProjectSettings.get_setting("display/window/size/viewport_height") > ProjectSettings.get_setting("display/window/size/viewport_width"), "Project runs in portrait format")
 	if grid != null:
 		_expect(grid.cells.size() == 25, "Grid contains 25 cells")
 		_expect(grid.wrap_projection_count == 20, "Two projected edge columns appear on each side")
@@ -54,13 +56,21 @@ func _run_tests() -> void:
 		_expect(grid.get_neighbors(Vector2i(2, 0)).size() == 3, "Top and bottom edges remain closed")
 
 	var deck: Array[MovementCard] = MovementCardScript.create_deck()
-	_expect(deck.size() == 5, "Exactly five movement cards exist")
+	_expect(deck.size() >= 16, "Card pool has at least 16 movement cards")
+	var pool_names: Dictionary = {}
+	for pool_card: MovementCard in deck:
+		pool_names[pool_card.card_name] = true
+	_expect(pool_names.size() == deck.size(), "Every card in the pool has a unique name")
+	var drawn := MovementCardScript.draw_match_cards(5)
+	_expect(drawn.size() == 5 and drawn[0] != drawn[1], "A match draws five distinct cards from the pool")
 	_expect(Vector2i(2, 1) in deck[0].destinations(Vector2i(2, 2), 0, 5), "Player 1 card moves forward")
 	_expect(Vector2i(2, 3) in deck[0].destinations(Vector2i(2, 2), 1, 5), "Player 2 card is mirrored")
 	_expect(Vector2i(3, 2) in deck[1].destinations(Vector2i(0, 2), 0, 5), "Card targets wrap horizontally")
 	_expect(Vector2i(4, 2) in deck[3].destinations(Vector2i(0, 2), 0, 5), "Player 1 can move from the left edge to the right")
 	_expect(Vector2i(4, 2) in deck[3].destinations(Vector2i(0, 2), 1, 5), "Player 2's mirrored card uses the same shared board")
-	_expect(deck[0].move_summary(0) == deck[0].move_summary(1), "Both players read identical relative arrows from their own sides")
+	_expect(deck[0].diagram_cell(Vector2i(0, 1), false) == Vector2i(2, 1), "Own card diagram shows forward as up")
+	_expect(deck[0].diagram_cell(Vector2i(0, 1), true) == Vector2i(2, 3), "Opponent card diagram is rotated towards them")
+	_expect(deck[1].diagram_cell(Vector2i(-2, 0), false) == Vector2i(0, 2), "Diagram places sideways moves on the outer column")
 
 	if battle != null:
 		battle.bot_opponent_enabled = false
@@ -68,7 +78,7 @@ func _run_tests() -> void:
 		_expect(battle.players.filter(func(unit: BattleUnit) -> bool: return unit.is_master).size() == 1, "Player 1 has one master")
 		_expect(battle.enemies.filter(func(unit: BattleUnit) -> bool: return unit.is_master).size() == 1, "Player 2 has one master")
 		_expect(battle.players[0]._wrap_projections.size() == 2, "Each logical figure has only render-only side projections")
-		_expect(ui.opponent_is_bot and ui.hand_titles[1].text == "BOT", "Second hand is identified as the bot")
+		_expect(ui.opponent_is_bot and ui.hand_titles[1].text.begins_with("BOT"), "Second hand is identified as the bot")
 		var card_names: Array[String] = []
 		for team_hand: Array in battle.hands:
 			_expect(team_hand.size() == 2, "Each player receives two cards")
@@ -135,6 +145,8 @@ func _run_tests() -> void:
 			await battle.unit_movement.move_unit(seam_unit, [seam_start, seam_end], grid)
 			_expect(seam_unit.position.is_equal_approx(grid.grid_to_world(seam_end)), "Wrap animation exits one edge and lands on the opposite edge")
 
+		await _test_bot_levels()
+
 		if grid != null:
 			var master: BattleUnit = battle.players[2]
 			var target_master: BattleUnit = battle.enemies[2]
@@ -153,7 +165,7 @@ func _run_tests() -> void:
 			_expect(Vector2i(2, 1) in battle.movement_targets, "Enemy master is a valid capture target")
 			await battle._perform_move(Vector2i(2, 1))
 			_expect(battle.battle_over, "Capturing the master ends the game")
-			_expect(ui.result_overlay.visible and ui.result_label.text == "PLAYER 1 WINS", "Master capture declares the winning player")
+			_expect(ui.result_overlay.visible and ui.result_label.text == ("SIEG!" if battle.bot_opponent_enabled else "SPIELER 1 GEWINNT"), "Master capture declares the winning player")
 
 	if failures.is_empty():
 		print("TEST RESULT: PASS (all core assertions succeeded)")
@@ -164,6 +176,56 @@ func _run_tests() -> void:
 	main.queue_free()
 	await process_frame
 	quit(0 if failures.is_empty() else 1)
+
+
+func _empty_ai_state(cards: Array[MovementCard]) -> Dictionary:
+	var pieces := PackedInt32Array()
+	var teams := PackedInt32Array()
+	pieces.resize(25)
+	teams.resize(25)
+	return {"pieces": pieces, "teams": teams, "hands": [[0, 1], [2, 3]], "pass": 4, "cards": cards}
+
+
+func _place(state: Dictionary, coordinate: Vector2i, team: int, master: bool) -> void:
+	var cell := coordinate.y * 5 + coordinate.x
+	var pieces: PackedInt32Array = state["pieces"]
+	var teams: PackedInt32Array = state["teams"]
+	pieces[cell] = 2 if master else 1
+	teams[cell] = team
+	state["pieces"] = pieces
+	state["teams"] = teams
+
+
+func _test_bot_levels() -> void:
+	var forward := MovementCard.new("Forward", [Vector2i(0, 1)])
+	var side := MovementCard.new("Side", [Vector2i(1, 0)])
+	var cards: Array[MovementCard] = [
+		MovementCard.new("Back", [Vector2i(0, -1)]),
+		MovementCard.new("Still", [Vector2i(-1, 0)]),
+		forward,
+		side,
+		MovementCard.new("Spare", [Vector2i(0, 2)]),
+	]
+	for level: int in range(3):
+		# Player 1 master stands right in front of the bot student.
+		var state := _empty_ai_state(cards)
+		_place(state, Vector2i(2, 3), 0, true)
+		_place(state, Vector2i(2, 2), 1, false)
+		_place(state, Vector2i(4, 0), 1, true)
+		var ai := BotAI.new(level)
+		var move := ai.choose_move(state, 1)
+		_expect(not move.is_empty() and move["to"] == Vector2i(2, 3), "Bot level %s captures an exposed master" % BotAI.label_for(level))
+	var started := Time.get_ticks_msec()
+	var opening_cards := MovementCardScript.draw_match_cards(5)
+	var opening := _empty_ai_state(opening_cards)
+	for column: int in range(5):
+		_place(opening, Vector2i(column, 4), 0, column == 2)
+		_place(opening, Vector2i(column, 0), 1, column == 2)
+	var hard := BotAI.new(BotAI.Difficulty.HARD)
+	var hard_move := hard.choose_move(opening, 1)
+	var elapsed := Time.get_ticks_msec() - started
+	_expect(not hard_move.is_empty(), "Hard bot finds an opening move")
+	_expect(elapsed < 4000, "Hard bot answers within the think-time budget (%d ms)" % elapsed)
 
 
 func _find_legal_move(battle: OnitamaBattleManager, team_id: int) -> Dictionary:

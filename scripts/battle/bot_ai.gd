@@ -34,7 +34,8 @@ static func label_for(level: int) -> String:
 ##   "pieces": PackedInt32Array(25), "teams": PackedInt32Array(25),
 ##   "hands": [[card_index, card_index], [card_index, card_index]],
 ##   "pass": card_index, "cards": Array[MovementCard] }
-## Returns {"from": Vector2i, "slot": int, "to": Vector2i} or {} when no move exists.
+## Returns {"from": Vector2i, "slot": int, "to": Vector2i}, or {"slot": int, "pass": true}
+## when no figure can move and a card must be given away instead.
 func choose_move(state: Dictionary, team: int) -> Dictionary:
 	_prepare_cards(state["cards"])
 	var pieces: PackedInt32Array = (state["pieces"] as PackedInt32Array).duplicate()
@@ -43,7 +44,8 @@ func choose_move(state: Dictionary, team: int) -> Dictionary:
 	var pass_card: int = int(state["pass"])
 	var root_moves := _generate_moves(pieces, teams, hands, team)
 	if root_moves.is_empty():
-		return {}
+		var pass_move := _search_root(pieces, teams, hands, pass_card, team, _pass_moves(), 2, 1000000)
+		return {"slot": pass_move[1], "pass": true}
 	root_moves.shuffle()
 	var best: Array = root_moves[0]
 	match difficulty:
@@ -115,7 +117,7 @@ func _negamax(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, p
 		return 0
 	var moves := _generate_moves(pieces, teams, hands, team)
 	if moves.is_empty():
-		return _evaluate(pieces, teams, hands, team)
+		moves = _pass_moves()
 	_order_moves(pieces, moves)
 	var best := -WIN_SCORE * 10
 	for move: Array in moves:
@@ -192,8 +194,14 @@ func _generate_moves(pieces: PackedInt32Array, teams: PackedInt32Array, hands: A
 	return result
 
 
+## Without a legal move a side keeps its figures in place and only gives a card
+## away. A pass is encoded as [-1, slot, -1].
+func _pass_moves() -> Array:
+	return [[-1, 0, -1], [-1, 1, -1]]
+
+
 func _order_moves(pieces: PackedInt32Array, moves: Array) -> void:
-	moves.sort_custom(func(a: Array, b: Array) -> bool: return pieces[a[2]] > pieces[b[2]])
+	moves.sort_custom(func(a: Array, b: Array) -> bool: return a[2] >= 0 and b[2] >= 0 and pieces[a[2]] > pieces[b[2]])
 
 
 func _apply(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, team: int, move: Array, pass_card: int) -> Dictionary:
@@ -201,28 +209,32 @@ func _apply(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, tea
 	var to: int = move[2]
 	var slot: int = move[1]
 	var undo := {
-		"captured_piece": pieces[to],
-		"captured_team": teams[to],
+		"captured_piece": pieces[to] if to >= 0 else 0,
+		"captured_team": teams[to] if to >= 0 else 0,
 		"used_card": hands[team][slot],
 		"old_pass": pass_card,
 	}
+	hands[team][slot] = pass_card
+	undo["pass"] = undo["used_card"]
+	if from < 0:
+		return undo
 	pieces[to] = pieces[from]
 	teams[to] = teams[from]
 	pieces[from] = 0
 	teams[from] = 0
-	hands[team][slot] = pass_card
-	undo["pass"] = undo["used_card"]
 	return undo
 
 
 func _undo(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, team: int, move: Array, undo: Dictionary) -> void:
 	var from: int = move[0]
 	var to: int = move[2]
+	hands[team][move[1]] = int(undo["used_card"])
+	if from < 0:
+		return
 	pieces[from] = pieces[to]
 	teams[from] = teams[to]
 	pieces[to] = int(undo["captured_piece"])
 	teams[to] = int(undo["captured_team"])
-	hands[team][move[1]] = int(undo["used_card"])
 
 
 func _master_alive(pieces: PackedInt32Array, teams: PackedInt32Array, team: int) -> bool:

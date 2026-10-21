@@ -11,6 +11,9 @@ func _initialize() -> void:
 
 
 func _run_tests() -> void:
+	# Fixed seed: dealt cards and bot replies are random, and some assertions
+	# below depend on which figures survive the opening moves.
+	seed(20261021)
 	var main := MainScene.instantiate()
 	root.add_child(main)
 	current_scene = main
@@ -113,8 +116,8 @@ func _run_tests() -> void:
 			await battle._run_bot_turn()
 			_expect(battle.current_player == 0, "Bot completes its move and returns the turn to Player 1")
 			_expect(is_zero_approx(camera.target_yaw), "Camera stays behind Player 1 while playing against the bot")
-			var seam_attacker: BattleUnit = battle.players[0]
-			var seam_target: BattleUnit = battle.enemies[0]
+			var seam_attacker := _first_living_student(battle.players)
+			var seam_target := _first_living_student(battle.enemies)
 			var attacker_origin := seam_attacker.grid_position
 			var target_origin := seam_target.grid_position
 			var saved_card: MovementCard = battle.hands[0][0]
@@ -138,12 +141,14 @@ func _run_tests() -> void:
 			grid.set_occupant(target_origin, seam_target)
 			battle.hands[0][0] = saved_card
 			battle.selected_card_slot = -1
-			var seam_unit: BattleUnit = battle.players[0]
+			var seam_unit := _first_living_student(battle.players)
 			var seam_start := Vector2i(0, 2)
 			var seam_end := Vector2i(4, 2)
 			seam_unit.position = grid.grid_to_world(seam_start)
 			await battle.unit_movement.move_unit(seam_unit, [seam_start, seam_end], grid)
 			_expect(seam_unit.position.is_equal_approx(grid.grid_to_world(seam_end)), "Wrap animation exits one edge and lands on the opposite edge")
+			seam_unit.position = grid.grid_to_world(seam_unit.grid_position)
+			await _test_pass_and_draw(battle, ui)
 
 		await _test_bot_levels()
 
@@ -215,6 +220,14 @@ func _test_bot_levels() -> void:
 		var ai := BotAI.new(level)
 		var move := ai.choose_move(state, 1)
 		_expect(not move.is_empty() and move["to"] == Vector2i(2, 3), "Bot level %s captures an exposed master" % BotAI.label_for(level))
+	var stuck_cards: Array[MovementCard] = [cards[0], cards[1], forward, MovementCard.new("Leap", [Vector2i(0, 2)]), cards[4]]
+	for level: int in range(3):
+		# The bot master stands on the far row; both of its cards only move forward off the board.
+		var stuck := _empty_ai_state(stuck_cards)
+		_place(stuck, Vector2i(2, 0), 0, true)
+		_place(stuck, Vector2i(2, 4), 1, true)
+		var stuck_move := BotAI.new(level).choose_move(stuck, 1)
+		_expect(stuck_move.get("pass", false) and int(stuck_move["slot"]) in [0, 1], "Bot level %s gives a card away when it cannot move" % BotAI.label_for(level))
 	var started := Time.get_ticks_msec()
 	var opening_cards := MovementCardScript.draw_match_cards(5)
 	var opening := _empty_ai_state(opening_cards)
@@ -226,6 +239,49 @@ func _test_bot_levels() -> void:
 	var elapsed := Time.get_ticks_msec() - started
 	_expect(not hard_move.is_empty(), "Hard bot finds an opening move")
 	_expect(elapsed < 4000, "Hard bot answers within the think-time budget (%d ms)" % elapsed)
+
+
+func _test_pass_and_draw(battle: OnitamaBattleManager, ui: OnitamaUI) -> void:
+	battle.bot_opponent_enabled = false
+	battle.current_player = 0
+	var saved_hand: Array = battle.hands[0].duplicate()
+	var saved_pass: MovementCard = battle.pass_card
+	var off_board := MovementCard.new("Off Board", [Vector2i(0, 5)])
+	var far_off_board := MovementCard.new("Far Off Board", [Vector2i(0, -5)])
+	battle.hands[0] = [off_board, far_off_board]
+	_expect(not battle._has_legal_move(0), "A side whose cards only leave the board has no legal move")
+	battle.must_pass = true
+	battle.input_locked = false
+	battle._on_cell_clicked(battle.players[2].grid_position)
+	_expect(battle.selected_unit == null and battle.current_player == 0, "Figures cannot be selected while a card must be given away")
+	battle._on_card_selected(0, 1)
+	_expect(battle.hands[0][1] == saved_pass and battle.pass_card == far_off_board, "Passing gives the chosen card to the pass space")
+	_expect(battle.current_player == 1 and not battle.battle_over, "Passing ends the turn without moving a figure")
+
+	battle.hands[0] = saved_hand
+	battle.pass_card = saved_pass
+	battle.current_player = 0
+	battle.position_counts.clear()
+	battle._record_position()
+	# Nothing moves between turns, so the same two positions keep alternating.
+	for turn: int in range(3):
+		battle._advance_turn()
+		_expect(not battle.battle_over, "No draw before the third repetition (turn %d)" % (turn + 1))
+	battle._advance_turn()
+	_expect(battle.battle_over and ui.result_label.text == "UNENTSCHIEDEN", "Third repetition of a position ends the match in a draw")
+
+	battle.battle_over = false
+	battle.must_pass = false
+	battle.current_player = 0
+	battle.position_counts.clear()
+	ui.result_overlay.visible = false
+
+
+func _first_living_student(team: Array[BattleUnit]) -> BattleUnit:
+	for unit: BattleUnit in team:
+		if not unit.is_dead and not unit.is_master:
+			return unit
+	return null
 
 
 func _find_legal_move(battle: OnitamaBattleManager, team_id: int) -> Dictionary:

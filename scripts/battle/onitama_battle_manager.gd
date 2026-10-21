@@ -5,6 +5,8 @@ const PlayerUnitScript := preload("res://scripts/units/player_unit.gd")
 const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
+## The same position with the same side to move ends the match in a draw on this count.
+const DRAW_REPETITIONS: int = 3
 
 var grid_manager: GridManager
 var camera_controller: CameraController
@@ -26,6 +28,10 @@ var input_locked: bool = true
 var battle_over: bool = false
 var bot_opponent_enabled: bool = true
 var bot_difficulty: int = BotAI.Difficulty.MEDIUM
+## True when no figure of the side to move can use either card; it then gives a card away.
+var must_pass: bool = false
+## Position key -> how often it occurred, for the repetition draw.
+var position_counts: Dictionary = {}
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
 
@@ -57,6 +63,7 @@ func setup(
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
 	_spawn_armies()
+	_record_position()
 	call_deferred("_show_title_menu")
 
 
@@ -137,6 +144,9 @@ func _start_local_multiplayer() -> void:
 func _on_card_selected(team_id: int, slot: int) -> void:
 	if input_locked or battle_over or team_id != current_player or slot < 0 or slot >= 2:
 		return
+	if must_pass:
+		_pass_turn(slot)
+		return
 	selected_card_slot = slot
 	_refresh_targets()
 	_refresh_ui()
@@ -150,6 +160,9 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 
 func _on_cell_clicked(coordinate: Vector2i) -> void:
 	if input_locked or battle_over or not grid_manager.is_inside(coordinate):
+		return
+	if must_pass:
+		battle_ui.set_instruction(_pass_instruction())
 		return
 	var clicked_unit := grid_manager.get_unit_at(coordinate) as BattleUnit
 	if clicked_unit != null and clicked_unit.team_id == current_player:
@@ -205,13 +218,27 @@ func _perform_move(destination: Vector2i) -> void:
 	await unit_movement.move_unit(moving_unit, path, grid_manager)
 	moving_unit.grid_position = destination
 	grid_manager.move_occupant(moving_unit, source, destination)
-	var used_card: MovementCard = hands[current_player][selected_card_slot]
-	hands[current_player][selected_card_slot] = pass_card
-	pass_card = used_card
+	_exchange_card(selected_card_slot)
 	_deselect_unit()
 	if captured_master:
 		_finish_battle(current_player)
 		return
+	_advance_turn()
+
+
+## Gives the card in slot to the pass space and takes the waiting card.
+func _exchange_card(slot: int) -> void:
+	var used_card: MovementCard = hands[current_player][slot]
+	hands[current_player][slot] = pass_card
+	pass_card = used_card
+
+
+## Onitama rule: a side without any legal move still has to give one card away.
+func _pass_turn(slot: int) -> void:
+	input_locked = true
+	player_controller.enabled = false
+	_deselect_unit()
+	_exchange_card(slot)
 	_advance_turn()
 
 
@@ -222,6 +249,12 @@ func _advance_turn() -> void:
 	if current_player == 0:
 		round_number += 1
 	selected_card_slot = -1
+	var repetitions := _record_position()
+	if repetitions >= DRAW_REPETITIONS:
+		_refresh_ui()
+		_finish_battle(-1)
+		return
+	must_pass = not _has_legal_move(current_player)
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	input_locked = bot_turn
 	player_controller.enabled = not bot_turn
@@ -229,8 +262,51 @@ func _advance_turn() -> void:
 	if bot_turn:
 		battle_ui.set_instruction("Der Bot denkt nach ...")
 		call_deferred("_run_bot_turn")
+	elif must_pass:
+		battle_ui.set_instruction(_pass_instruction())
+	elif repetitions == DRAW_REPETITIONS - 1:
+		battle_ui.set_instruction("Diese Stellung gab es schon. Noch einmal, und es ist Unentschieden.")
 	else:
 		battle_ui.set_instruction("Wähle eine Karte und eine Figur." if bot_opponent_enabled else "Spieler %d: Wähle eine Karte und eine Figur." % (current_player + 1))
+
+
+func _pass_instruction() -> String:
+	return "Keine Figur kann ziehen. Tippe auf eine Karte, um sie abzugeben."
+
+
+func _has_legal_move(team_id: int) -> bool:
+	var team: Array[BattleUnit] = players if team_id == 0 else enemies
+	for unit: BattleUnit in team:
+		if unit.is_dead:
+			continue
+		for card: MovementCard in hands[team_id]:
+			for coordinate: Vector2i in card.destinations(unit.grid_position, team_id, grid_manager.grid_size.x):
+				var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
+				if occupant == null or occupant.team_id != team_id:
+					return true
+	return false
+
+
+## Counts the current position (figures, cards, side to move) and returns how often it has occurred.
+func _record_position() -> int:
+	var key := _position_key()
+	position_counts[key] = int(position_counts.get(key, 0)) + 1
+	return position_counts[key]
+
+
+func _position_key() -> String:
+	var parts: PackedStringArray = []
+	for unit: BattleUnit in players + enemies:
+		if not unit.is_dead:
+			parts.append("%d%s%d,%d" % [unit.team_id, "M" if unit.is_master else "S", unit.grid_position.x, unit.grid_position.y])
+	parts.sort()
+	for team_id: int in range(2):
+		var names: PackedStringArray = [hands[team_id][0].card_name, hands[team_id][1].card_name]
+		names.sort()
+		parts.append("|".join(names))
+	parts.append(pass_card.card_name)
+	parts.append(str(current_player))
+	return ";".join(parts)
 
 
 func _run_bot_turn() -> void:
@@ -241,9 +317,11 @@ func _run_bot_turn() -> void:
 	await get_tree().process_frame
 	var choice := _choose_bot_move()
 	if choice.is_empty():
-		input_locked = false
-		player_controller.enabled = true
-		battle_ui.set_instruction("Der Bot kann nicht ziehen. Du bist wieder dran.")
+		return
+	if choice.has("pass"):
+		_pass_turn(int(choice["slot"]))
+		if not battle_over and not must_pass:
+			battle_ui.set_instruction("Der Bot konnte nicht ziehen und hat eine Karte abgegeben.")
 		return
 	selected_card_slot = int(choice["slot"])
 	_select_unit(choice["unit"] as BattleUnit)
@@ -257,6 +335,8 @@ func _choose_bot_move() -> Dictionary:
 	var result := ai.choose_move(build_ai_state(), 1)
 	if result.is_empty():
 		return {}
+	if result.has("pass"):
+		return {"slot": int(result["slot"]), "pass": true}
 	var unit := grid_manager.get_unit_at(result["from"]) as BattleUnit
 	if unit == null:
 		return {}
@@ -313,11 +393,14 @@ func _on_unit_died(unit: BattleUnit) -> void:
 	grid_manager.remove_occupant(unit.grid_position, unit)
 
 
+## winner -1 means a draw by repetition.
 func _finish_battle(winner: int) -> void:
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
-	if bot_opponent_enabled:
+	if winner < 0:
+		battle_ui.show_result("UNENTSCHIEDEN")
+	elif bot_opponent_enabled:
 		battle_ui.show_result("SIEG!" if winner == 0 else "NIEDERLAGE")
 	else:
 		battle_ui.show_result("SPIELER %d GEWINNT" % (winner + 1))

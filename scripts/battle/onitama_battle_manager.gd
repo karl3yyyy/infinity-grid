@@ -5,7 +5,7 @@ const PlayerUnitScript := preload("res://scripts/units/player_unit.gd")
 const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
-const MatchClientScript := preload("res://scripts/network/match_client.gd")
+const NetworkMatchScript := preload("res://scripts/battle/network_match.gd")
 ## The same position with the same side to move ends the match in a draw on this count.
 const DRAW_REPETITIONS: int = 3
 
@@ -35,10 +35,9 @@ var must_pass: bool = false
 var position_counts: Dictionary = {}
 ## Team this device controls in a Wi-Fi match; -1 outside of one.
 var network_team: int = -1
-var match_client: MatchClient
-## Opponent moves that arrived while a local animation was still running.
-var _remote_moves: Array[Dictionary] = []
-var _playing_remote_move: bool = false
+var network_match: NetworkMatch
+## Completed turns (moves and passes) in this match; numbers network turns.
+var turns_played: int = 0
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
 
@@ -69,6 +68,8 @@ func setup(
 	battle_ui.lan_match_requested.connect(_start_lan_match)
 	battle_ui.online_create_requested.connect(_start_online_create)
 	battle_ui.online_join_requested.connect(_start_online_join)
+	battle_ui.online_quick_requested.connect(_start_online_quick)
+	battle_ui.online_resume_requested.connect(_start_online_resume)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
@@ -152,20 +153,26 @@ func _start_local_multiplayer() -> void:
 
 
 func _start_lan_match() -> void:
-	_start_network_match(MatchClient.lan_url(), "Verbinde mit dem PC ...", "Verbunden. Warte auf eine zweite Person ...")
+	_start_network_match().start(MatchClient.lan_url(), "Verbinde mit dem PC ...", "Verbunden. Warte auf eine zweite Person ...")
 
 
 func _start_online_create() -> void:
-	_start_network_match(MatchClient.online_create_url(), "Erstelle ein Spiel ...", "Verbunden. Gleich gibt es einen Raum-Code ...")
+	_start_network_match().start(MatchClient.online_create_url(), "Erstelle ein Spiel ...", "Verbunden. Gleich gibt es einen Raum-Code ...")
 
 
 func _start_online_join(code: String) -> void:
-	_start_network_match(MatchClient.online_join_url(code), "Suche Raum %s ..." % code, "Verbunden. Trete Raum %s bei ..." % code)
+	_start_network_match().start(MatchClient.online_join_url(code), "Suche Raum %s ..." % code, "Verbunden. Trete Raum %s bei ..." % code)
 
 
-func _start_network_match(url: String, connecting_text: String, connected_text: String) -> void:
-	if battle_over:
-		return
+func _start_online_quick() -> void:
+	_start_network_match().start(MatchClient.online_quick_url(), "Verbinde ...", "Suche einen Gegner ...")
+
+
+func _start_online_resume(session: Dictionary) -> void:
+	_start_network_match().resume(session)
+
+
+func _start_network_match() -> NetworkMatch:
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = false
@@ -173,42 +180,19 @@ func _start_network_match(url: String, connecting_text: String, connected_text: 
 	battle_ui.set_opponent_remote(true)
 	input_locked = true
 	player_controller.enabled = false
-	match_client = MatchClientScript.new()
-	match_client.name = "MatchClient"
-	# Keep the connection alive while the pause menu is open.
-	match_client.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(match_client)
-	match_client.connected.connect(func() -> void: battle_ui.set_instruction(connected_text))
-	match_client.room_created.connect(func(code: String) -> void:
-		battle_ui.set_instruction("Raum-Code: %s  –  schick ihn deinem Gegner und warte." % code))
-	match_client.match_started.connect(_on_network_match_started)
-	match_client.opponent_moved.connect(_on_opponent_moved)
-	match_client.opponent_left.connect(_on_network_ended.bind("GEGNER IST WEG"))
-	match_client.rejected.connect(_on_network_rejected)
-	match_client.connection_lost.connect(_on_network_ended.bind("KEINE VERBINDUNG"))
+	network_match = NetworkMatchScript.new()
+	network_match.name = "NetworkMatch"
+	add_child(network_match)
+	network_match.setup(self, battle_ui)
 	_refresh_ui()
-	battle_ui.set_instruction(connecting_text)
-	if match_client.connect_to_host(url) != OK:
-		_on_network_ended("KEINE VERBINDUNG")
+	return network_match
 
 
-func _on_network_rejected(reason: String) -> void:
-	match reason:
-		"not_found":
-			_on_network_ended("RAUM NICHT GEFUNDEN")
-		"full":
-			_on_network_ended("RAUM IST VOLL")
-		"code_taken":
-			_on_network_ended("BITTE NOCHMAL VERSUCHEN")
-		_:
-			_on_network_ended("VERBINDUNG ABGELEHNT")
-
-
-func _on_network_match_started(team: int, card_names: Array) -> void:
+## Sets up a fresh board for a match against another device.
+func begin_network_match(team: int, card_names: Array) -> bool:
 	var cards := MovementCardScript.cards_from_names(card_names)
 	if cards.size() != 5 or team < 0 or team > 1:
-		_on_network_ended("FEHLER BEIM START")
-		return
+		return false
 	network_team = team
 	match_cards = cards.duplicate()
 	hands[0] = [cards[0], cards[1]]
@@ -216,66 +200,75 @@ func _on_network_match_started(team: int, card_names: Array) -> void:
 	pass_card = cards[4]
 	current_player = 0
 	round_number = 1
+	turns_played = 0
 	must_pass = false
 	position_counts.clear()
 	_record_position()
 	camera_controller.set_player_view(team)
-	input_locked = team != current_player
-	player_controller.enabled = not input_locked
-	_refresh_ui()
-	battle_ui.set_instruction("Du beginnst. Wähle eine Karte und eine Figur." if team == 0 else "Der Gegner beginnt ...")
+	_begin_turn(1)
+	return true
 
 
-func _on_opponent_moved(message: Dictionary) -> void:
-	_remote_moves.append(message)
-	_play_queued_remote_move()
-
-
-func _play_queued_remote_move() -> void:
-	if _playing_remote_move or _remote_moves.is_empty() or battle_over or network_team < 0 or current_player == network_team:
-		return
-	var message: Dictionary = _remote_moves.pop_front()
+## Plays one turn received over the network for whichever side is to move.
+## Returns false when it does not fit this board (the two devices disagree).
+func apply_network_turn(message: Dictionary) -> bool:
 	var slot := int(message.get("slot", -1))
-	if slot < 0 or slot > 1:
-		return
+	if slot < 0 or slot > 1 or battle_over:
+		return false
+	_deselect_unit()
+	selected_card_slot = -1
 	if str(message.get("type", "")) == "pass":
 		_pass_turn(slot)
-		return
+		return true
 	var from_values: Array = message.get("from", [])
 	var to_values: Array = message.get("to", [])
 	if from_values.size() != 2 or to_values.size() != 2:
-		return
+		return false
 	var unit := grid_manager.get_unit_at(Vector2i(int(from_values[0]), int(from_values[1]))) as BattleUnit
 	var destination := Vector2i(int(to_values[0]), int(to_values[1]))
 	if unit == null or unit.team_id != current_player:
-		_on_network_ended("SPIELSTAND WEICHT AB")
-		return
-	_playing_remote_move = true
+		return false
 	selected_card_slot = slot
 	_select_unit(unit)
 	if destination not in movement_targets:
-		_playing_remote_move = false
-		_on_network_ended("SPIELSTAND WEICHT AB")
-		return
+		_deselect_unit()
+		return false
 	await _perform_move(destination)
-	_playing_remote_move = false
+	return true
 
 
-func _on_network_ended(reason: String) -> void:
+## Ends the match with a message instead of a winner (connection problems).
+func end_with_message(reason: String) -> void:
 	if battle_over:
 		return
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
+	battle_ui.hide_side_action()
 	battle_ui.show_result(reason)
+
+
+## Quick play found nobody; drop the search and play the bot instead.
+func switch_to_bot() -> void:
+	if network_match != null:
+		network_match.leave()
+		network_match.queue_free()
+		network_match = null
+	network_team = -1
+	battle_ui.set_opponent_remote(false)
+	_start_bot_training()
+
+
+func refresh_turn_instruction() -> void:
+	_begin_turn(0)
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:
 	if input_locked or battle_over or team_id != current_player or slot < 0 or slot >= 2:
 		return
 	if must_pass:
-		if match_client != null:
-			match_client.send_pass(slot)
+		if network_match != null:
+			network_match.send_local_turn({"type": "pass", "seq": turns_played, "slot": slot})
 		_pass_turn(slot)
 		return
 	selected_card_slot = slot
@@ -300,8 +293,8 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		_select_unit(clicked_unit)
 		return
 	if selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
-		if match_client != null:
-			match_client.send_move(selected_unit.grid_position, selected_card_slot, coordinate)
+		if network_match != null:
+			network_match.send_local_turn({"type": "move", "seq": turns_played, "from": selected_unit.grid_position, "slot": selected_card_slot, "to": coordinate})
 		await _perform_move(coordinate)
 	elif selected_card_slot < 0:
 		battle_ui.set_instruction("Wähle zuerst eine deiner zwei Karten.")
@@ -364,6 +357,7 @@ func _exchange_card(slot: int) -> void:
 	var used_card: MovementCard = hands[current_player][slot]
 	hands[current_player][slot] = pass_card
 	pass_card = used_card
+	turns_played += 1
 
 
 ## Onitama rule: a side without any legal move still has to give one card away.
@@ -387,6 +381,12 @@ func _advance_turn() -> void:
 		_refresh_ui()
 		_finish_battle(-1)
 		return
+	_begin_turn(repetitions)
+
+
+## Unlocks input for the side to move (or hands over to the bot / the other
+## device) and tells the player what to do.
+func _begin_turn(repetitions: int) -> void:
 	must_pass = not _has_legal_move(current_player)
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	var remote_turn := network_team >= 0 and current_player != network_team
@@ -398,7 +398,7 @@ func _advance_turn() -> void:
 		call_deferred("_run_bot_turn")
 	elif remote_turn:
 		battle_ui.set_instruction("Der Gegner ist am Zug ...")
-		call_deferred("_play_queued_remote_move")
+		network_match.call_deferred("play_pending_turns")
 	elif must_pass:
 		battle_ui.set_instruction(_pass_instruction())
 	elif repetitions == DRAW_REPETITIONS - 1:
@@ -537,6 +537,8 @@ func _finish_battle(winner: int) -> void:
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
+	if network_match != null:
+		network_match.finished()
 	if winner < 0:
 		battle_ui.show_result("UNENTSCHIEDEN")
 	elif network_team >= 0:
@@ -571,6 +573,8 @@ func _on_cancel_requested() -> void:
 
 
 func _restart_battle() -> void:
+	if network_match != null and not battle_over:
+		network_match.leave()
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().reload_current_scene()

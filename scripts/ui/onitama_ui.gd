@@ -7,6 +7,8 @@ signal local_multiplayer_requested
 signal lan_match_requested
 signal online_create_requested
 signal online_join_requested(code: String)
+signal online_quick_requested
+signal online_resume_requested(session: Dictionary)
 signal restart_pressed
 signal quit_pressed
 signal board_insets_changed(top_pixels: float, bottom_pixels: float)
@@ -39,6 +41,9 @@ var hud_column: Control
 var top_tray: PanelContainer
 var bottom_tray: PanelContainer
 var menu_button: Button
+## Optional button under the instruction, e.g. "play the bot instead".
+var side_action_button: Button
+var _side_action: Callable
 var main_menu: MainMenu
 
 
@@ -105,6 +110,16 @@ func set_opponent_bot(enabled: bool, difficulty_label: String = "") -> void:
 	opponent_label = "BOT" if difficulty_label.is_empty() else "BOT · %s" % difficulty_label
 	if hand_titles.size() > 1:
 		hand_titles[1].text = _team_name(_team_at(1))
+
+
+func show_side_action(label_text: String, action: Callable) -> void:
+	_side_action = action
+	side_action_button.text = label_text
+	side_action_button.visible = true
+
+
+func hide_side_action() -> void:
+	side_action_button.visible = false
 
 
 func set_opponent_remote(enabled: bool) -> void:
@@ -219,6 +234,13 @@ func _build_ui() -> void:
 	instruction_label.add_theme_font_override("font", ThemeDB.fallback_font)
 	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
+	side_action_button = _make_button("", bottom_box)
+	side_action_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	side_action_button.visible = false
+	side_action_button.pressed.connect(func() -> void:
+		side_action_button.visible = false
+		if _side_action.is_valid():
+			_side_action.call())
 	_add_hand_title(bottom_box, 0)
 	_add_hand_row(bottom_box, 0)
 	# Titles were appended bottom-last; keep index = position.
@@ -285,6 +307,8 @@ func _build_main_menu() -> void:
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
 	main_menu.online_create_requested.connect(func() -> void: online_create_requested.emit())
 	main_menu.online_join_requested.connect(func(code: String) -> void: online_join_requested.emit(code))
+	main_menu.online_quick_requested.connect(func() -> void: online_quick_requested.emit())
+	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 
 

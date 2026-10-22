@@ -6,6 +6,8 @@ signal local_multiplayer_requested
 signal lan_match_requested
 signal online_create_requested
 signal online_join_requested(code: String)
+signal online_quick_requested
+signal online_resume_requested(session: Dictionary)
 signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
@@ -122,7 +124,13 @@ func _show_home() -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 22.0
 	_content.add_child(spacer)
-	_add_menu_button(_content, "SCHNELLES SPIEL", "Gegen den Bot – Schwierigkeit wählen", _show_difficulty)
+	var session := MatchClient.saved_session()
+	if not session.is_empty():
+		_add_menu_button(_content, "PARTIE FORTSETZEN", "Deine Online-Partie läuft noch", func() -> void:
+			close_menu()
+			online_resume_requested.emit(session))
+	# "Schnelles Spiel" now means a random online opponent (Multiplayer > Online).
+	_add_menu_button(_content, "GEGEN DEN BOT", "Schwierigkeit wählen", _show_difficulty)
 	_add_menu_button(_content, "MULTIPLAYER", "Lokal auf einem Gerät oder online", _show_multiplayer)
 	_add_menu_button(_content, "SAMMLUNG", "Deine Bewegungskarten", _show_collection)
 	_add_menu_button(_content, "SHOP", "Kosmetik und Kartenrücken", _show_online_page.bind("SHOP"))
@@ -174,7 +182,10 @@ func _show_multiplayer() -> void:
 func _show_online_play() -> void:
 	_clear_content()
 	_content.add_child(_make_label("ONLINE", 26, UITheme.GOLD_LIGHT))
-	_content.add_child(_make_label("Erstelle ein Spiel und schick den Raum-Code an deinen Gegner – oder gib seinen Code ein.", 15, Color("b9b3cc")))
+	_content.add_child(_make_label("Spiel gegen einen zufälligen Gegner – oder mit einem Raum-Code gegen Freunde.", 15, Color("b9b3cc")))
+	_add_menu_button(_content, "SCHNELLES SPIEL", "Zufälliger Gegner, sofort los", func() -> void:
+		close_menu()
+		online_quick_requested.emit())
 	_add_menu_button(_content, "SPIEL ERSTELLEN", "Du bekommst einen Raum-Code", func() -> void:
 		close_menu()
 		online_create_requested.emit())

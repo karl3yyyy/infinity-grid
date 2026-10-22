@@ -99,15 +99,31 @@ Pages build cannot use this mode because it is served over HTTPS.
 
 ## Online play (room codes)
 
-**Multiplayer > Online** lets one player create a game and share the four-digit
-room code; the other enters it. The relay is a Cloudflare Worker with one
-Durable Object per room (`server/online/`, free Workers plan). It speaks the
-same protocol as the PC host, which can stand in for tests:
-`INFINITY_GRID_ONLINE=ws://127.0.0.1:8061` on desktop.
+**Multiplayer > Online** offers **Schnelles Spiel** (random opponent from a
+queue; after 30 s the bot is offered instead) or a four-digit room code for
+friends. A dropped connection reconnects by itself and replays missed turns;
+the opponent waits up to 60 s. After a page reload the main menu offers
+**Partie fortsetzen** for 10 minutes.
 
-The same Worker also serves the game itself:
-**https://infinity-grid.infinitygrid.workers.dev** (marked `noindex`). The
-repository stays private; GitHub Pages would need it public.
+Online tests run against a local server:
+
+```
+cd server/online
+npx wrangler dev --port 8787
+# second terminal, from the project root:
+set INFINITY_GRID_ONLINE=ws://127.0.0.1:8787
+godot --headless --path . --script res://tests/online_test.gd
+```
+
+The server is a Cloudflare Worker (`server/online/`, free Workers plan): one
+Durable Object per room keeps the turn history and checks turn order, one
+lobby object pairs quick-play players. The PC host for Wi-Fi play speaks the
+basic part of the same protocol (no quick queue, no reconnect).
+
+The game is published twice: by the Worker at
+**https://infinity-grid.infinitygrid.workers.dev** (marked `noindex`) and by
+GitHub Pages at **https://karl3yyyy.github.io/tactical-slash/** (from `site/`
+on every push to `main`).
 
 Publish a new version (needs Node.js and `npx wrangler login`):
 

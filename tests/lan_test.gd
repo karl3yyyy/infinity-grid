@@ -67,7 +67,7 @@ func _run_tests() -> void:
 		_expect(teams == [0, 1], "Paired players get opposite teams")
 		_expect(starts[0][2] == starts[1][2] and (starts[0][2] as Array).size() == 5, "Both players receive the same five cards")
 		_expect(MovementCard.cards_from_names(starts[0][2]).size() == 5, "Card names map back to movement cards")
-	first.send_move(Vector2i(1, 4), 1, Vector2i(1, 3))
+	first.send_move(0, Vector2i(1, 4), 1, Vector2i(1, 3))
 	await _wait_until(func() -> bool: return received.size() == 1)
 	# JSON turns numbers into floats; the battle manager converts them back with int().
 	var relayed: Dictionary = received[0] if received.size() == 1 else {}
@@ -138,21 +138,23 @@ func _test_remote_move_replay() -> void:
 	var battle := main.get_node("BattleManager") as OnitamaBattleManager
 	var ui := main.get_node("BattleUI") as OnitamaUI
 	var grid := main.get_node("BattleScene/GridManager") as GridManager
-	ui.main_menu.close_menu()
-	grid.get_parent().visible = true
-	battle.bot_opponent_enabled = false
-	ui.set_opponent_remote(true)
-	battle._on_network_match_started(1, ["Crane", "Wave", "Comet", "Shell", "Vortex"])
+	var network := battle._start_network_match()
+	network._on_match_started(1, ["Crane", "Wave", "Comet", "Shell", "Vortex"])
 	_expect(battle.network_team == 1 and battle.input_locked and not battle.player_controller.enabled, "Second player waits while the first one moves")
 	_expect(battle.hands[0][0].card_name == "Crane" and battle.pass_card.card_name == "Vortex", "Cards are dealt as the host decided")
 	_expect(ui.hand_titles[0].text == "DU" and ui.hand_titles[1].text == "GEGNER", "Own hand is at the bottom, the opponent's on top")
+	# Turns arrive out of order: number 1 (own) must wait for number 0 (opponent's).
 	# Crane (0, 1) moves Player 1's student forward from (0, 4) to (0, 3).
-	battle._on_opponent_moved({"type": "move", "from": [0, 4], "slot": 0, "to": [0, 3]})
-	await _wait_until(func() -> bool: return battle.current_player == 1)
+	network._on_opponent_moved({"type": "move", "seq": 1, "from": [0, 0], "slot": 0, "to": [0, 1]})
+	network._on_opponent_moved({"type": "move", "seq": 0, "from": [0, 4], "slot": 0, "to": [0, 3]})
+	await _wait_until(func() -> bool: return battle.turns_played == 2)
 	_expect(grid.get_unit_at(Vector2i(0, 3)) != null and grid.get_unit_at(Vector2i(0, 4)) == null, "The opponent's move is replayed on this board")
-	_expect(battle.hands[0][0].card_name == "Vortex" and battle.pass_card.card_name == "Crane", "The replayed move swaps cards like a local move")
-	_expect(not battle.input_locked and battle.player_controller.enabled, "After the opponent's move it is this player's turn")
-	battle._on_network_ended("GEGNER IST WEG")
+	_expect(battle.turns_played == 2 and grid.get_unit_at(Vector2i(0, 1)) != null, "Turns are applied in order by their number, like after a reconnect")
+	network._on_opponent_moved({"type": "move", "seq": 0, "from": [0, 4], "slot": 0, "to": [0, 3]})
+	await process_frame
+	_expect(battle.turns_played == 2, "A turn that was already played is ignored")
+	_expect(not battle.input_locked or battle.current_player != battle.network_team, "Input follows whose turn it is")
+	battle.end_with_message("GEGNER IST WEG")
 	_expect(battle.battle_over and ui.result_label.text == "GEGNER IST WEG", "A lost opponent ends the match with a message")
 	main.queue_free()
 	await process_frame

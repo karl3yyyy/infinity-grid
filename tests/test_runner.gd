@@ -32,7 +32,7 @@ func _run_tests() -> void:
 		_expect(ui.main_menu.visible and battle.input_locked and not grid.get_parent().visible, "Opaque main menu opens before the board is shown")
 		var menu_rect := ui.main_menu._panel.get_global_rect()
 		_expect(menu_rect.position.y >= 0.0 and menu_rect.end.y <= get_root().get_visible_rect().size.y, "Main menu fits inside the visible viewport")
-		_expect(ui.main_menu._content.get_child_count() >= 9, "Main menu shows all four centered game options")
+		_expect(ui.main_menu._content.get_children().filter(func(child: Node) -> bool: return child is Button).size() >= 5, "Main menu lists the game modes as entries")
 		ui.main_menu.local_multiplayer_requested.emit()
 		await process_frame
 		_expect(not ui.main_menu.visible and not battle.bot_opponent_enabled and grid.get_parent().visible, "Local multiplayer starts with the second hand enabled")

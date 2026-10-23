@@ -17,6 +17,14 @@ func _ready() -> void:
 		JavaScriptBridge.pwa_update_available.connect(_apply_web_update)
 		if JavaScriptBridge.pwa_needs_update():
 			_apply_web_update.call_deferred()
+		# Browsers only look for a new version now and then; ask right away and
+		# every few minutes so a published update shows up quickly.
+		_check_for_web_update()
+		var timer := Timer.new()
+		timer.wait_time = 180.0
+		timer.autostart = true
+		timer.timeout.connect(_check_for_web_update)
+		add_child(timer)
 	_build_environment()
 	var battle_scene := Node3D.new()
 	battle_scene.name = "BattleScene"
@@ -57,6 +65,10 @@ func _ready() -> void:
 		unit_movement,
 		units
 	)
+
+
+func _check_for_web_update() -> void:
+	JavaScriptBridge.eval("if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistration().then(function (r) { if (r) { r.update(); } }); }")
 
 
 ## Reloads into the new version, but never in the middle of a match.

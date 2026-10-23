@@ -305,12 +305,18 @@ func apply_team_look(team: int, look: Dictionary) -> void:
 	var team_units: Array[BattleUnit] = players if team == 0 else enemies
 	for index: int in range(team_units.size()):
 		var unit := team_units[index]
-		var figure: Node3D
+		if unit.is_dead:
+			continue
+		# The fighter needs to be in the tree before it builds its own world.
+		var fighter := FighterSprite.new()
+		fighter.name = "FighterSprite"
+		unit.apply_figure(fighter)
 		if unit.is_master:
-			figure = VoxelFigure.build_master(character, tint)
+			fighter.build(character, tint)
+			fighter.add_crown()
 		else:
-			figure = VoxelFigure.build_echo(echo, character, tint, int(character.get("seed", 1)) * 10 + index)
-		unit.apply_figure(figure)
+			fighter.build(CharacterRoster.echo_look(echo, character, tint), tint, 0.75 if echo == "echo" else 0.0)
+		unit.refresh_projections()
 	var skin := CharacterRoster.board_skin(str(look.get("board", "")))
 	grid_manager.set_side_skin(team, skin["tint"], skin["glow"])
 

@@ -93,6 +93,7 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 		"gunner":
 			if victim != null:
 				await unit.rig.pose("aim", 0.2)
+				unit.rig.pose("shoot")
 				await CombatEffects.projectile(effects_parent, _hand_position(unit), aim + Vector3(0.0, 0.8, 0.0), accent)
 				CombatEffects.burst(effects_parent, aim + Vector3(0.0, 0.8, 0.0), accent, 0.5)
 				await victim.shatter(unit.global_position, accent)

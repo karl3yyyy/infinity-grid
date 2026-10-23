@@ -40,6 +40,8 @@ var _profile_button: Button
 var _resume_available: bool = false
 ## What Escape / the back key does on the current page.
 var _back_action: Callable
+## Fighter previews of the current page; they render their own small worlds.
+var _previews: Node3D
 
 
 func _ready() -> void:
@@ -386,8 +388,8 @@ func _show_character_picker() -> void:
 	var selected := str(CharacterRoster.load_look()["character"])
 	_content.add_child(_make_text("Dein Meister ist der einzige Mensch auf deiner Seite. Sein Kampfstil gilt für dein ganzes Team.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid(CharacterRoster.CHARACTERS, selected, 3,
-		func(entry: Dictionary) -> Image:
-			return PixelPortrait.framed(PixelPortrait.paint(entry), Color("e2b04a"), true),
+		func(entry: Dictionary) -> Texture2D:
+			return _fighter_preview(entry, OnitamaUI.TEAM_COLORS[0], 0.0),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("character", entry["id"])
 			_show_character_picker())
@@ -400,8 +402,8 @@ func _show_echo_picker() -> void:
 	var master := CharacterRoster.character(look["character"])
 	_content.add_child(_make_text("Deine vier Schüler sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid(CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
-		func(entry: Dictionary) -> Image:
-			return PixelPortrait.framed(PixelPortrait.paint_echo(entry["id"], master, OnitamaUI.TEAM_COLORS[0], 4), OnitamaUI.TEAM_COLORS[0], false),
+		func(entry: Dictionary) -> Texture2D:
+			return _fighter_preview(CharacterRoster.echo_look(entry["id"], master, OnitamaUI.TEAM_COLORS[0]), OnitamaUI.TEAM_COLORS[0], 0.75 if entry["id"] == "echo" else 0.0),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("echo", entry["id"])
 			_show_echo_picker())
@@ -412,7 +414,10 @@ func _show_board_picker() -> void:
 	_set_page("SPIELFELD", _show_collection)
 	_content.add_child(_make_text("So sehen die zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid(CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
-		_board_preview,
+		func(entry: Dictionary) -> Texture2D:
+			var image := _board_preview(entry)
+			image.resize(image.get_width() * 4, image.get_height() * 4, Image.INTERPOLATE_NEAREST)
+			return ImageTexture.create_from_image(image),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("board", entry["id"])
 			_show_board_picker())
@@ -436,9 +441,17 @@ func _board_preview(entry: Dictionary) -> Image:
 	return image
 
 
-## Grid of pickable options with a pixel image each; the current choice is
+## Live, animated preview of a fighter (the same pixel renderer as on the board).
+func _fighter_preview(look: Dictionary, tint: Color, hologram: float) -> Texture2D:
+	var fighter := FighterSprite.new()
+	_previews.add_child(fighter)
+	fighter.build(look, tint, hologram, false)
+	return fighter.viewport.get_texture()
+
+
+## Grid of pickable options with a preview each; the current choice is
 ## framed. Focus shows the option's name and line below the list.
-func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: int, make_image: Callable, on_pick: Callable) -> void:
+func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: int, make_texture: Callable, on_pick: Callable) -> void:
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 560.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -451,14 +464,14 @@ func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: 
 	var cell_width := floorf((get_viewport().get_visible_rect().size.x - 150.0) / float(columns))
 	var selected_button: Button
 	for entry: Dictionary in entries:
-		var image: Image = make_image.call(entry)
-		var scale_factor := maxi(1, int(floorf((cell_width - 24.0) / float(image.get_width()))))
 		var button := Button.new()
-		button.icon = PixelPortrait.texture(image, scale_factor)
+		button.icon = make_texture.call(entry)
+		button.expand_icon = true
 		button.text = str(entry["name"])
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		button.custom_minimum_size = Vector2(cell_width, 0.0)
+		var icon_size: Vector2 = button.icon.get_size()
+		button.custom_minimum_size = Vector2(cell_width, (cell_width - 20.0) * icon_size.y / maxf(icon_size.x, 1.0) + 34.0)
 		button.add_theme_font_size_override("font_size", 22)
 		button.focus_mode = Control.FOCUS_ALL
 		var chosen: bool = entry["id"] == selected_id
@@ -519,6 +532,12 @@ func _start_local_multiplayer() -> void:
 ## Clears the list and shows the page name framed like "-------- MENU --------".
 func _set_page(title: String, back_action: Callable) -> void:
 	_clear_content()
+	if _previews == null:
+		_previews = Node3D.new()
+		_previews.name = "Previews"
+		add_child(_previews)
+	for preview: Node in _previews.get_children():
+		preview.queue_free()
 	_back_action = back_action
 	_page_title.text = "-------- %s --------" % title
 	_description.text = ""

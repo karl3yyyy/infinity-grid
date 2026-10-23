@@ -222,7 +222,7 @@ func _on_player_message(player: Dictionary, text: String) -> void:
 	var message: Variant = JSON.parse_string(text)
 	if not message is Dictionary:
 		return
-	if str(message.get("type", "")) in ["move", "pass"]:
+	if str(message.get("type", "")) in ["move", "pass", "look"]:
 		var partner := _find_player(int(player["partner"]))
 		if not partner.is_empty():
 			_send(partner, message)

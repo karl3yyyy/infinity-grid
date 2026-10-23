@@ -372,6 +372,117 @@ func _show_profile() -> void:
 
 func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
+	var look := CharacterRoster.load_look()
+	_add_menu_button(_content, "CHARAKTERE", "Dein Meister: %s" % CharacterRoster.character(look["character"])["name"], _show_character_picker)
+	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
+	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
+	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
+	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
+	_focus_first_entry()
+
+
+func _show_character_picker() -> void:
+	_set_page("CHARAKTERE", _show_collection)
+	var selected := str(CharacterRoster.load_look()["character"])
+	_content.add_child(_make_text("Dein Meister ist der einzige Mensch auf deiner Seite. Fällt er, ist das Spiel verloren.", 22, TerminalTheme.GREEN_DIM))
+	_add_picker_grid(CharacterRoster.CHARACTERS, selected, 3,
+		func(entry: Dictionary) -> Image:
+			return PixelPortrait.framed(PixelPortrait.paint(entry), Color("e2b04a"), true),
+		func(entry: Dictionary) -> void:
+			CharacterRoster.save_look_value("character", entry["id"])
+			_show_character_picker())
+	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+
+
+func _show_echo_picker() -> void:
+	_set_page("ECHOS", _show_collection)
+	var look := CharacterRoster.load_look()
+	var master := CharacterRoster.character(look["character"])
+	_content.add_child(_make_text("Deine vier Schüler sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
+	_add_picker_grid(CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
+		func(entry: Dictionary) -> Image:
+			return PixelPortrait.framed(PixelPortrait.paint_echo(entry["id"], master, OnitamaUI.TEAM_COLORS[0], 4), OnitamaUI.TEAM_COLORS[0], false),
+		func(entry: Dictionary) -> void:
+			CharacterRoster.save_look_value("echo", entry["id"])
+			_show_echo_picker())
+	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+
+
+func _show_board_picker() -> void:
+	_set_page("SPIELFELD", _show_collection)
+	_content.add_child(_make_text("So sehen die zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
+	_add_picker_grid(CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
+		_board_preview,
+		func(entry: Dictionary) -> void:
+			CharacterRoster.save_look_value("board", entry["id"])
+			_show_board_picker())
+	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+
+
+## Two rows of five tiles in the skin's colours, with its glow along the top.
+func _board_preview(entry: Dictionary) -> Image:
+	var tint: Color = entry["tint"]
+	var glow: Color = entry["glow"]
+	# Untinted means the plain wood texture.
+	var base := Color("a0703f") if tint == Color(1, 1, 1) else tint
+	var image := Image.create(36, 24, false, Image.FORMAT_RGBA8)
+	image.fill(Color("0b0f0b"))
+	for row: int in range(2):
+		for column: int in range(5):
+			var tile := base if (row + column) % 2 == 0 else base.darkened(0.3)
+			image.fill_rect(Rect2i(3 + column * 6, 6 + row * 8, 6, 8), tile)
+			image.fill_rect(Rect2i(3 + column * 6, 6 + row * 8, 6, 1), tile.lightened(0.2))
+	if glow != Color(0, 0, 0):
+		image.fill_rect(Rect2i(2, 3, 32, 2), glow)
+		image.fill_rect(Rect2i(2, 22, 32, 1), glow.darkened(0.3))
+	return image
+
+
+## Grid of pickable options with a pixel image each; the current choice is
+## framed. Focus shows the option's name and line below the list.
+func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: int, make_image: Callable, on_pick: Callable) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 560.0
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_content.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = columns
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(grid)
+	var cell_width := floorf((get_viewport().get_visible_rect().size.x - 150.0) / float(columns))
+	var selected_button: Button
+	for entry: Dictionary in entries:
+		var image: Image = make_image.call(entry)
+		var scale_factor := maxi(1, int(floorf((cell_width - 24.0) / float(image.get_width()))))
+		var button := Button.new()
+		button.icon = PixelPortrait.texture(image, scale_factor)
+		button.text = str(entry["name"])
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		button.custom_minimum_size = Vector2(cell_width, 0.0)
+		button.add_theme_font_size_override("font_size", 22)
+		button.focus_mode = Control.FOCUS_ALL
+		var chosen: bool = entry["id"] == selected_id
+		if chosen:
+			var frame := StyleBoxFlat.new()
+			frame.bg_color = Color(TerminalTheme.GREEN, 0.12)
+			frame.border_color = TerminalTheme.GREEN_BRIGHT
+			frame.set_border_width_all(3)
+			frame.set_content_margin_all(6.0)
+			button.add_theme_stylebox_override("normal", frame)
+			selected_button = button
+		var line := "%s%s – %s" % ["* " if chosen else "", entry["name"], entry["line"]]
+		button.mouse_entered.connect(button.grab_focus)
+		button.focus_entered.connect(func() -> void: _description.text = "> " + line)
+		button.pressed.connect(on_pick.bind(entry))
+		grid.add_child(button)
+	if selected_button != null:
+		selected_button.grab_focus.call_deferred()
+
+
+func _show_card_collection() -> void:
+	_set_page("KARTEN", _show_collection)
 	var deck := MovementCardScript.create_deck()
 	_content.add_child(_make_text("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), TEXT_FONT_SIZE))
 	var scroll := ScrollContainer.new()
@@ -390,7 +501,7 @@ func _show_collection() -> void:
 		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
 		view.show_card(card, false, UITheme.TEAM_COLORS[0], false)
 		grid.add_child(view)
-	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
+	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 	_focus_first_entry()
 
 

@@ -42,6 +42,9 @@ func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
 		if not battle.battle_over:
 			battle.refresh_turn_instruction())
 	client.opponent_left.connect(battle.end_with_message.bind("GEGNER IST WEG"))
+	client.opponent_look.connect(func(look: Dictionary) -> void:
+		if battle.network_team >= 0:
+			battle.apply_team_look(1 - battle.network_team, look))
 	client.reconnecting.connect(func() -> void:
 		if not battle.battle_over:
 			ui.set_instruction("Verbindung weg – verbinde neu ..."))
@@ -106,6 +109,7 @@ func _on_match_started(team: int, card_names: Array) -> void:
 		battle.end_with_message("FEHLER BEIM START")
 		return
 	_started = true
+	client.send_look(CharacterRoster.load_look())
 	ui.set_instruction("Du beginnst. Wähle eine Karte und eine Figur." if team == 0 else "Der Gegner beginnt ...")
 
 
@@ -115,6 +119,7 @@ func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
 			battle.end_with_message("FEHLER BEIM START")
 			return
 		_started = true
+	client.send_look(CharacterRoster.load_look())
 	for index: int in range(moves.size()):
 		var turn: Dictionary = moves[index]
 		turn["seq"] = index

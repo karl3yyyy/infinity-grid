@@ -66,6 +66,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_face_viewer()
 	_sync_wrap_projections()
 	if is_dead:
 		return
@@ -108,6 +109,57 @@ func create_wrap_projections(parent: Node, board_width: float) -> void:
 			"offset": float(side) * board_width,
 		})
 	_sync_wrap_projections()
+
+
+## Replaces the creature figurine with a voxel figure (see VoxelFigure) on a
+## small glowing plinth. Called whenever the players' looks are known (match
+## start, opponent's choice arriving).
+func apply_figure(figure: Node3D) -> void:
+	var creature := visual_root.get_node_or_null("Creature") as Node3D
+	if creature != null:
+		creature.visible = false
+	var old := visual_root.get_node_or_null("Standee")
+	if old != null:
+		visual_root.remove_child(old)
+		old.queue_free()
+	var standee := Node3D.new()
+	standee.name = "Standee"
+	visual_root.add_child(standee)
+
+	var plinth := MeshInstance3D.new()
+	var plinth_mesh := CylinderMesh.new()
+	plinth_mesh.radial_segments = 6
+	plinth_mesh.rings = 1
+	plinth_mesh.top_radius = 0.36
+	plinth_mesh.bottom_radius = 0.42
+	plinth_mesh.height = 0.12
+	plinth.mesh = plinth_mesh
+	plinth.position.y = 0.06
+	var plinth_material := StandardMaterial3D.new()
+	plinth_material.albedo_color = Color("15181a")
+	plinth_material.metallic = 0.6
+	plinth_material.roughness = 0.35
+	plinth_material.emission_enabled = true
+	plinth_material.emission = _aura_color()
+	plinth_material.emission_energy_multiplier = 0.35
+	plinth.material_override = plinth_material
+	standee.add_child(plinth)
+
+	figure.position.y = 0.12
+	standee.add_child(figure)
+	_rebuild_projection_visuals()
+
+
+## Voxel figures turn towards the player so every character shows its face,
+## whichever way the piece itself points. The edge projections copy this.
+func _face_viewer() -> void:
+	if visual_root == null or visual_root.get_node_or_null("Standee") == null or is_dead:
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var camera_yaw := camera.global_rotation.y
+	visual_root.rotation.y = wrapf(camera_yaw - global_rotation.y, -PI, PI)
 
 
 func set_selected(value: bool) -> void:
@@ -460,6 +512,23 @@ func _sync_wrap_projections() -> void:
 					break
 			projection["animation_state"] = animation_state
 			_wrap_projections[index] = projection
+
+
+## The edge projections copy the visual; refresh them after it changed.
+func _rebuild_projection_visuals() -> void:
+	for index: int in range(_wrap_projections.size()):
+		var projection: Dictionary = _wrap_projections[index]
+		var old_visual := projection["visual"] as Node3D
+		var projection_root := projection["root"] as Node3D
+		var fresh := visual_root.duplicate() as Node3D
+		fresh.name = "VisualProjection"
+		projection_root.remove_child(old_visual)
+		old_visual.queue_free()
+		projection_root.add_child(fresh)
+		_set_projection_transparency(fresh, 0.48)
+		projection["visual"] = fresh
+		projection["animation_player"] = _find_animation_player(fresh)
+		_wrap_projections[index] = projection
 
 
 func _set_projection_transparency(node: Node, transparency_amount: float) -> void:

@@ -40,6 +40,8 @@ var network_match: NetworkMatch
 var turns_played: int = 0
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
+## Look per team: {"character", "echo", "board"} (see CharacterRoster).
+var team_looks: Array[Dictionary] = [{}, {}]
 
 
 func setup(
@@ -126,6 +128,7 @@ func _show_title_menu() -> void:
 func _start_bot_training() -> void:
 	if battle_over:
 		return
+	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = true
@@ -141,6 +144,7 @@ func _start_bot_training() -> void:
 func _start_local_multiplayer() -> void:
 	if battle_over:
 		return
+	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = false
@@ -204,6 +208,7 @@ func begin_network_match(team: int, card_names: Array) -> bool:
 	must_pass = false
 	position_counts.clear()
 	_record_position()
+	_apply_match_looks(team)
 	camera_controller.set_player_view(team)
 	_begin_turn(1)
 	return true
@@ -261,6 +266,37 @@ func switch_to_bot() -> void:
 
 func refresh_turn_instruction() -> void:
 	_begin_turn(0)
+
+
+## The player's own look goes to their team; the other side gets a random one
+## until (online) the opponent's real choice arrives.
+func _apply_match_looks(own_team: int) -> void:
+	var own := CharacterRoster.load_look()
+	apply_team_look(own_team, own)
+	apply_team_look(1 - own_team, {
+		"character": CharacterRoster.random_character_id(own["character"]),
+		"echo": CharacterRoster.ECHO_STYLES.pick_random()["id"],
+		"board": CharacterRoster.BOARD_SKINS.pick_random()["id"],
+	})
+
+
+## Shows a team's master portrait, student echoes and board half skin.
+func apply_team_look(team: int, look: Dictionary) -> void:
+	team_looks[team] = look
+	var character := CharacterRoster.character(str(look.get("character", "")))
+	var echo := str(CharacterRoster.echo_style(str(look.get("echo", "")))["id"])
+	var tint: Color = OnitamaUI.TEAM_COLORS[team]
+	var team_units: Array[BattleUnit] = players if team == 0 else enemies
+	for index: int in range(team_units.size()):
+		var unit := team_units[index]
+		var figure: Node3D
+		if unit.is_master:
+			figure = VoxelFigure.build_master(character, tint)
+		else:
+			figure = VoxelFigure.build_echo(echo, character, tint, int(character.get("seed", 1)) * 10 + index)
+		unit.apply_figure(figure)
+	var skin := CharacterRoster.board_skin(str(look.get("board", "")))
+	grid_manager.set_side_skin(team, skin["tint"], skin["glow"])
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:

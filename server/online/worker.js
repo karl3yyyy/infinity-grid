@@ -10,7 +10,7 @@
 //   mode=quick                       -> {"type":"queued"}, later {"type":"matched","code","team"}
 //   mode=match&code=<12>&team=0|1    -> both: start (the lobby sends players here)
 //   mode=resume&code=..&token=..     -> {"type":"resume","team","cards","code","token","moves":[...]}
-// Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"leave"}, raw "ping".
+// Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"look", ...}, {"type":"leave"}, raw "ping".
 // Server events: opponent_away {seconds}, opponent_back, opponent_left, error {reason}.
 // Every client runs the rules itself; the server only checks turn order.
 
@@ -156,6 +156,7 @@ export class Room {
       const old = this.socketFor(seat);
       const response = this.accept(seat, {
         type: "resume", team: seat, cards: room.cards, code: room.code, token, moves: room.moves,
+        opponent_look: (room.looks || [null, null])[1 - seat],
       });
       if (old) {
         old.close(1000, "replaced");
@@ -202,6 +203,21 @@ export class Room {
     }
     if (message.type === "leave") {
       await this.end(room, seat);
+      return;
+    }
+    if (message.type === "look") {
+      // Cosmetic choice (character, echoes, board skin); kept for resumes.
+      const look = { type: "look" };
+      for (const key of ["character", "echo", "board"]) {
+        look[key] = String(message[key] || "").slice(0, 32);
+      }
+      room.looks = room.looks || [null, null];
+      room.looks[seat] = look;
+      await this.save(room);
+      const other = this.socketFor(1 - seat);
+      if (other) {
+        send(other, look);
+      }
       return;
     }
     if (message.type !== "move" && message.type !== "pass") {

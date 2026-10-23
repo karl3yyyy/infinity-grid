@@ -15,6 +15,8 @@ signal resumed(team: int, card_names: Array, moves: Array)
 signal opponent_moved(message: Dictionary)
 signal opponent_away(seconds: int)
 signal opponent_back
+## The opponent's chosen look: {"character", "echo", "board"}.
+signal opponent_look(look: Dictionary)
 signal opponent_left
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
@@ -157,6 +159,11 @@ func send_pass(seq: int, slot: int) -> void:
 	_send_turn({"type": "pass", "seq": seq, "slot": slot})
 
 
+## Tells the opponent which character, echoes and board skin to show.
+func send_look(look: Dictionary) -> void:
+	_send_now({"type": "look", "character": str(look.get("character", "")), "echo": str(look.get("echo", "")), "board": str(look.get("board", ""))})
+
+
 func is_reconnecting() -> bool:
 	return _reconnect_time_left >= 0.0
 
@@ -259,6 +266,8 @@ func _handle_message(text: String) -> void:
 			_remember(message)
 			_reconnect_time_left = -1.0
 			resumed.emit(int(message["team"]), message["cards"] as Array, message.get("moves", []) as Array)
+			if message.get("opponent_look") is Dictionary:
+				opponent_look.emit(message["opponent_look"])
 			_flush_outbox()
 		"move", "pass":
 			opponent_moved.emit(message)
@@ -266,6 +275,8 @@ func _handle_message(text: String) -> void:
 			opponent_away.emit(int(message.get("seconds", 60)))
 		"opponent_back":
 			opponent_back.emit()
+		"look":
+			opponent_look.emit(message)
 		"opponent_left":
 			forget_session()
 			disconnect_from_host()

@@ -8,6 +8,11 @@ const CELL_SIZE: float = 1.4
 
 var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
+## Board skin per player half: {"tint", "glow"} (see CharacterRoster.BOARD_SKINS).
+var _side_skins: Array[Dictionary] = [
+	{"tint": Color.WHITE, "glow": Color.BLACK},
+	{"tint": Color.WHITE, "glow": Color.BLACK},
+]
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
 var wrap_projection_count: int = 0
 var _wrap_materials: Dictionary = {}
@@ -274,26 +279,45 @@ func _refresh_cell(cell: GridCell) -> void:
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
-	# Normal tiles show the wood texture untinted; highlights tint and glow.
-	var wood_tint := Color.WHITE
-	var tile_color: Color = wood_tint if cell.highlight == GridCellData.Highlight.NORMAL else _colors[cell.highlight]
+	# Normal tiles show the wood texture, tinted by the skin of that player's
+	# half; highlights tint and glow.
+	var skin := _side_skin_at(cell.coordinate)
+	var normal_tile := cell.highlight == GridCellData.Highlight.NORMAL
+	var tile_color: Color = skin["tint"] if normal_tile else _colors[cell.highlight]
 	var is_emissive := cell.highlight in [
 		GridCellData.Highlight.HOVER,
 		GridCellData.Highlight.SELECTED,
 		GridCellData.Highlight.MOVE,
 		GridCellData.Highlight.ATTACK,
 	]
-	_apply_cell_material(cell.material, tile_color, 1.0, is_emissive)
+	var glow: Color = _colors[cell.highlight] if is_emissive else skin["glow"]
+	var energy := 0.45 if is_emissive else 0.3
+	_apply_cell_material(cell.material, tile_color, 1.0, glow, energy)
 	for projection_value: Variant in _wrap_materials.get(cell.coordinate, []):
 		var projection: Dictionary = projection_value
-		_apply_cell_material(projection["material"], tile_color, float(projection["opacity"]), is_emissive)
+		_apply_cell_material(projection["material"], tile_color, float(projection["opacity"]), glow, energy)
 
 
-func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, is_emissive: bool) -> void:
+## Skin for the two rows nearest a player; the middle row stays neutral.
+func set_side_skin(team: int, tint: Color, glow: Color) -> void:
+	_side_skins[team] = {"tint": tint, "glow": glow}
+	for cell: GridCell in cells.values():
+		_update_cell_visual(cell)
+
+
+func _side_skin_at(coordinate: Vector2i) -> Dictionary:
+	if coordinate.y >= grid_size.y - 2:
+		return _side_skins[0]
+	if coordinate.y <= 1:
+		return _side_skins[1]
+	return {"tint": Color.WHITE, "glow": Color.BLACK}
+
+
+func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, glow: Color, energy: float) -> void:
 	var faded_color := color
 	faded_color.a = opacity
 	material.albedo_color = faded_color
-	material.emission_enabled = is_emissive
-	if is_emissive:
-		material.emission = color
-		material.emission_energy_multiplier = 0.45
+	material.emission_enabled = glow != Color.BLACK
+	if material.emission_enabled:
+		material.emission = glow
+		material.emission_energy_multiplier = energy

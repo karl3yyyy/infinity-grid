@@ -6,3 +6,5 @@ build/
 *.gd.uid
 assets/source_assets/*
 !assets/source_assets/.gdignore
+.wrangler/
+.dev.vars

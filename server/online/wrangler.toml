@@ -33,3 +33,11 @@ class_name = "Account"
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["Account"]
+
+# Credit packs paid through Stripe Checkout (see payments.js). Empty price ids
+# switch the packs off. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are secrets
+# and are set with `npx wrangler secret put <NAME>`, never written here.
+[vars]
+STRIPE_PRICE_SMALL = ""
+STRIPE_PRICE_MEDIUM = ""
+STRIPE_PRICE_LARGE = ""

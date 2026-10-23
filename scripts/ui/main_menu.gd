@@ -389,10 +389,14 @@ func _show_profile() -> void:
 ## Opens the account on first start, afterwards refreshes it (daily bonus).
 func _connect_account() -> void:
 	var is_new := not account.has_account()
+	var credits_before := account.credits()
+	var checkout := StripeCheckout.returned()
 	await account.connect_account()
 	if is_new and account.has_account():
 		# A new account takes over the name chosen on this device.
 		account.save_profile(profile_name, avatar_index)
+	if not checkout.is_empty():
+		_shop.show_checkout_return(checkout, credits_before)
 
 
 ## After restoring an account from its code, use its name and colour here.

@@ -13,9 +13,11 @@
 // Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"look", ...}, {"type":"leave"}, raw "ping".
 // Server events: opponent_away {seconds}, opponent_back, opponent_left, error {reason}.
 // Every client runs the rules itself; the server only checks turn order.
-// Player accounts for the cosmetics shop live in accounts.js (/api/account).
+// Player accounts for the cosmetics shop live in accounts.js (/api/account);
+// credit packs paid through Stripe Checkout in payments.js (/api/stripe/webhook).
 
 import { handleAccountApi } from "./accounts.js";
+import { handleWebhook } from "./payments.js";
 export { Account } from "./accounts.js";
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
@@ -39,6 +41,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/index.wasm") {
       return serveSplitWasm(request, env);
+    }
+    if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
+      return handleWebhook(request, env);
     }
     if (url.pathname.startsWith("/api/account")) {
       return handleAccountApi(request, env, url);

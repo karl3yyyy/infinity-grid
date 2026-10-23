@@ -19,6 +19,8 @@ var account: Dictionary = {}
 var code: String = ""
 var busy: bool = false
 var _last_error: String = ""
+## Full answer of the last request (checkout details live here).
+var _last_response: Dictionary = {}
 
 
 func _ready() -> void:
@@ -105,6 +107,7 @@ func _call(action: String, method: int, path: String, body: Dictionary) -> void:
 		headers.append("Authorization: Bearer " + code)
 	var payload := "" if method == HTTPClient.METHOD_GET else JSON.stringify(body)
 	_last_error = "offline"
+	_last_response = {}
 	if request.request(api_url() + path, headers, method, payload) == OK:
 		var response: Array = await request.request_completed
 		var status: int = response[1]
@@ -114,6 +117,7 @@ func _call(action: String, method: int, path: String, body: Dictionary) -> void:
 		if response[0] == HTTPRequest.RESULT_SUCCESS and answer is Dictionary:
 			var data: Dictionary = answer
 			_last_error = str(data.get("error", "")) if status >= 400 or data.has("error") else ""
+			_last_response = data
 			if data.has("account"):
 				account = data["account"]
 				if action == "create":
@@ -133,3 +137,15 @@ func _store() -> void:
 	config.set_value(SECTION, "code", code)
 	config.set_value(SECTION, "cache", account)
 	config.save(PROFILE_PATH)
+
+
+## Credit packs the server sells for real money ([] when payments are off).
+func packs() -> Array:
+	return account.get("packs", [])
+
+
+## Starts paying for a credit pack. Returns {session, url} of the Stripe
+## Checkout page or {} (then _last_error says why).
+func start_checkout(pack_id: String) -> Dictionary:
+	await _call("checkout", HTTPClient.METHOD_POST, "/checkout", {"pack": pack_id})
+	return _last_response if _last_error.is_empty() else {}

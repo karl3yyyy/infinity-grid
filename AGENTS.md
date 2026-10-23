@@ -89,4 +89,8 @@ Approved backend milestone: player accounts and a cosmetics shop paid with
 in-game credits. `server/online/accounts.js` (one Durable Object per account,
 opened with an account code, no passwords or e-mail) alone decides credits and
 ownership; `scripts/network/account_service.gd` only displays and caches them.
-Real-money payments still need their own approved milestone.
+
+Approved: credit packs bought with real money through Stripe Checkout
+(`server/online/payments.js`). Credits are only granted from a verified Stripe
+webhook, never from the client. Secret keys live in Cloudflare secrets and are
+never committed; the owner sets them up and switches from test to live mode.

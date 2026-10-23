@@ -11,7 +11,10 @@
 //   POST /api/account/profile {name, avatar}
 //   POST /api/account/buy {item}       -> 402 not_enough_credits, 409 owned
 //   POST /api/account/reward {difficulty} after a won bot match
-// account = {name, avatar, credits, owned: [...], prices: {...}, bonus?: n}
+//   POST /api/account/checkout {pack}  -> Stripe Checkout for a credit pack (payments.js)
+// account = {name, avatar, credits, owned: [...], prices: {...}, packs: [...], bonus?: n}
+
+import { createCheckout, offeredPacks } from "./payments.js";
 
 // Must match CharacterRoster.PRICES (checked by tests/lan_test.gd).
 // Items not listed are free for everyone.
@@ -89,14 +92,25 @@ export async function handleAccountApi(request, env, url) {
     }
   }
   const op = action === "" ? (request.method === "POST" ? "create" : "get") : action;
-  if (!["create", "get", "profile", "buy", "reward"].includes(op)) {
+  if (!["create", "get", "profile", "buy", "reward", "checkout"].includes(op)) {
     return json({ error: "not_found" }, 404);
   }
-  const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(code));
-  const answer = await account.fetch("https://account/" + op, { method: "POST", body: JSON.stringify(body) });
+  // Accounts are stored under a hash of the code, so the payment provider only
+  // ever sees the hash (as the checkout reference), never the code itself.
+  const key = await accountKey(code);
+  const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(key));
+  // Checkout also needs an existing account, so it first asks like "get".
+  const answer = await account.fetch("https://account/" + (op === "checkout" ? "get" : op), { method: "POST", body: JSON.stringify(body) });
   const result = await answer.json();
+  if (op === "checkout" && answer.ok) {
+    const checkout = await createCheckout(env, key,String(body.pack || ""), url.origin);
+    return json(checkout.body, checkout.status);
+  }
   if (op === "create" && answer.ok) {
     result.code = code;
+  }
+  if (result.account) {
+    result.account.packs = offeredPacks(env);
   }
   return json(result, answer.status);
 }
@@ -121,6 +135,16 @@ export class Account {
     }
     if (!data) {
       return json({ error: "no_account" }, 404);
+    }
+    if (op === "grant") {
+      // Paid credit pack (from the verified Stripe webhook); once per checkout session.
+      data.payments = data.payments || [];
+      if (!data.payments.includes(body.transaction)) {
+        data.payments.push(body.transaction);
+        data.credits += Math.max(0, Math.floor(Number(body.credits) || 0));
+        await storage.put("account", data);
+      }
+      return json({ ok: true });
     }
     let bonus = 0;
     if (data.bonusDay !== today()) {
@@ -191,6 +215,11 @@ function normaliseCode(text) {
     return "";
   }
   return `${letters.slice(0, 4)}-${letters.slice(4, 8)}-${letters.slice(8)}`;
+}
+
+export async function accountKey(code) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function today() {

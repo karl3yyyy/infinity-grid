@@ -489,7 +489,7 @@ func _update_status_label() -> void:
 
 
 func _role_name() -> String:
-	return "MASTER" if is_master else "STUDENT"
+	return "KERN" if is_master else "SCHÜLER"
 
 
 func _sync_wrap_projections() -> void:

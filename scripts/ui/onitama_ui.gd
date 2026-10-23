@@ -104,7 +104,7 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 
 
 func update_selection(unit: BattleUnit) -> void:
-	selection_label.text = "" if unit == null else ("MEISTER" if unit.is_master else "SCHÜLER")
+	selection_label.text = "" if unit == null else ("KERN" if unit.is_master else "SCHÜLER")
 
 
 func set_instruction(text_value: String) -> void:
@@ -331,13 +331,13 @@ func _build_ui() -> void:
 	rules.add_theme_font_size_override("font_size", 27)
 	rules.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rules.text = "\n".join([
-		"> Jede Seite hat einen MEISTER (mit Krone) und vier SCHÜLER.",
+		"> Jede Seite hat einen KERN (auf dem goldenen Sockel) und vier SCHÜLER.",
 		"> Wähle eine deiner zwei Karten und eine Figur. Die Karte zeigt, wohin sie ziehen darf: weißes Feld = Figur, leuchtende Felder = Ziele.",
 		"> Ziehst du auf einen Gegner, ist er geschlagen.",
 		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",
 		"> Links und rechts ist das Brett endlos: Wer rechts rausgeht, kommt links wieder rein.",
 		"> Kann keine Figur ziehen, gibst du eine Karte ab.",
-		"> Schlag den gegnerischen Meister und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
+		"> Schlag den gegnerischen KERN und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
 	])
 	_rules_box.add_child(rules)
 	var rules_back := _make_button("< ZURÜCK", _rules_box)

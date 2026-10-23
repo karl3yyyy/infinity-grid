@@ -371,7 +371,7 @@ func _select_unit(unit: BattleUnit) -> void:
 	elif movement_targets.is_empty():
 		battle_ui.set_instruction("Diese Figur hat mit der Karte kein Zielfeld.")
 	else:
-		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Wer den Meister schlägt, gewinnt.")
+		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Wer den KERN schlägt, gewinnt.")
 
 
 func _refresh_targets() -> void:

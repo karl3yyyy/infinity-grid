@@ -59,7 +59,7 @@ const STYLES: Dictionary = {
 
 ## How students look. They are not people but copies the grid made.
 const ECHO_STYLES: Array[Dictionary] = [
-	{"id": "echo", "name": "HOLOGRAMME", "line": "Leuchtende Kopien deines Meisters in Teamfarbe."},
+	{"id": "echo", "name": "HOLOGRAMME", "line": "Leuchtende Kopien deines KERNS in Teamfarbe."},
 	{"id": "agents", "name": "AGENTEN", "line": "Anzug, Sonnenbrille, kein Gesichtsausdruck."},
 	{"id": "cyborgs", "name": "CYBORGS", "line": "Kahle Klone mit Implantaten und Kabeln."},
 	{"id": "bodies", "name": "RUMPFE", "line": "Gesichtslose Puppen, frisch aus dem Code gedruckt."},

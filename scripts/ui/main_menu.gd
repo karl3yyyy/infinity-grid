@@ -375,7 +375,7 @@ func _show_profile() -> void:
 func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
 	var look := CharacterRoster.load_look()
-	_add_menu_button(_content, "CHARAKTERE", "Dein Meister: %s" % CharacterRoster.character(look["character"])["name"], _show_character_picker)
+	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.character(look["character"])["name"], _show_character_picker)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)

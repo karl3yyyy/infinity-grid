@@ -87,6 +87,9 @@ var walking: bool = false:
 var turn: float = 0.0
 var model: FighterModel
 var viewport: SubViewport
+var camera: Camera3D
+## Frame rate of the low-res render; previews and close-ups may raise it.
+var frames_per_second: float = FRAMES_PER_SECOND
 var display: MeshInstance3D
 var _model_pivot: Node3D
 var _posing: bool = false
@@ -131,7 +134,7 @@ func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_displ
 	model.build(look)
 	_seated = "pram" in look.get("gear", [])
 
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	# Big characters (monsters) get a wider shot and a taller sprite.
 	var size_factor := maxf(1.0, float(look.get("scale", 1.0)))
@@ -177,7 +180,7 @@ func _process(delta: float) -> void:
 		return
 	_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, turn, minf(1.0, delta * 12.0))
 	_frame_time += delta
-	if _frame_time >= 1.0 / FRAMES_PER_SECOND:
+	if _frame_time >= 1.0 / frames_per_second:
 		_frame_time = 0.0
 		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
@@ -209,33 +212,3 @@ func _update_locomotion() -> void:
 		model.play(&"Sitting_Idle")
 	else:
 		model.play(&"Jog_Fwd" if walking else &"Idle", 0.15, 1.15 if walking else 1.0)
-
-
-## Floating pixel crown above a master: the piece that has to be captured.
-func add_crown() -> void:
-	var image := Image.create(15, 9, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0, 0, 0, 0))
-	var gold := Color("ffc23a")
-	image.fill_rect(Rect2i(1, 6, 13, 3), gold.darkened(0.2))
-	image.fill_rect(Rect2i(1, 7, 13, 1), gold.lightened(0.2))
-	for spike: int in [1, 7, 13]:
-		image.fill_rect(Rect2i(spike - 1, 2, 3, 4), gold)
-		image.set_pixel(spike, 1, gold.lightened(0.3))
-	image.set_pixel(7, 3, Color("ff3a3a"))
-	image.set_pixel(4, 7, Color("6ee65a"))
-	image.set_pixel(10, 7, Color("6ee65a"))
-	var crown := Sprite3D.new()
-	crown.name = "Crown"
-	crown.texture = ImageTexture.create_from_image(image)
-	crown.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	crown.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	crown.shaded = false
-	crown.pixel_size = 0.028
-	crown.no_depth_test = true
-	crown.render_priority = 10
-	var top := (display.mesh as QuadMesh).size.y if display != null else DISPLAY_HEIGHT
-	crown.position.y = top - 0.02
-	add_child(crown)
-	var bob := crown.create_tween().set_loops().set_trans(Tween.TRANS_SINE)
-	bob.tween_property(crown, "position:y", top + 0.08, 0.8)
-	bob.tween_property(crown, "position:y", top - 0.02, 0.8)

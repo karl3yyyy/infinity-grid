@@ -78,7 +78,7 @@ static func bar(color: Color) -> StyleBoxFlat:
 	return box
 
 
-## Filled triangle pointing "up", "down" or "right". VT323 has no arrow glyphs
+## Filled triangle pointing "up", "down", "left" or "right". VT323 has no arrow glyphs
 ## and phones have no system font to fall back to, so they are drawn.
 static func arrow_texture(direction: String, size: int = 22, color: Color = GREEN) -> ImageTexture:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -93,6 +93,8 @@ static func arrow_texture(direction: String, size: int = 22, color: Color = GREE
 					inside = v >= 0.1 and absf(u - 0.5) <= (v - 0.1) * 0.55
 				"down":
 					inside = v <= 0.9 and absf(u - 0.5) <= (0.9 - v) * 0.55
+				"left":
+					inside = u >= 0.1 and absf(v - 0.5) <= (u - 0.1) * 0.55
 				_:
 					inside = u <= 0.9 and absf(v - 0.5) <= (0.9 - u) * 0.55
 			if inside:

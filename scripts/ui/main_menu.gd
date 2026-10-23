@@ -383,17 +383,21 @@ func _show_collection() -> void:
 	_focus_first_entry()
 
 
+## Full-screen showcase, one swipeable page per character.
 func _show_character_picker() -> void:
-	_set_page("CHARAKTERE", _show_collection)
 	var selected := str(CharacterRoster.load_look()["character"])
-	_content.add_child(_make_text("Dein Meister ist der einzige Mensch auf deiner Seite. Sein Kampfstil gilt für dein ganzes Team.", 22, TerminalTheme.GREEN_DIM))
-	_add_picker_grid(CharacterRoster.CHARACTERS, selected, 3,
-		func(entry: Dictionary) -> Texture2D:
-			return _fighter_preview(entry, OnitamaUI.TEAM_COLORS[0], 0.0),
-		func(entry: Dictionary) -> void:
-			CharacterRoster.save_look_value("character", entry["id"])
-			_show_character_picker())
-	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+	var start := 0
+	for index: int in range(CharacterRoster.CHARACTERS.size()):
+		if CharacterRoster.CHARACTERS[index]["id"] == selected:
+			start = index
+	var showcase := CharacterShowcase.new()
+	showcase.name = "CharacterShowcase"
+	add_child(showcase)
+	showcase.chosen.connect(func(character_id: String) -> void: CharacterRoster.save_look_value("character", character_id))
+	showcase.closed.connect(func() -> void:
+		showcase.queue_free()
+		_show_collection())
+	showcase.open(start, selected)
 
 
 func _show_echo_picker() -> void:

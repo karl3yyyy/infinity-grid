@@ -313,7 +313,6 @@ func apply_team_look(team: int, look: Dictionary) -> void:
 		unit.apply_figure(fighter)
 		if unit.is_master:
 			fighter.build(character, tint)
-			fighter.add_crown()
 		else:
 			fighter.build(CharacterRoster.echo_look(echo, character, tint), tint, 0.75 if echo == "echo" else 0.0)
 		unit.refresh_projections()

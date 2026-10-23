@@ -80,6 +80,7 @@ func _run_tests() -> void:
 	_server.stop()
 	_server = null
 	_test_online_server_cards()
+	_test_shop_prices()
 
 	await _test_remote_move_replay()
 
@@ -127,6 +128,24 @@ func _test_online_server_cards() -> void:
 		if not worker.contains("\"%s\"" % card.card_name):
 			missing.append(card.card_name)
 	_expect(not worker.is_empty() and missing.is_empty(), "The online server deals from the same card pool (missing: %s)" % ", ".join(missing))
+
+
+func _test_shop_prices() -> void:
+	var accounts := FileAccess.get_file_as_string("res://server/online/accounts.js")
+	var block := accounts.get_slice("export const PRICES = {", 1).get_slice("};", 0)
+	var server_prices := {}
+	var pattern := RegEx.create_from_string("\"([a-z]+:[a-z]+)\": ([0-9]+)")
+	for found: RegExMatch in pattern.search_all(block):
+		server_prices[found.get_string(1)] = found.get_string(2).to_int()
+	_expect(not server_prices.is_empty() and server_prices == CharacterRoster.PRICES, "The shop server charges the prices the game shows")
+	var unknown: Array[String] = []
+	var lists := {"character": CharacterRoster.CHARACTERS, "echo": CharacterRoster.ECHO_STYLES, "board": CharacterRoster.BOARD_SKINS}
+	for item: String in CharacterRoster.PRICES:
+		var ids: Array = (lists[item.get_slice(":", 0)] as Array).map(func(entry: Dictionary) -> String: return entry["id"])
+		if not item.get_slice(":", 1) in ids:
+			unknown.append(item)
+	_expect(unknown.is_empty(), "Every shop item exists in the collection (unknown: %s)" % ", ".join(unknown))
+	_expect(CharacterRoster.price("character", CharacterRoster.CHARACTERS[0]["id"]) == 0 and CharacterRoster.price("echo", "echo") == 0 and CharacterRoster.price("board", "standard") == 0, "The default look is free")
 
 
 func _test_remote_move_replay() -> void:

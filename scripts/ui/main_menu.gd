@@ -42,11 +42,23 @@ var _resume_available: bool = false
 var _back_action: Callable
 ## Fighter previews of the current page; they render their own small worlds.
 var _previews: Node3D
+## The online account (credits, owned cosmetics) and its menu pages.
+var account: AccountService
+var _shop: ShopPages
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_load_profile()
+	account = AccountService.new()
+	account.name = "Account"
+	add_child(account)
+	_shop = ShopPages.new(self, account)
+	account.changed.connect(_update_profile_button)
+	# Headless test runs must not open accounts on the live server.
+	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
+	if MatchClient.is_online_available() and not is_test_run:
+		_connect_account.call_deferred()
 	_build_shell()
 	_show_home()
 
@@ -243,7 +255,7 @@ func _show_home() -> void:
 	_add_menu_button(_content, "GEGEN DEN BOT", "Schwierigkeit wählen", _show_difficulty)
 	_add_menu_button(_content, "MULTIPLAYER", "Ein Gerät, WLAN oder online mit Code", _show_multiplayer)
 	_add_menu_button(_content, "SAMMLUNG", "Alle Bewegungskarten ansehen", _show_collection)
-	_add_menu_button(_content, "SHOP", "Kosmetik und Kartenrücken – bald", _show_online_page.bind("SHOP"))
+	_add_menu_button(_content, "SHOP", "Charaktere, Echos und Spielfelder für Credits", _shop.show_shop)
 	_add_menu_button(_content, "BEENDEN", "Spiel schließen", func() -> void: quit_requested.emit())
 	_focus_first_entry()
 
@@ -327,7 +339,7 @@ func _show_lan_help() -> void:
 func _show_online_page(mode_name: String) -> void:
 	_set_page(mode_name, _show_home)
 	_update_profile_button()
-	_content.add_child(_make_text("Noch nicht verfügbar. Dafür fehlt noch ein Server für Konten und Käufe.", TEXT_FONT_SIZE))
+	_content.add_child(_make_text("Noch nicht verfügbar. Dafür fehlt die Verbindung zum Spielserver.", TEXT_FONT_SIZE))
 	_content.add_child(_make_text("Dein Profilname wird nur auf diesem Gerät gespeichert.", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
@@ -366,10 +378,29 @@ func _show_profile() -> void:
 		if profile_name.is_empty():
 			profile_name = "Spieler"
 		_save_profile()
+		account.save_profile(profile_name, avatar_index)
 		_show_home()
 	)
+	_shop.add_account_section(_content)
 	_add_menu_button(_content, "< ZURÜCK", "Ohne Speichern zurück", _show_home)
 	name_input.grab_focus.call_deferred()
+
+
+## Opens the account on first start, afterwards refreshes it (daily bonus).
+func _connect_account() -> void:
+	var is_new := not account.has_account()
+	await account.connect_account()
+	if is_new and account.has_account():
+		# A new account takes over the name chosen on this device.
+		account.save_profile(profile_name, avatar_index)
+
+
+## After restoring an account from its code, use its name and colour here.
+func adopt_account_profile() -> void:
+	profile_name = str(account.account.get("name", profile_name))
+	avatar_index = clampi(int(account.account.get("avatar", avatar_index)), 0, AVATAR_COLORS.size() - 1)
+	_save_profile()
+	_update_profile_button()
 
 
 func _show_collection() -> void:
@@ -394,6 +425,9 @@ func _show_character_picker() -> void:
 	showcase.name = "CharacterShowcase"
 	add_child(showcase)
 	showcase.chosen.connect(func(character_id: String) -> void: CharacterRoster.save_look_value("character", character_id))
+	showcase.buy_requested.connect(func(character_id: String) -> void:
+		showcase.queue_free()
+		_shop.confirm_buy(CharacterRoster.item_id("character", character_id), _show_character_picker))
 	showcase.closed.connect(func() -> void:
 		showcase.queue_free()
 		_show_collection())
@@ -405,24 +439,24 @@ func _show_echo_picker() -> void:
 	var look := CharacterRoster.load_look()
 	var master := CharacterRoster.character(look["character"])
 	_content.add_child(_make_text("Deine vier Schüler sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
-	_add_picker_grid(CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
+	_add_picker_grid("echo", CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
 		func(entry: Dictionary) -> Texture2D:
 			return _fighter_preview(CharacterRoster.echo_look(entry["id"], master, OnitamaUI.TEAM_COLORS[0]), OnitamaUI.TEAM_COLORS[0], 0.75 if entry["id"] == "echo" else 0.0),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("echo", entry["id"])
-			_show_echo_picker())
+			_show_echo_picker(), _show_echo_picker)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 
 
 func _show_board_picker() -> void:
 	_set_page("SPIELFELD", _show_collection)
 	_content.add_child(_make_text("So sehen die zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
-	_add_picker_grid(CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
+	_add_picker_grid("board", CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
 		func(entry: Dictionary) -> Texture2D:
 			return ImageTexture.create_from_image(_board_preview(entry)),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("board", entry["id"])
-			_show_board_picker())
+			_show_board_picker(), _show_board_picker)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 
 
@@ -459,7 +493,8 @@ func _fighter_preview(look: Dictionary, tint: Color, hologram: float) -> Texture
 
 ## Grid of pickable options with a preview each; the current choice is
 ## framed. Focus shows the option's name and line below the list.
-func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: int, make_texture: Callable, on_pick: Callable) -> void:
+## Locked (not yet bought) options show their price and open the buy dialog.
+func _add_picker_grid(kind: String, entries: Array[Dictionary], selected_id: String, columns: int, make_texture: Callable, on_pick: Callable, page: Callable) -> void:
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 560.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -495,9 +530,16 @@ func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: 
 		if entry.has("style"):
 			style_note = "[%s] " % CharacterRoster.STYLES[entry["style"]]["name"]
 		var line := "%s%s %s– %s" % ["* " if chosen else "", entry["name"], style_note, entry["line"]]
+		var item := CharacterRoster.item_id(kind, str(entry["id"]))
+		if not AccountService.owns(item):
+			button.text = "%s  %d CR" % [entry["name"], CharacterRoster.PRICES[item]]
+			button.self_modulate = Color(1.0, 1.0, 1.0, 0.55)
+			line = "GESPERRT – %s – für %d Credits im Shop" % [entry["name"], CharacterRoster.PRICES[item]]
+			button.pressed.connect(_shop.confirm_buy.bind(item, page))
+		else:
+			button.pressed.connect(on_pick.bind(entry))
 		button.mouse_entered.connect(button.grab_focus)
 		button.focus_entered.connect(func() -> void: _description.text = "> " + line)
-		button.pressed.connect(on_pick.bind(entry))
 		grid.add_child(button)
 	if selected_button != null:
 		selected_button.grab_focus.call_deferred()
@@ -640,3 +682,5 @@ func _update_profile_button() -> void:
 	if _profile_button == null:
 		return
 	_profile_button.text = profile_name.to_upper()
+	if not account.account.is_empty():
+		_profile_button.text += "  %d CR" % account.credits()

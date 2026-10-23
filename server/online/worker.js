@@ -13,6 +13,10 @@
 // Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"look", ...}, {"type":"leave"}, raw "ping".
 // Server events: opponent_away {seconds}, opponent_back, opponent_left, error {reason}.
 // Every client runs the rules itself; the server only checks turn order.
+// Player accounts for the cosmetics shop live in accounts.js (/api/account).
+
+import { handleAccountApi } from "./accounts.js";
+export { Account } from "./accounts.js";
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
 const CARD_NAMES = [
@@ -35,6 +39,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/index.wasm") {
       return serveSplitWasm(request, env);
+    }
+    if (url.pathname.startsWith("/api/account")) {
+      return handleAccountApi(request, env, url);
     }
     if (url.pathname !== "/play") {
       return new Response("Not found", { status: 404 });

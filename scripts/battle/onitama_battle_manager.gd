@@ -604,8 +604,25 @@ func _finish_battle(winner: int) -> void:
 		battle_ui.show_result("SIEG!" if winner == network_team else "NIEDERLAGE")
 	elif bot_opponent_enabled:
 		battle_ui.show_result("SIEG!" if winner == 0 else "NIEDERLAGE")
+		if winner == 0:
+			_collect_bot_reward()
 	else:
 		battle_ui.show_result("SPIELER %d GEWINNT" % (winner + 1))
+
+
+## Credits for beating the bot; the server adds them and caps them per day.
+func _collect_bot_reward() -> void:
+	var account := battle_ui.main_menu.account
+	if not account.has_account():
+		return
+	var before := account.credits()
+	await account.report_bot_win(bot_difficulty)
+	if not battle_over:
+		return
+	if account.credits() > before:
+		battle_ui.show_result("SIEG!\n+%d CREDITS" % (account.credits() - before))
+	elif account._last_error == "daily_limit":
+		battle_ui.show_result("SIEG!\nCredit-Limit für heute erreicht")
 
 
 func _refresh_ui() -> void:

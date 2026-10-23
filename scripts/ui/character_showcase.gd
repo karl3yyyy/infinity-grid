@@ -9,6 +9,7 @@ extends Control
 
 signal closed
 signal chosen(character_id: String)
+signal buy_requested(character_id: String)
 
 const STYLE_COLORS := {
 	"mage": Color("2ad4ff"),
@@ -340,12 +341,22 @@ func _intro(slide: Control, accent: Color) -> void:
 
 func _update_select_button(character: Dictionary) -> void:
 	var active := str(character["id"]) == _selected_id
+	var item := CharacterRoster.item_id("character", str(character["id"]))
+	if not AccountService.owns(item):
+		_select_button.text = "KAUFEN · %d CR" % CharacterRoster.PRICES[item]
+		_select_button.disabled = false
+		return
 	_select_button.text = "AUSGEWÄHLT" if active else "AUSWÄHLEN"
 	_select_button.disabled = active
 
 
+## Locked characters are not selected here; the menu offers to buy them.
 func _choose() -> void:
-	_selected_id = str(CharacterRoster.CHARACTERS[index]["id"])
+	var id := str(CharacterRoster.CHARACTERS[index]["id"])
+	if not AccountService.owns(CharacterRoster.item_id("character", id)):
+		buy_requested.emit(id)
+		return
+	_selected_id = id
 	chosen.emit(_selected_id)
 	_update_select_button(CharacterRoster.CHARACTERS[index])
 

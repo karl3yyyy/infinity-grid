@@ -76,6 +76,25 @@ const BOARD_SKINS: Array[Dictionary] = [
 ]
 
 
+## Credits each cosmetic costs in the shop; everything not listed is free.
+## Must match PRICES in server/online/accounts.js (checked by tests/lan_test.gd).
+const PRICES: Dictionary = {
+	"character:agent": 300,
+	"character:mira": 300,
+	"character:opa": 300,
+	"character:kid": 300,
+	"character:monk": 400,
+	"character:doc": 400,
+	"character:brute": 500,
+	"character:baby": 600,
+	"echo:agents": 250,
+	"echo:cyborgs": 250,
+	"board:blood": 250,
+	"board:neon": 250,
+	"board:void": 300,
+	"board:gold": 500,
+}
+
 static func character(id: String) -> Dictionary:
 	return _find(CHARACTERS, id)
 
@@ -98,11 +117,26 @@ static func random_character_id(exclude: String = "") -> String:
 static func load_look() -> Dictionary:
 	var config := ConfigFile.new()
 	config.load(PROFILE_PATH)
-	return {
+	var look := {
 		"character": str(config.get_value("look", "character", CHARACTERS[0]["id"])),
 		"echo": str(config.get_value("look", "echo", ECHO_STYLES[0]["id"])),
 		"board": str(config.get_value("look", "board", BOARD_SKINS[0]["id"])),
 	}
+	# A choice that is not (or no longer) owned falls back to the free default.
+	var defaults := {"character": CHARACTERS[0]["id"], "echo": ECHO_STYLES[0]["id"], "board": BOARD_SKINS[0]["id"]}
+	for key: String in look:
+		if not AccountService.owns("%s:%s" % [key, look[key]]):
+			look[key] = defaults[key]
+	return look
+
+
+## Shop id of a cosmetic, e.g. "board:gold".
+static func item_id(kind: String, id: String) -> String:
+	return "%s:%s" % [kind, id]
+
+
+static func price(kind: String, id: String) -> int:
+	return int(PRICES.get(item_id(kind, id), 0))
 
 
 static func save_look_value(key: String, value: String) -> void:

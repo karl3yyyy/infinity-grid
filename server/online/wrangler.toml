@@ -24,3 +24,12 @@ class_name = "Lobby"
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Lobby"]
+
+# One Durable Object per player account: name, credits and owned cosmetics.
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "Account"
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["Account"]

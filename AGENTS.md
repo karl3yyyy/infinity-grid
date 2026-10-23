@@ -84,3 +84,9 @@ runs on a PC in the same network, serves the web export and relays moves
 between two browsers; `server/online/worker.js` (Cloudflare Worker) relays
 moves for rooms joined by code. Both speak one protocol (`scripts/network/`)
 and stay relays; every client runs the rules itself.
+
+Approved backend milestone: player accounts and a cosmetics shop paid with
+in-game credits. `server/online/accounts.js` (one Durable Object per account,
+opened with an account code, no passwords or e-mail) alone decides credits and
+ownership; `scripts/network/account_service.gd` only displays and caches them.
+Real-money payments still need their own approved milestone.

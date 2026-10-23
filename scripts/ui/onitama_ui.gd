@@ -10,6 +10,8 @@ signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal restart_pressed
+## Same mode again from the start (pause menu, result screen).
+signal new_match_pressed
 signal quit_pressed
 signal board_insets_changed(top_pixels: float, bottom_pixels: float)
 
@@ -18,7 +20,7 @@ const CardViewScript := preload("res://scripts/ui/card_view.gd")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
 ## Opponent cards are drawn smaller, like a hand seen across the table.
-const OPPONENT_CARD_SCALE: float = 0.8
+const OPPONENT_CARD_SCALE: float = 0.7
 
 var round_label: Label
 var instruction_label: Label
@@ -44,6 +46,10 @@ var menu_button: Button
 ## Optional button under the instruction, e.g. "play the bot instead".
 var side_action_button: Button
 var _side_action: Callable
+var _pause_box: VBoxContainer
+var _rules_box: VBoxContainer
+var _new_match_button: Button
+var _main_menu_button: Button
 var main_menu: MainMenu
 
 
@@ -154,6 +160,15 @@ func toggle_menu(force_visible: Variant = null) -> void:
 	var next_visible := not menu_overlay.visible if force_visible == null else bool(force_visible)
 	menu_overlay.visible = next_visible
 	get_tree().paused = next_visible
+	_show_rules(false)
+	# Online the match keeps running for the opponent: no restart, leaving gives up.
+	_new_match_button.visible = not opponent_is_remote
+	_main_menu_button.text = "AUFGEBEN & MENÜ" if opponent_is_remote else "HAUPTMENÜ"
+
+
+func _show_rules(show: bool) -> void:
+	_rules_box.visible = show
+	_pause_box.visible = not show
 
 
 func is_menu_open() -> bool:
@@ -264,9 +279,9 @@ func _build_ui() -> void:
 	_outline(result_label, 12)
 	result_box.add_child(result_label)
 	var restart_button := _make_button("NOCHMAL SPIELEN", result_box)
-	var quit_button := _make_button("BEENDEN", result_box)
-	restart_button.pressed.connect(func() -> void: restart_pressed.emit())
-	quit_button.pressed.connect(func() -> void: quit_pressed.emit())
+	var quit_button := _make_button("HAUPTMENÜ", result_box)
+	restart_button.pressed.connect(func() -> void: new_match_pressed.emit())
+	quit_button.pressed.connect(func() -> void: restart_pressed.emit())
 
 	menu_overlay = ColorRect.new()
 	menu_overlay.color = Color(0.0, 0.02, 0.04, 0.9)
@@ -274,22 +289,60 @@ func _build_ui() -> void:
 	menu_overlay.visible = false
 	menu_overlay.add_to_group("interactive_ui")
 	hud_root.add_child(menu_overlay)
+	var menu_center := CenterContainer.new()
+	menu_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu_overlay.add_child(menu_center)
 	var menu_box := VBoxContainer.new()
-	menu_box.set_anchors_preset(Control.PRESET_CENTER)
-	menu_box.position = Vector2(-145.0, -100.0)
-	menu_box.size = Vector2(290.0, 200.0)
 	menu_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	menu_box.add_theme_constant_override("separation", 14)
-	menu_overlay.add_child(menu_box)
+	menu_box.add_theme_constant_override("separation", 18)
+	menu_center.add_child(menu_box)
+	_pause_box = menu_box
 	var title := Label.new()
-	title.text = "INFINITY GRID"
+	title.text = "---- PAUSE ----"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 44)
 	menu_box.add_child(title)
 	var resume_button := _make_button("WEITER", menu_box)
-	var restart_menu_button := _make_button("NEU STARTEN", menu_box)
+	var rules_button := _make_button("REGELN", menu_box)
+	_new_match_button = _make_button("NEUE PARTIE", menu_box)
+	_main_menu_button = _make_button("HAUPTMENÜ", menu_box)
 	resume_button.pressed.connect(func() -> void: toggle_menu(false))
-	restart_menu_button.pressed.connect(func() -> void: restart_pressed.emit())
+	rules_button.pressed.connect(_show_rules.bind(true))
+	_new_match_button.pressed.connect(func() -> void: new_match_pressed.emit())
+	_main_menu_button.pressed.connect(func() -> void: restart_pressed.emit())
+
+	# Short rules, opened from the pause menu.
+	_rules_box = VBoxContainer.new()
+	_rules_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_rules_box.offset_left = 36.0
+	_rules_box.offset_right = -36.0
+	_rules_box.offset_top = 80.0
+	_rules_box.offset_bottom = -60.0
+	_rules_box.add_theme_constant_override("separation", 12)
+	_rules_box.visible = false
+	menu_overlay.add_child(_rules_box)
+	var rules_title := Label.new()
+	rules_title.text = "---- REGELN ----"
+	rules_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rules_title.add_theme_font_size_override("font_size", 44)
+	_rules_box.add_child(rules_title)
+	var rules := Label.new()
+	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rules.add_theme_font_size_override("font_size", 27)
+	rules.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rules.text = "\n".join([
+		"> Jede Seite hat einen MEISTER (mit Krone) und vier SCHÜLER.",
+		"> Wähle eine deiner zwei Karten und eine Figur. Die Karte zeigt, wohin sie ziehen darf: weißes Feld = Figur, leuchtende Felder = Ziele.",
+		"> Ziehst du auf einen Gegner, ist er geschlagen.",
+		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",
+		"> Links und rechts ist das Brett endlos: Wer rechts rausgeht, kommt links wieder rein.",
+		"> Kann keine Figur ziehen, gibst du eine Karte ab.",
+		"> Schlag den gegnerischen Meister und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
+	])
+	_rules_box.add_child(rules)
+	var rules_back := _make_button("< ZURÜCK", _rules_box)
+	rules_back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	rules_back.pressed.connect(_show_rules.bind(false))
 
 	_apply_safe_area()
 	_apply_responsive_layout()
@@ -373,7 +426,7 @@ func _make_button(label_text: String, parent: Control) -> Button:
 	var button := Button.new()
 	button.text = label_text
 	button.custom_minimum_size = Vector2(120.0, 48.0)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", 34)
 	button.add_to_group("interactive_ui")
 	parent.add_child(button)
 	return button
@@ -418,8 +471,8 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	hud_column.offset_right = column_width * 0.5
 	# Two hand cards plus a slightly smaller next card share one row.
 	var usable := column_width - 24.0 - 20.0
-	var card_width := clampf(usable / 2.95, 100.0, 260.0)
-	var card_height := clampf(card_width * 1.2, 120.0, minf(320.0, viewport_size.y * 0.24))
+	var card_width := clampf(usable / 3.25, 96.0, 240.0)
+	var card_height := clampf(card_width * 1.12, 110.0, minf(290.0, viewport_size.y * 0.19))
 	for position: int in range(2):
 		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
 		for view: CardView in card_views[position]:

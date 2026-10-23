@@ -38,6 +38,10 @@ var network_team: int = -1
 var network_match: NetworkMatch
 ## Completed turns (moves and passes) in this match; numbers network turns.
 var turns_played: int = 0
+## Mode of the running match ("bot", "local", "network"); see _new_match.
+var match_mode: String = ""
+## Survives the scene reload so "Neue Partie" starts the same mode again.
+static var _replay_mode: String = ""
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
 ## Look per team: {"character", "echo", "board"} (see CharacterRoster).
@@ -73,6 +77,7 @@ func setup(
 	battle_ui.online_quick_requested.connect(_start_online_quick)
 	battle_ui.online_resume_requested.connect(_start_online_resume)
 	battle_ui.restart_pressed.connect(_restart_battle)
+	battle_ui.new_match_pressed.connect(_new_match)
 	battle_ui.quit_pressed.connect(func() -> void: get_tree().quit())
 	_deal_cards()
 	_spawn_armies()
@@ -116,6 +121,14 @@ func _spawn_armies() -> void:
 
 
 func _show_title_menu() -> void:
+	if _replay_mode != "":
+		var mode := _replay_mode
+		_replay_mode = ""
+		if mode == "bot":
+			_start_bot_training()
+		else:
+			_start_local_multiplayer()
+		return
 	input_locked = true
 	player_controller.enabled = false
 	grid_manager.get_parent().visible = false
@@ -131,6 +144,7 @@ func _start_bot_training() -> void:
 	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
+	match_mode = "bot"
 	bot_opponent_enabled = true
 	bot_difficulty = battle_ui.main_menu.bot_difficulty
 	battle_ui.set_opponent_bot(true, BotAI.label_for(bot_difficulty))
@@ -153,6 +167,7 @@ func _start_local_multiplayer() -> void:
 	player_controller.enabled = true
 	camera_controller.set_player_view(0)
 	_refresh_ui()
+	match_mode = "local"
 	battle_ui.set_instruction("Spieler 1 beginnt. Nach jedem Zug das Gerät weitergeben.")
 
 
@@ -184,6 +199,7 @@ func _start_network_match() -> NetworkMatch:
 	battle_ui.set_opponent_remote(true)
 	input_locked = true
 	player_controller.enabled = false
+	match_mode = "network"
 	network_match = NetworkMatchScript.new()
 	network_match.name = "NetworkMatch"
 	add_child(network_match)
@@ -374,10 +390,12 @@ func _perform_move(destination: Vector2i) -> void:
 	var captured_unit := grid_manager.get_unit_at(destination) as BattleUnit
 	var captured_master := captured_unit != null and captured_unit.is_master
 	grid_manager.clear_highlights()
-	if captured_unit != null:
-		await captured_unit.play_death(moving_unit.global_position)
-	var path: Array[Vector2i] = [source, destination]
-	await unit_movement.move_unit(moving_unit, path, grid_manager)
+	# Each side moves in its master character's fighting style.
+	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))
+	await unit_movement.perform_move(
+		moving_unit, captured_unit, source, destination, grid_manager,
+		str(character.get("style", "brawler")), OnitamaUI.TEAM_COLORS[current_player]
+	)
 	moving_unit.grid_position = destination
 	grid_manager.move_occupant(moving_unit, source, destination)
 	_exchange_card(selected_card_slot)
@@ -606,6 +624,13 @@ func _on_cancel_requested() -> void:
 		battle_ui.set_instruction("Auswahl aufgehoben. Wähle Karte und Figur.")
 	else:
 		battle_ui.toggle_menu(true)
+
+
+## Starts the same mode again; online there is no rematch, so it goes to the menu.
+func _new_match() -> void:
+	if match_mode in ["bot", "local"]:
+		_replay_mode = match_mode
+	_restart_battle()
 
 
 func _restart_battle() -> void:

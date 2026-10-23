@@ -7,14 +7,14 @@ var distance: float = 11.5
 var target_distance: float = 11.5
 var yaw: float = 0.0
 var target_yaw: float = 0.0
-var pitch: float = deg_to_rad(58.0)
+var pitch: float = deg_to_rad(54.0)
 var pan_speed: float = 7.0
 var _shake_time: float = 0.0
 var _shake_strength: float = 0.0
 ## Screen pixels covered by the card trays above and below the board.
 var board_insets: Vector2 = Vector2.ZERO
 ## World units visible vertically for the whole board including figures.
-const BOARD_VISUAL_DEPTH: float = 8.2
+const BOARD_VISUAL_DEPTH: float = 7.6
 
 
 func _ready() -> void:
@@ -115,12 +115,13 @@ func _update_framing() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 	var aspect_ratio := viewport_size.x / viewport_size.y
-	var repeated_side_cells := 1.0 if aspect_ratio < 0.8 else 2.0
+	# On phones only a sliver of the wrapped copies shows, so the board itself is big.
+	var repeated_side_cells := 0.3 if aspect_ratio < 0.8 else 1.5
 	var total_board_width := (5.0 + repeated_side_cells * 2.0) * 1.4
 	var free_height := maxf(viewport_size.y * 0.3, viewport_size.y - board_insets.x - board_insets.y)
 	var width_fit := total_board_width / aspect_ratio
 	var height_fit := BOARD_VISUAL_DEPTH * viewport_size.y / free_height
-	target_distance = maxf(8.2, maxf(width_fit, height_fit))
+	target_distance = maxf(7.4, maxf(width_fit, height_fit))
 	distance = target_distance
 	_apply_inset_offset()
 

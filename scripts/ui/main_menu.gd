@@ -384,7 +384,7 @@ func _show_collection() -> void:
 func _show_character_picker() -> void:
 	_set_page("CHARAKTERE", _show_collection)
 	var selected := str(CharacterRoster.load_look()["character"])
-	_content.add_child(_make_text("Dein Meister ist der einzige Mensch auf deiner Seite. Fällt er, ist das Spiel verloren.", 22, TerminalTheme.GREEN_DIM))
+	_content.add_child(_make_text("Dein Meister ist der einzige Mensch auf deiner Seite. Sein Kampfstil gilt für dein ganzes Team.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid(CharacterRoster.CHARACTERS, selected, 3,
 		func(entry: Dictionary) -> Image:
 			return PixelPortrait.framed(PixelPortrait.paint(entry), Color("e2b04a"), true),
@@ -470,7 +470,10 @@ func _add_picker_grid(entries: Array[Dictionary], selected_id: String, columns: 
 			frame.set_content_margin_all(6.0)
 			button.add_theme_stylebox_override("normal", frame)
 			selected_button = button
-		var line := "%s%s – %s" % ["* " if chosen else "", entry["name"], entry["line"]]
+		var style_note := ""
+		if entry.has("style"):
+			style_note = "[%s] " % CharacterRoster.STYLES[entry["style"]]["name"]
+		var line := "%s%s %s– %s" % ["* " if chosen else "", entry["name"], style_note, entry["line"]]
 		button.mouse_entered.connect(button.grab_focus)
 		button.focus_entered.connect(func() -> void: _description.text = "> " + line)
 		button.pressed.connect(on_pick.bind(entry))

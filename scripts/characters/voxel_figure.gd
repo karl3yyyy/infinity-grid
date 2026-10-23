@@ -9,14 +9,18 @@ extends RefCounted
 const VOXEL: float = 0.07
 const GOLD := Color("e2b04a")
 
-## Voxel colours keyed by Vector3i.
-var voxels: Dictionary = {}
+## Body part name -> {Vector3i: Color}.
+var parts: Dictionary = {}
+## Body part name -> hinge point in voxel units.
+var pivots: Dictionary = {}
+var _part: String = "torso"
 
 
 ## The master: the one real person on a side, crowned.
 static func build_master(look: Dictionary, team_color: Color) -> Node3D:
 	var figure := VoxelFigure.new()
 	var head_top := figure._person(look, team_color)
+	figure._part = "head"
 	figure._crown(head_top)
 	return figure._to_node(1.0, null)
 
@@ -47,7 +51,8 @@ static func build_echo(style: String, master_look: Dictionary, team_color: Color
 
 # --- Bodies -----------------------------------------------------------------
 
-## Builds a person and returns the y just above the head (for the crown).
+## Builds a person part by part and returns the y just above the head.
+## Parts (legs, arms, torso, head) become separate meshes that can be animated.
 func _person(look: Dictionary, team_color: Color, blank_eyes: bool = false) -> int:
 	var kind := str(look.get("kind", "human"))
 	var skin: Color = look.get("skin", Color("d9a07a"))
@@ -55,42 +60,58 @@ func _person(look: Dictionary, team_color: Color, blank_eyes: bool = false) -> i
 	var pants := clothes.darkened(0.35).lerp(Color("23262a"), 0.4)
 	var shoes := Color("1a1614")
 	var baby := kind == "baby"
-	var leg_top := 5 if baby else 9
-	var torso_top := leg_top + (6 if baby else 9)
+	var leg_top := 4 if baby else 7
+	var torso_top := leg_top + (5 if baby else 8)
 	var half_width := 3 if baby else 4
 
-	# Legs and shoes.
+	# Legs with shoes; each hinges at the hip.
 	for side: int in [-1, 1]:
-		var x0 := 1 if side > 0 else -3
+		_part = "leg_l" if side < 0 else "leg_r"
+		var x0 := 1 if side > 0 else (-2 if baby else -3)
+		var width := 2 if baby else 3
 		for y: int in range(0, leg_top + 1):
-			for x: int in range(x0, x0 + 2 + (0 if baby else 1) - (1 if side > 0 and baby else 0)):
+			for x: int in range(x0, x0 + width):
 				for z: int in range(-1, 2):
-					_put(x, y, z, shoes if y <= 1 else pants)
+					var color := shoes if y <= 1 else pants
+					if y == 1 and z == 1:
+						color = shoes.lightened(0.25)
+					_put(x, y, z, color)
 		if not baby:
-			_put(x0 + (0 if side < 0 else 1), 0, 2, shoes)
-	# Torso with a belt in the team colour.
+			_put(x0 + 1, 0, 2, shoes)
+		pivots[_part] = Vector3(float(x0) + width * 0.5, float(leg_top) + 1.0, 0.5)
+	# Torso with a belt in the team colour, a collar and a chest highlight.
+	_part = "torso"
 	for y: int in range(leg_top + 1, torso_top + 1):
 		for x: int in range(-half_width, half_width):
 			for z: int in range(-2, 2 if not baby else 1):
 				var color := clothes
 				if y == leg_top + 1:
 					color = team_color.darkened(0.15)
-				elif z == 1 and x == -1 and y > torso_top - 3 and not baby:
-					color = clothes.lightened(0.15)
+				elif y == leg_top + 2 and x == -1 and z == 1:
+					color = Color("c9c3b5")
+				elif y == torso_top and absi(x + 1) <= 1 and z >= 0:
+					color = clothes.darkened(0.25)
+				elif z == 1 and x in [-3, 2] and y > leg_top + 2:
+					color = clothes.darkened(0.12)
 				_put(x, y, z, color)
-	# Arms with hands.
+	pivots["torso"] = Vector3(0.0, float(leg_top) + 1.0, 0.0)
+	# Arms with hands; each hinges at the shoulder.
 	for side: int in [-1, 1]:
-		var x := -half_width - 1 if side < 0 else half_width
+		_part = "arm_l" if side < 0 else "arm_r"
+		var x := -half_width - 2 if side < 0 else half_width
+		var hand_rows := 2 if baby else 3
 		for y: int in range(leg_top + (1 if baby else 2), torso_top + 1):
-			for z: int in range(-1, 1):
-				_put(x, y, z, skin if y <= leg_top + (2 if baby else 3) else clothes.darkened(0.1))
-			if not baby and y > torso_top - 3:
-				# Shoulder pads make the silhouette broader at the top.
-				_put(x + side, y, 0, clothes.darkened(0.2))
-	# Neck.
+			for dx: int in range(2):
+				for z: int in range(-1, 1):
+					var is_hand := y < leg_top + (1 if baby else 2) + hand_rows
+					_put(x + dx, y, z, skin if is_hand else clothes.darkened(0.08 + dx * 0.06))
+		pivots[_part] = Vector3(float(x) + 1.0, float(torso_top) + 1.0, 0.0)
+	# Neck and head turn together.
+	_part = "head"
 	for x: int in range(-1, 1):
 		for z: int in range(-1, 1):
 			_put(x, torso_top + 1, z, skin.darkened(0.15))
+	pivots["head"] = Vector3(0.0, float(torso_top) + 1.0, 0.0)
 	return _head(look, torso_top + 2, blank_eyes)
 
 
@@ -278,35 +299,65 @@ func _crown(y: int) -> void:
 
 func _hooded(team_color: Color) -> void:
 	var cloth := team_color.darkened(0.55)
-	# Robe widening towards the floor.
-	for y: int in range(0, 19):
+	# Robe widening towards the floor; the legs stay hidden inside it.
+	_part = "torso"
+	for y: int in range(0, 17):
 		var half := 5 - y / 6
 		for x: int in range(-half, half):
 			for z: int in range(-half + 1, half - 1):
 				_put(x, y, z, cloth if (x + y) % 5 else cloth.darkened(0.2))
+	pivots["torso"] = Vector3.ZERO
+	for side: int in [-1, 1]:
+		_part = "arm_l" if side < 0 else "arm_r"
+		var x := -6 if side < 0 else 4
+		for y: int in range(8, 16):
+			for dx: int in range(2):
+				for z: int in range(-1, 1):
+					_put(x + dx, y, z, cloth.lightened(0.04) if y > 9 else team_color.lightened(0.3))
+		pivots[_part] = Vector3(float(x) + 1.0, 16.0, 0.0)
 	# Hood with an empty, dark face and two glowing eyes.
-	for y: int in range(19, 28):
+	_part = "head"
+	for y: int in range(17, 26):
 		for x: int in range(-4, 4):
 			for z: int in range(-4, 4):
-				var shell := x in [-4, 3] or z in [-4, 3] or y == 27
-				var opening := z == 3 and x > -3 and x < 2 and y < 26 and y > 19
+				var shell := x in [-4, 3] or z in [-4, 3] or y == 25
+				var opening := z == 3 and x > -3 and x < 2 and y < 24 and y > 17
 				if opening:
 					_put(x, y, z - 1, Color("050605"))
 				elif shell:
 					_put(x, y, z, cloth.lightened(0.05))
-	_put(-2, 23, 2, team_color.lightened(0.5))
-	_put(0, 23, 2, team_color.lightened(0.5))
+	_put(-2, 21, 2, team_color.lightened(0.5))
+	_put(0, 21, 2, team_color.lightened(0.5))
+	pivots["head"] = Vector3(0.0, 17.0, 0.0)
 
 
 func _drone(team_color: Color, seed_value: int) -> void:
 	var metal := Color("6b7178")
 	for side: int in [-1, 1]:
+		_part = "leg_l" if side < 0 else "leg_r"
+		var x := -3 if side < 0 else 1
 		for y: int in range(0, 8):
-			_put(side * 2 - (1 if side < 0 else 0), y, 0, metal.darkened(0.35))
+			_put(x, y, 0, metal.darkened(0.35))
+			_put(x + 1, y, 0, metal.darkened(0.45))
+		_put(x, 0, 1, metal.darkened(0.2))
+		_put(x + 1, 0, 1, metal.darkened(0.2))
+		pivots[_part] = Vector3(float(x) + 1.0, 8.0, 0.5)
+	_part = "torso"
 	for y: int in range(8, 17):
 		for x: int in range(-4, 4):
 			for z: int in range(-2, 2):
 				_put(x, y, z, metal.darkened(0.2) if y % 3 == 0 else metal)
+	_put(-1, 12, 2, team_color)
+	_put(0, 12, 2, team_color)
+	pivots["torso"] = Vector3(0.0, 8.0, 0.0)
+	for side: int in [-1, 1]:
+		_part = "arm_l" if side < 0 else "arm_r"
+		var x := -5 if side < 0 else 4
+		for y: int in range(9, 16):
+			_put(x, y, 0, metal.darkened(0.3))
+		_put(x, 9, 1, team_color)
+		pivots[_part] = Vector3(float(x) + 0.5, 16.0, 0.5)
+	_part = "head"
 	for y: int in range(17, 25):
 		for x: int in range(-4, 4):
 			for z: int in range(-3, 3):
@@ -319,17 +370,17 @@ func _drone(team_color: Color, seed_value: int) -> void:
 	for y: int in range(25, 29):
 		_put(2, y, 0, metal.darkened(0.3))
 	_put(2, 29, 0, team_color.lightened(0.3))
-	_put(-1, 12, 2, team_color)
-	_put(0, 12, 2, team_color)
+	pivots["head"] = Vector3(0.0, 17.0, 0.0)
 
 
 # --- Effects ----------------------------------------------------------------
 
 func _tint_all(tint: Color, strength: float) -> void:
-	for key: Vector3i in voxels:
-		var color: Color = voxels[key]
-		var grey := color.get_luminance()
-		voxels[key] = color.lerp(Color(tint.r * grey * 1.5, tint.g * grey * 1.5, tint.b * grey * 1.5), strength)
+	for part: Dictionary in parts.values():
+		for key: Vector3i in part:
+			var color: Color = part[key]
+			var grey := color.get_luminance()
+			part[key] = color.lerp(Color(tint.r * grey * 1.5, tint.g * grey * 1.5, tint.b * grey * 1.5), strength)
 
 
 ## A few slices shifted sideways: the copy does not quite hold together.
@@ -337,14 +388,15 @@ func _glitch(seed_value: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value * 7919 + 3
 	for _slice: int in range(2):
-		var y := rng.randi_range(6, 26)
+		var y := rng.randi_range(6, 24)
 		var shift := 1 if rng.randf() < 0.5 else -1
-		var moved: Dictionary = {}
-		for key: Vector3i in voxels.keys():
-			if key.y == y:
-				moved[Vector3i(key.x + shift, key.y, key.z)] = voxels[key]
-				voxels.erase(key)
-		voxels.merge(moved, true)
+		for part: Dictionary in parts.values():
+			var moved: Dictionary = {}
+			for key: Vector3i in part.keys():
+				if key.y == y:
+					moved[Vector3i(key.x + shift, key.y, key.z)] = part[key]
+					part.erase(key)
+			part.merge(moved, true)
 
 
 # --- Mesh -------------------------------------------------------------------
@@ -352,9 +404,12 @@ func _glitch(seed_value: int) -> void:
 func _put(x: int, y: int, z: int, color: Color) -> void:
 	if color.a <= 0.0:
 		return
-	voxels[Vector3i(x, y, z)] = color
+	if not parts.has(_part):
+		parts[_part] = {}
+	parts[_part][Vector3i(x, y, z)] = color
 
 
+## Outward normal and the four corners of each cube face (clockwise from outside).
 const FACES := [
 	[Vector3i(1, 0, 0), [Vector3(1, 0, 0), Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(1, 0, 1)]],
 	[Vector3i(-1, 0, 0), [Vector3(0, 0, 1), Vector3(0, 1, 1), Vector3(0, 1, 0), Vector3(0, 0, 0)]],
@@ -363,38 +418,78 @@ const FACES := [
 	[Vector3i(0, 0, 1), [Vector3(1, 0, 1), Vector3(1, 1, 1), Vector3(0, 1, 1), Vector3(0, 0, 1)]],
 	[Vector3i(0, 0, -1), [Vector3(0, 0, 0), Vector3(0, 1, 0), Vector3(1, 1, 0), Vector3(1, 0, 0)]],
 ]
+## Brightness of a face corner by how many neighbouring voxels crowd it.
+const AO_LEVELS: Array[float] = [1.0, 0.8, 0.66, 0.54]
 
 
+## One node per body part, hinged at its pivot, under a shared "Body" node.
 func _to_node(scale_factor: float, material: StandardMaterial3D) -> Node3D:
+	if material == null:
+		material = StandardMaterial3D.new()
+		material.vertex_color_use_as_albedo = true
+		material.roughness = 0.62
+		material.rim_enabled = true
+		material.rim = 0.35
+		material.rim_tint = 0.6
+	var root := Node3D.new()
+	root.name = "VoxelFigure"
+	root.scale = Vector3.ONE * scale_factor
+	var body := Node3D.new()
+	body.name = "Body"
+	root.add_child(body)
+	for part_name: String in parts:
+		var pivot: Vector3 = pivots.get(part_name, Vector3.ZERO)
+		var hinge := Node3D.new()
+		hinge.name = part_name.capitalize().replace(" ", "")
+		hinge.position = pivot * VOXEL
+		body.add_child(hinge)
+		var instance := MeshInstance3D.new()
+		instance.name = "Voxels"
+		instance.mesh = _part_mesh(parts[part_name], pivot)
+		instance.material_override = material
+		hinge.add_child(instance)
+	return root
+
+
+func _part_mesh(cells: Dictionary, pivot: Vector3) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for key: Vector3i in voxels:
-		var color: Color = voxels[key]
+	for key: Vector3i in cells:
+		var base_color: Color = cells[key]
+		# A little per-voxel variation keeps large areas from looking flat.
+		var noise := float(hash(key) % 1000) / 1000.0
+		var color := base_color.lightened(0.05) if noise > 0.7 else base_color.darkened(0.05) if noise < 0.25 else base_color
 		for face: Array in FACES:
 			var direction: Vector3i = face[0]
-			if voxels.has(key + direction):
+			if cells.has(key + direction):
 				continue
 			var corners: Array = face[1]
 			var normal := Vector3(direction)
 			var origin := Vector3(key)
-			# Godot treats clockwise triangles as front-facing.
+			var shades: Array[float] = []
+			for corner: Vector3 in corners:
+				shades.append(_corner_light(cells, key, direction, corner))
 			for index: int in [0, 2, 1, 0, 3, 2]:
-				tool.set_color(color)
+				tool.set_color(Color(color.r * shades[index], color.g * shades[index], color.b * shades[index], color.a))
 				tool.set_normal(normal)
-				tool.add_vertex((origin + corners[index]) * VOXEL)
-	var mesh := tool.commit()
-	if material == null:
-		material = StandardMaterial3D.new()
-		material.vertex_color_use_as_albedo = true
-		material.roughness = 0.75
-	var instance := MeshInstance3D.new()
-	instance.name = "Voxels"
-	instance.mesh = mesh
-	instance.material_override = material
-	# Centre the figure on its plinth; voxel x/z run from negative to positive.
-	instance.position = Vector3(0.5 * VOXEL, 0.0, 0.5 * VOXEL) * -1.0 * scale_factor
-	instance.scale = Vector3.ONE * scale_factor
-	var root := Node3D.new()
-	root.name = "VoxelFigure"
-	root.add_child(instance)
-	return root
+				tool.add_vertex((origin + corners[index] - pivot) * VOXEL)
+	return tool.commit()
+
+
+## Ambient occlusion for one face corner: counts the voxels in front of the
+## face that touch this corner.
+func _corner_light(cells: Dictionary, key: Vector3i, normal: Vector3i, corner: Vector3) -> float:
+	var axes: Array[int] = []
+	for axis: int in range(3):
+		if normal[axis] == 0:
+			axes.append(axis)
+	var front := key + normal
+	var step_a := Vector3i.ZERO
+	var step_b := Vector3i.ZERO
+	step_a[axes[0]] = 1 if corner[axes[0]] > 0.5 else -1
+	step_b[axes[1]] = 1 if corner[axes[1]] > 0.5 else -1
+	var side_a := cells.has(front + step_a)
+	var side_b := cells.has(front + step_b)
+	var diagonal := cells.has(front + step_a + step_b)
+	var count := 3 if side_a and side_b else int(side_a) + int(side_b) + int(diagonal)
+	return AO_LEVELS[count]

@@ -43,6 +43,11 @@ var _base_colors: Array[Color] = []
 var _idle_time: float = 0.0
 var _placeholder_root: Node3D
 var _wrap_projections: Array[Dictionary] = []
+## Animates the voxel figure once one is applied.
+var rig: FigureRig
+## While true the figure faces where the piece points (moving, attacking)
+## instead of turning to the viewer.
+var facing_locked: bool = false
 
 
 func configure(
@@ -147,6 +152,11 @@ func apply_figure(figure: Node3D) -> void:
 
 	figure.position.y = 0.12
 	standee.add_child(figure)
+	if rig == null:
+		rig = FigureRig.new()
+		rig.name = "FigureRig"
+		add_child(rig)
+	rig.bind(figure)
 	_rebuild_projection_visuals()
 
 
@@ -158,8 +168,8 @@ func _face_viewer() -> void:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		return
-	var camera_yaw := camera.global_rotation.y
-	visual_root.rotation.y = wrapf(camera_yaw - global_rotation.y, -PI, PI)
+	var target := 0.0 if facing_locked else wrapf(camera.global_rotation.y - global_rotation.y, -PI, PI)
+	visual_root.rotation.y = lerp_angle(visual_root.rotation.y, target, minf(1.0, get_process_delta_time() * 10.0))
 
 
 func set_selected(value: bool) -> void:
@@ -181,10 +191,14 @@ func set_animation_state(state: StringName) -> void:
 
 func play_idle() -> void:
 	set_animation_state(&"idle")
+	if rig != null:
+		rig.walking = false
 
 
 func play_walk() -> void:
 	set_animation_state(&"walk")
+	if rig != null:
+		rig.walking = true
 
 
 func face_world_position(target_position: Vector3) -> void:
@@ -529,6 +543,45 @@ func _rebuild_projection_visuals() -> void:
 		projection["visual"] = fresh
 		projection["animation_player"] = _find_animation_player(fresh)
 		_wrap_projections[index] = projection
+	if rig != null:
+		var mirrors: Array[Node3D] = []
+		for projection: Dictionary in _wrap_projections:
+			var copy := (projection["visual"] as Node3D).get_node_or_null("Standee/VoxelFigure") as Node3D
+			if copy != null:
+				mirrors.append(copy)
+		rig.set_mirrors(mirrors)
+
+
+## Shatters the voxel figure into flying cubes (captured pieces).
+func shatter(from_position: Vector3, color: Color) -> void:
+	if is_dead:
+		return
+	is_dead = true
+	_hide_auras()
+	selection_ring.visible = false
+	var origin := global_position + Vector3(0.0, 0.7, 0.0)
+	CombatEffects.shatter(get_parent(), origin, (origin - from_position).normalized(), _figure_colors(), color)
+	visual_root.visible = false
+	for projection: Dictionary in _wrap_projections:
+		(projection["visual"] as Node3D).visible = false
+	await get_tree().create_timer(0.25).timeout
+	died.emit(self)
+
+
+## A few colours sampled from the figure for its debris.
+func _figure_colors() -> Array[Color]:
+	var colors: Array[Color] = []
+	var figure := visual_root.get_node_or_null("Standee/VoxelFigure")
+	if figure == null:
+		return [_aura_color()]
+	for instance: Node in figure.find_children("Voxels", "MeshInstance3D", true, false):
+		var mesh := (instance as MeshInstance3D).mesh as ArrayMesh
+		if mesh == null or mesh.get_surface_count() == 0:
+			continue
+		var vertex_colors: PackedColorArray = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+		for index: int in range(0, vertex_colors.size(), maxi(1, vertex_colors.size() / 6)):
+			colors.append(vertex_colors[index])
+	return colors if not colors.is_empty() else [_aura_color()]
 
 
 func _set_projection_transparency(node: Node, transparency_amount: float) -> void:

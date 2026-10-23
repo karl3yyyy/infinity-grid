@@ -423,18 +423,16 @@ func _show_board_picker() -> void:
 func _board_preview(entry: Dictionary) -> Image:
 	var tint: Color = entry["tint"]
 	var glow: Color = entry["glow"]
-	# Untinted means the plain wood texture.
-	var base := Color("a0703f") if tint == Color(1, 1, 1) else tint
+	# Dark glass panels (tinted like on the board) with glowing borders.
 	var image := Image.create(36, 24, false, Image.FORMAT_RGBA8)
-	image.fill(Color("0b0f0b"))
+	image.fill(Color("05070a"))
 	for row: int in range(2):
 		for column: int in range(5):
-			var tile := base if (row + column) % 2 == 0 else base.darkened(0.3)
-			image.fill_rect(Rect2i(3 + column * 6, 6 + row * 8, 6, 8), tile)
-			image.fill_rect(Rect2i(3 + column * 6, 6 + row * 8, 6, 1), tile.lightened(0.2))
-	if glow != Color(0, 0, 0):
-		image.fill_rect(Rect2i(2, 3, 32, 2), glow)
-		image.fill_rect(Rect2i(2, 22, 32, 1), glow.darkened(0.3))
+			var panel := (Color("141c28") if (row + column) % 2 == 0 else Color("0b1018")) * tint
+			var cell := Rect2i(3 + column * 6, 3 + row * 9, 6, 9)
+			image.fill_rect(cell, glow.darkened(0.15))
+			image.fill_rect(cell.grow(-1), panel)
+	image.fill_rect(Rect2i(2, 22, 32, 1), glow)
 	return image
 
 

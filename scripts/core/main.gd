@@ -6,7 +6,7 @@ const PlayerControllerScript := preload("res://scripts/controllers/player_contro
 const UnitMovementScript := preload("res://scripts/units/unit_movement.gd")
 const CameraControllerScript := preload("res://scripts/camera/camera_controller.gd")
 const BattleUIScript := preload("res://scripts/ui/onitama_ui.gd")
-const ArenaEnvironmentScript := preload("res://scripts/core/arena_environment.gd")
+const CyberEnvironmentScript := preload("res://scripts/core/cyber_environment.gd")
 
 
 func _ready() -> void:
@@ -72,7 +72,7 @@ func _apply_web_update() -> void:
 
 
 func _build_environment() -> void:
-	var arena: ArenaEnvironment = ArenaEnvironmentScript.new()
+	var arena: CyberEnvironment = CyberEnvironmentScript.new()
 	arena.name = "Arena"
 	add_child(arena)
 	arena.build()

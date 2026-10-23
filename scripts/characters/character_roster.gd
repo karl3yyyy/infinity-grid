@@ -42,14 +42,14 @@ const ECHO_STYLES: Array[Dictionary] = [
 	{"id": "drone", "name": "DROHNEN", "line": "Maschinen mit einem wandernden Auge."},
 ]
 
-## Tint and glow for the tiles of a player's half of the board.
+## Panel tint and border glow for the two rows of a player's half.
 const BOARD_SKINS: Array[Dictionary] = [
-	{"id": "wood", "name": "HOLZ", "line": "Das klassische Brett.", "tint": Color(1, 1, 1), "glow": Color(0, 0, 0)},
-	{"id": "matrix", "name": "MATRIX", "line": "Schwarz mit grünem Code-Schimmer.", "tint": Color("2d4a2a"), "glow": Color("2fb23a")},
-	{"id": "blood", "name": "BLUTROT", "line": "Für Spieler ohne Gnade.", "tint": Color("7a2a26"), "glow": Color("b3261e")},
-	{"id": "neon", "name": "NEON", "line": "Blau und pink wie eine Nachtstadt.", "tint": Color("2c3a7a"), "glow": Color("d94ad9")},
-	{"id": "gold", "name": "GOLD", "line": "Für Gewinner. Oder Angeber.", "tint": Color("c9a24a"), "glow": Color("ffcf5a")},
-	{"id": "void", "name": "LEERE", "line": "Fast nichts. Nur Umrisse im Dunkeln.", "tint": Color("2a2236"), "glow": Color("6a4ab0")},
+	{"id": "standard", "name": "CYAN", "line": "Das Standard-Raster.", "tint": Color(1, 1, 1), "glow": Color("2ad4ff")},
+	{"id": "matrix", "name": "MATRIX", "line": "Schwarz mit grünem Code-Schimmer.", "tint": Color("a8ffb0"), "glow": Color("2fd23a")},
+	{"id": "blood", "name": "BLUTROT", "line": "Für Spieler ohne Gnade.", "tint": Color("ff9a9a"), "glow": Color("e0261e")},
+	{"id": "neon", "name": "NEON", "line": "Blau und pink wie eine Nachtstadt.", "tint": Color("c8a8ff"), "glow": Color("ff2fd0")},
+	{"id": "gold", "name": "GOLD", "line": "Für Gewinner. Oder Angeber.", "tint": Color("ffe0a0"), "glow": Color("ffc23a")},
+	{"id": "void", "name": "LEERE", "line": "Fast nichts. Nur Umrisse im Dunkeln.", "tint": Color("8a80a0"), "glow": Color("5a3aa0")},
 ]
 
 

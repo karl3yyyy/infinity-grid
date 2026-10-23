@@ -8,15 +8,18 @@ const CELL_SIZE: float = 1.4
 
 var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
+## Panel borders of the neutral middle row and of unskinned halves.
+const NEUTRAL_GLOW := Color("1f7a99")
 ## Board skin per player half: {"tint", "glow"} (see CharacterRoster.BOARD_SKINS).
 var _side_skins: Array[Dictionary] = [
-	{"tint": Color.WHITE, "glow": Color.BLACK},
-	{"tint": Color.WHITE, "glow": Color.BLACK},
+	{"tint": Color.WHITE, "glow": NEUTRAL_GLOW},
+	{"tint": Color.WHITE, "glow": NEUTRAL_GLOW},
 ]
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
 var wrap_projection_count: int = 0
 var _wrap_materials: Dictionary = {}
-var _block_material: StandardMaterial3D = WoodMaterials.surface("frame", 0.6)
+var _block_material: StandardMaterial3D = _make_block_material()
+var _tile_textures: Dictionary = {}
 
 var _colors: Dictionary = {
 	GridCellData.Highlight.NORMAL: Color("35545b"),
@@ -26,6 +29,14 @@ var _colors: Dictionary = {
 	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
 	GridCellData.Highlight.OCCUPIED: Color("f0e6dc"),
 }
+
+
+static func _make_block_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("0a0d12")
+	material.metallic = 0.85
+	material.roughness = 0.35
+	return material
 
 
 func setup() -> void:
@@ -161,7 +172,7 @@ func _create_cell_visual(cell: GridCell) -> void:
 	_update_cell_visual(cell)
 
 
-## A carved wooden square: a thin dark block plus a textured top face.
+## A board panel: a thin dark metal block plus a textured top face.
 ## The top face's material is the one that gets tinted for highlights.
 func _create_tile_node(coordinate: Vector2i, at: Vector3, opacity: float) -> MeshInstance3D:
 	var block := MeshInstance3D.new()
@@ -253,12 +264,56 @@ func _create_wrap_seams() -> void:
 		add_child(seam)
 
 
-## Light oak and dark walnut squares; the masters' home squares and the
-## centre carry a carved rune ring.
+## Dark glass panels with a glowing circuit border. The border is the
+## emission texture, so skins and highlights only light up the edges; the
+## masters' home squares and the centre carry an extra ring.
 func _tile_material(coordinate: Vector2i) -> StandardMaterial3D:
 	var is_light_square := (coordinate.x + coordinate.y) % 2 == 0
-	var has_rune := coordinate.x == 2 and coordinate.y in [0, 2, 4]
-	return WoodMaterials.tile(is_light_square, has_rune)
+	var has_ring := coordinate.x == 2 and coordinate.y in [0, 2, 4]
+	var key := "%s_%s" % [is_light_square, has_ring]
+	if not _tile_textures.has(key):
+		_tile_textures[key] = _make_tile_textures(is_light_square, has_ring)
+	var textures: Array = _tile_textures[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = textures[0]
+	material.emission_texture = textures[1]
+	# Multiply: only the border pixels of the mask light up.
+	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	material.metallic = 0.55
+	material.roughness = 0.22
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return material
+
+
+## [albedo, emission mask] for one kind of panel.
+func _make_tile_textures(light: bool, ring: bool) -> Array:
+	var size := 64
+	var albedo := Image.create(size, size, true, Image.FORMAT_RGBA8)
+	var mask := Image.create(size, size, true, Image.FORMAT_RGBA8)
+	albedo.fill(Color("141c28") if light else Color("0b1018"))
+	mask.fill(Color.BLACK)
+	for y: int in range(size):
+		for x: int in range(size):
+			var edge := mini(mini(x, y), mini(size - 1 - x, size - 1 - y))
+			var lit := 0.0
+			if edge <= 1:
+				lit = 1.0
+			elif edge == 4 and (x + y) % 6 < 3:
+				# Dashed inner line, like a circuit trace.
+				lit = 0.45
+			var corner := (x < 10 or x > size - 11) and (y < 10 or y > size - 11) and edge <= 3
+			if corner:
+				lit = 1.0
+			if ring:
+				var distance := Vector2(x - size / 2.0, y - size / 2.0).length()
+				if absf(distance - 17.0) < 1.2:
+					lit = maxf(lit, 0.8)
+			if lit > 0.0:
+				mask.set_pixel(x, y, Color(lit, lit, lit))
+				albedo.set_pixel(x, y, albedo.get_pixel(x, y).lerp(Color("5a6a80"), lit * 0.6))
+	albedo.generate_mipmaps()
+	mask.generate_mipmaps()
+	return [ImageTexture.create_from_image(albedo), ImageTexture.create_from_image(mask)]
 
 
 func _refresh_coordinate(coordinate: Vector2i) -> void:
@@ -291,7 +346,7 @@ func _update_cell_visual(cell: GridCell) -> void:
 		GridCellData.Highlight.ATTACK,
 	]
 	var glow: Color = _colors[cell.highlight] if is_emissive else skin["glow"]
-	var energy := 0.45 if is_emissive else 0.3
+	var energy := 2.4 if is_emissive else 1.1
 	_apply_cell_material(cell.material, tile_color, 1.0, glow, energy)
 	for projection_value: Variant in _wrap_materials.get(cell.coordinate, []):
 		var projection: Dictionary = projection_value
@@ -310,7 +365,7 @@ func _side_skin_at(coordinate: Vector2i) -> Dictionary:
 		return _side_skins[0]
 	if coordinate.y <= 1:
 		return _side_skins[1]
-	return {"tint": Color.WHITE, "glow": Color.BLACK}
+	return {"tint": Color.WHITE, "glow": NEUTRAL_GLOW}
 
 
 func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, glow: Color, energy: float) -> void:

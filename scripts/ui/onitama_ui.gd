@@ -70,7 +70,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func update_header(current_player: int, round_number: int) -> void:
 	var mover := "%s AM ZUG" % _team_name(current_player)
 	round_label.text = "RUNDE %02d  •  %s" % [round_number, mover]
-	round_label.modulate = UITheme.GOLD_LIGHT if current_player == viewer_team else TEAM_COLORS[current_player].lightened(0.35)
+	round_label.modulate = TerminalTheme.GREEN_BRIGHT if current_player == viewer_team else TEAM_COLORS[current_player].lightened(0.35)
 
 
 func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
@@ -98,7 +98,7 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 
 
 func update_selection(unit: BattleUnit) -> void:
-	selection_label.text = "No figure selected" if unit == null else unit.unit_name
+	selection_label.text = "" if unit == null else ("MEISTER" if unit.is_master else "SCHÜLER")
 
 
 func set_instruction(text_value: String) -> void:
@@ -164,13 +164,13 @@ func _build_ui() -> void:
 	hud_root = Control.new()
 	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_root.theme = UITheme.theme()
+	hud_root.theme = TerminalTheme.theme()
 	add_child(hud_root)
 	# Dark vignette frames the candle-lit table like a tavern scene.
 	var vignette := TextureRect.new()
 	var vignette_gradient := Gradient.new()
 	vignette_gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
-	vignette_gradient.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0.02, 0.01, 0.0, 0.15), Color(0.02, 0.01, 0.0, 0.7)])
+	vignette_gradient.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0.0, 0.01, 0.03, 0.2), Color(0.0, 0.01, 0.03, 0.75)])
 	var vignette_texture := GradientTexture2D.new()
 	vignette_texture.gradient = vignette_gradient
 	vignette_texture.fill = GradientTexture2D.FILL_RADIAL
@@ -200,19 +200,18 @@ func _build_ui() -> void:
 	round_label = Label.new()
 	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	round_label.add_theme_font_size_override("font_size", 21)
+	round_label.add_theme_font_size_override("font_size", 32)
 	_outline(round_label)
 	header.add_child(round_label)
 	selection_label = Label.new()
 	selection_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	selection_label.add_theme_font_size_override("font_size", 15)
-	selection_label.modulate = Color("e6edf2")
-	selection_label.add_theme_font_override("font", ThemeDB.fallback_font)
+	selection_label.add_theme_font_size_override("font_size", 24)
+	selection_label.modulate = TerminalTheme.GREEN
 	_outline(selection_label)
 	header.add_child(selection_label)
-	menu_button = _make_button("☰", header)
+	menu_button = _make_button("MENÜ", header)
 	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
-	menu_button.add_theme_font_size_override("font_size", 22)
+	menu_button.add_theme_font_size_override("font_size", 28)
 	menu_button.pressed.connect(func() -> void: toggle_menu(true))
 	_add_hand_row(top_box, 1)
 	_add_hand_title(top_box, 1)
@@ -229,9 +228,8 @@ func _build_ui() -> void:
 	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction_label.custom_minimum_size.y = 42.0
-	instruction_label.add_theme_font_size_override("font_size", 16)
-	instruction_label.modulate = Color.WHITE
-	instruction_label.add_theme_font_override("font", ThemeDB.fallback_font)
+	instruction_label.add_theme_font_size_override("font_size", 26)
+	instruction_label.modulate = TerminalTheme.GREEN_BRIGHT
 	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
 	side_action_button = _make_button("", bottom_box)
@@ -247,7 +245,7 @@ func _build_ui() -> void:
 	hand_titles.reverse()
 
 	result_overlay = ColorRect.new()
-	result_overlay.color = Color(0.03, 0.02, 0.07, 0.82)
+	result_overlay.color = Color(0.0, 0.02, 0.04, 0.86)
 	result_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_overlay.visible = false
 	result_overlay.add_to_group("interactive_ui")
@@ -261,9 +259,8 @@ func _build_ui() -> void:
 	result_overlay.add_child(result_box)
 	result_label = Label.new()
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result_label.add_theme_font_size_override("font_size", 52)
-	result_label.add_theme_font_override("font", UITheme.decorative_font())
-	result_label.modulate = UITheme.GOLD_LIGHT
+	result_label.add_theme_font_size_override("font_size", 76)
+	result_label.modulate = TerminalTheme.GREEN_BRIGHT
 	_outline(result_label, 12)
 	result_box.add_child(result_label)
 	var restart_button := _make_button("NOCHMAL SPIELEN", result_box)
@@ -272,7 +269,7 @@ func _build_ui() -> void:
 	quit_button.pressed.connect(func() -> void: quit_pressed.emit())
 
 	menu_overlay = ColorRect.new()
-	menu_overlay.color = Color(0.03, 0.02, 0.07, 0.88)
+	menu_overlay.color = Color(0.0, 0.02, 0.04, 0.9)
 	menu_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_overlay.visible = false
 	menu_overlay.add_to_group("interactive_ui")
@@ -287,7 +284,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "INFINITY GRID"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_font_size_override("font_size", 44)
 	menu_box.add_child(title)
 	var resume_button := _make_button("WEITER", menu_box)
 	var restart_menu_button := _make_button("NEU STARTEN", menu_box)
@@ -332,7 +329,7 @@ func _outline(label: Label, outline_size: int = 6) -> void:
 func _add_hand_title(parent: Control, position: int) -> void:
 	var title := Label.new()
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 28)
 	_outline(title)
 	title.text = "DU" if position == 0 else "BOT"
 	parent.add_child(title)

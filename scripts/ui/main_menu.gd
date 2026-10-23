@@ -130,6 +130,10 @@ func _show_home() -> void:
 			close_menu()
 			online_resume_requested.emit(session))
 	# "Schnelles Spiel" now means a random online opponent (Multiplayer > Online).
+	if MatchClient.is_online_available():
+		_add_menu_button(_content, "SCHNELLES ONLINE-SPIEL", "Zufälliger Gegner, ohne Code", func() -> void:
+			close_menu()
+			online_quick_requested.emit())
 	_add_menu_button(_content, "GEGEN DEN BOT", "Schwierigkeit wählen", _show_difficulty)
 	_add_menu_button(_content, "MULTIPLAYER", "Lokal auf einem Gerät oder online", _show_multiplayer)
 	_add_menu_button(_content, "SAMMLUNG", "Deine Bewegungskarten", _show_collection)

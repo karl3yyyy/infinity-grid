@@ -12,6 +12,11 @@ const ArenaEnvironmentScript := preload("res://scripts/core/arena_environment.gd
 func _ready() -> void:
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("document.addEventListener('contextmenu', function(event) { event.preventDefault(); });")
+		# The installed web app keeps serving its cached version until every tab
+		# is closed; switch to a newly published one as soon as it is there.
+		JavaScriptBridge.pwa_update_available.connect(_apply_web_update)
+		if JavaScriptBridge.pwa_needs_update():
+			_apply_web_update.call_deferred()
 	_build_environment()
 	var battle_scene := Node3D.new()
 	battle_scene.name = "BattleScene"
@@ -52,6 +57,18 @@ func _ready() -> void:
 		unit_movement,
 		units
 	)
+
+
+## Reloads into the new version, but never in the middle of a match.
+func _apply_web_update() -> void:
+	var battle := get_node_or_null("BattleManager") as OnitamaBattleManager
+	# The board is only shown once a match was started from the menu.
+	var in_match: bool = battle != null and battle.grid_manager.get_parent().visible and not battle.battle_over
+	if in_match:
+		# Try again once the match is over and the result screen is shown.
+		get_tree().create_timer(30.0).timeout.connect(_apply_web_update)
+		return
+	JavaScriptBridge.pwa_update()
 
 
 func _build_environment() -> void:

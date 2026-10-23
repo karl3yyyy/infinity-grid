@@ -41,19 +41,41 @@ uniform vec4 shoe_color : source_color;
 uniform vec4 accent_color : source_color;
 uniform float sleeves = 1.0;
 uniform float covered = 1.0;
+// Glowing piping, belt and seams; 0 for plain clothes.
+uniform float trim = 1.0;
 
 void fragment() {
 	vec3 skin = texture(skin_texture, UV).rgb * skin_tint.rgb;
 	float top = COLOR.r * step(COLOR.a, sleeves + 0.001) * covered;
 	float bottom = COLOR.g * covered;
 	float shoes = COLOR.b * covered;
+	float height = UV2.x;
+	float side = abs(UV2.y);
+	// A faint ripple so large areas read as cloth rather than paint.
+	float fold = 0.95 + 0.05 * sin(height * 40.0 + side * 18.0);
 	vec3 color = skin;
-	color = mix(color, bottom_color.rgb, bottom);
-	color = mix(color, top_color.rgb, top);
+	color = mix(color, bottom_color.rgb * fold, bottom);
+	color = mix(color, top_color.rgb * fold, top);
 	color = mix(color, shoe_color.rgb, shoes);
+	vec3 glow = vec3(0.0);
+	// Belt over the hips with a metal buckle.
+	float belt = (1.0 - step(0.028, abs(height - 0.02))) * max(top, bottom) * step(side, 0.2);
+	color = mix(color, vec3(0.05, 0.05, 0.06), belt);
+	float buckle = belt * (1.0 - step(0.03, side));
+	color = mix(color, vec3(0.75, 0.75, 0.8), buckle);
+	// Centre zip and piping down the sides of the shirt and trousers.
+	float zip = top * (1.0 - step(0.005, side)) * step(0.06, height);
+	float piping = top * (1.0 - step(0.006, abs(side - 0.1))) * step(0.08, height) * step(COLOR.a, 0.01);
+	float leg_seam = bottom * (1.0 - step(0.008, abs(side - 0.2))) * step(height, -0.32);
+	color = mix(color, color * 0.4, zip);
+	glow += accent_color.rgb * (piping + leg_seam + buckle * 0.3) * trim;
+	// Soles.
+	color = mix(color, vec3(0.02), shoes * (1.0 - step(0.012, height + 0.92)));
 	ALBEDO = color;
-	ROUGHNESS = mix(0.75, 0.45, max(top, shoes));
-	METALLIC = shoes * 0.3;
+	EMISSION = glow * 1.6;
+	ROUGHNESS = mix(0.6, 0.85, max(top, bottom));
+	ROUGHNESS = mix(ROUGHNESS, 0.35, max(shoes, buckle));
+	METALLIC = max(shoes * 0.3, buckle * 0.8);
 }
 """
 
@@ -77,8 +99,15 @@ func build(look: Dictionary) -> void:
 	var hair := str(look.get("hair", ""))
 	if HAIR_SCENES.has(hair):
 		_attach_mesh(HAIR_SCENES[hair], look.get("hair_color", Color("2a1d16")))
+	if hair == "long":
+		# The library's "long" hair ends at the chin; add the length down the back.
+		ClothBuilder.long_hair(skeleton, look.get("hair_color", Color("2a1d16")))
 	if look.get("beard", false):
 		_attach_mesh(HAIR_SCENES["beard"], look.get("hair_color", Color("2a1d16")))
+	if float(look.get("head_scale", 1.0)) != 1.0:
+		var modifier := HeadScaleModifier.new()
+		modifier.head_scale = float(look.get("head_scale", 1.0))
+		skeleton.add_child(modifier)
 	for gear: String in look.get("gear", []):
 		_add_gear(gear, look)
 	scale = Vector3.ONE * float(look.get("scale", 1.0))
@@ -145,7 +174,8 @@ func _dress_skin(model: Node3D, look: Dictionary, body: String) -> void:
 			material.set_shader_parameter("top_color", outfit.get("top", Color("16181c")))
 			material.set_shader_parameter("bottom_color", outfit.get("bottom", Color("101114")))
 			material.set_shader_parameter("shoe_color", outfit.get("shoes", Color("08090a")))
-			material.set_shader_parameter("accent_color", outfit.get("accent", Color("6ee65a")))
+			material.set_shader_parameter("accent_color", outfit.get("accent", look.get("glow_color", Color("6ee65a"))))
+			material.set_shader_parameter("trim", 0.0 if outfit.get("plain", false) else 1.0)
 			material.set_shader_parameter("sleeves", {"long": 1.0, "short": 0.5, "none": 0.0}.get(outfit.get("sleeves", "long"), 1.0))
 			material.set_shader_parameter("covered", 0.0 if outfit.get("skin_only", false) else 1.0)
 			mesh.material_override = material
@@ -181,15 +211,22 @@ func _outfit_mesh(instance: MeshInstance3D, body: String) -> Mesh:
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var colors := PackedColorArray()
 		colors.resize(vertices.size())
+		# UV2 = (metres above the hips, metres from the centre line) for seams and belts.
+		var places := PackedVector2Array()
+		places.resize(vertices.size())
 		for index: int in range(vertices.size()):
 			var v := vertices[index]
 			var across := absf(v.x)
-			var top := 1.0 if v.y > hips_y and v.y < neck_y -  0.035 * unit and across < wrist_x else 0.0
+			# The shirt reaches up over the shoulders; only the neck stays bare.
+			var collar_y := neck_y - 0.035 * unit if across < 0.075 * unit else neck_y + 0.02 * unit
+			var top := 1.0 if v.y > hips_y and v.y < collar_y and across < wrist_x else 0.0
+			places[index] = Vector2((v.y - hips_y) / unit, v.x / unit)
 			var bottom := 1.0 if v.y <= hips_y and v.y > ankle_y else 0.0
 			var shoes := 1.0 if v.y <= ankle_y else 0.0
 			var arm := clampf((across - shoulder_x) / maxf(wrist_x - shoulder_x, 0.01), 0.0, 1.0)
 			colors[index] = Color(top, bottom, shoes, arm)
 		arrays[Mesh.ARRAY_COLOR] = colors
+		arrays[Mesh.ARRAY_TEX_UV2] = places
 		# Custom channels would need their format flags; the outfit shader does not use them.
 		for channel: int in [Mesh.ARRAY_CUSTOM0, Mesh.ARRAY_CUSTOM1, Mesh.ARRAY_CUSTOM2, Mesh.ARRAY_CUSTOM3]:
 			arrays[channel] = null
@@ -337,27 +374,9 @@ func _round_glasses() -> void:
 		head.add_child(ring)
 
 
-## Long open coat hanging from the chest to the knees.
+## Long open coat; skinned, so the skirt swings with the legs.
 func _coat(color: Color) -> void:
-	var chest := _bone_attachment("UpperChest")
-	var rest := skeleton.get_bone_global_rest(skeleton.find_bone("UpperChest"))
-	var coat := MeshInstance3D.new()
-	var tube := CylinderMesh.new()
-	tube.top_radius = 0.17
-	tube.bottom_radius = 0.3
-	tube.height = 1.05
-	tube.cap_top = false
-	tube.cap_bottom = false
-	tube.radial_segments = 14
-	coat.mesh = tube
-	var material := _flat(color, 0.0, 0.2)
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	coat.material_override = material
-	coat.position = rest.affine_inverse() * (rest.origin + Vector3(0.0, -0.45, -0.01))
-	chest.add_child(coat)
-	# Collar.
-	var collar := _box(chest, Vector3(0.36, 0.12, 0.26), rest.affine_inverse() * (rest.origin + Vector3(0.0, 0.08, -0.02)), material)
-	collar.rotation_degrees.x = -8.0
+	ClothBuilder.coat(skeleton, color)
 
 
 ## Cables plugged into the back of a bald head, drooping onto the shoulders.
@@ -478,11 +497,12 @@ func _pram(glow: Color) -> void:
 	_box(pram, Vector3(0.8, 0.03, 0.05), Vector3(0.0, 0.62, 0.52), light)
 	# The baby sits in the tub at a small scale.
 	var body := get_node("Body") as Node3D
-	body.scale = Vector3.ONE * 0.42
-	body.position = Vector3(0.0, 0.42, 0.0)
+	# Seated, the hips drop below the rim so only the upper body shows.
+	body.scale = Vector3.ONE * 0.48
+	body.position = Vector3(0.0, 0.3, -0.05)
 	var hover := pram.create_tween().set_loops().set_trans(Tween.TRANS_SINE)
 	hover.tween_property(pram, "position:y", 0.08, 0.9)
 	hover.tween_property(pram, "position:y", 0.0, 0.9)
 	var bob := body.create_tween().set_loops().set_trans(Tween.TRANS_SINE)
-	bob.tween_property(body, "position:y", 0.5, 0.9)
-	bob.tween_property(body, "position:y", 0.42, 0.9)
+	bob.tween_property(body, "position:y", 0.38, 0.9)
+	bob.tween_property(body, "position:y", 0.3, 0.9)

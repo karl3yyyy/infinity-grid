@@ -9,7 +9,7 @@ extends Node3D
 
 const FRAME_SIZE := Vector2i(120, 168)
 ## World height of the sprite quad on the board.
-const DISPLAY_HEIGHT: float = 2.05
+const DISPLAY_HEIGHT: float = 1.85
 ## The low-res model animates at this rate, like hand-drawn sprite frames.
 const FRAMES_PER_SECOND: float = 18.0
 
@@ -77,7 +77,37 @@ void fragment() {
 }
 """
 
+## Drawn over everything: the silhouette edge in the team colour, so a figure
+## hidden behind a bigger one still shows its outline. On a visible figure it
+## lands on the rim light, which already has that colour.
+const GHOST_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never;
+
+uniform sampler2D frame : source_color, filter_nearest;
+uniform vec2 frame_size = vec2(120.0, 168.0);
+uniform vec4 rim_color : source_color = vec4(0.43, 0.9, 0.35, 1.0);
+
+void vertex() {
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+	MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0.0, 0.0, 0.0), vec4(0.0, length(MODEL_MATRIX[1].xyz), 0.0, 0.0), vec4(0.0, 0.0, length(MODEL_MATRIX[2].xyz), 0.0), vec4(0.0, 0.0, 0.0, 1.0));
+}
+
+void fragment() {
+	vec2 texel = 1.0 / frame_size;
+	vec2 uv = (floor(UV * frame_size) + 0.5) * texel;
+	if (texture(frame, uv).a < 0.5) {
+		discard;
+	}
+	float inner = min(min(texture(frame, uv + vec2(texel.x * 2.0, 0.0)).a, texture(frame, uv - vec2(texel.x * 2.0, 0.0)).a), min(texture(frame, uv + vec2(0.0, texel.y * 2.0)).a, texture(frame, uv - vec2(0.0, texel.y * 2.0)).a));
+	// Edge pixels get the outline; the inside only a faint veil.
+	ALBEDO = rim_color.rgb;
+	ALPHA = inner < 0.5 ? 0.85 : 0.07;
+}
+"""
+
 static var _shader: Shader
+static var _ghost_shader: Shader
 
 var walking: bool = false:
 	set(value):
@@ -155,6 +185,16 @@ func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_displ
 	material.set_shader_parameter("frame_size", Vector2(FRAME_SIZE))
 	material.set_shader_parameter("rim_color", rim_color)
 	material.set_shader_parameter("hologram", hologram)
+	if _ghost_shader == null:
+		_ghost_shader = Shader.new()
+		_ghost_shader.code = GHOST_SHADER
+	var ghost := ShaderMaterial.new()
+	ghost.shader = _ghost_shader
+	ghost.render_priority = 10
+	ghost.set_shader_parameter("frame", viewport.get_texture())
+	ghost.set_shader_parameter("frame_size", Vector2(FRAME_SIZE))
+	ghost.set_shader_parameter("rim_color", rim_color)
+	material.next_pass = ghost
 	display = MeshInstance3D.new()
 	display.name = "Display"
 	var quad := QuadMesh.new()
@@ -172,6 +212,8 @@ func make_mirror() -> MeshInstance3D:
 	var copy := display.duplicate() as MeshInstance3D
 	copy.material_override = (display.material_override as ShaderMaterial).duplicate()
 	(copy.material_override as ShaderMaterial).set_shader_parameter("opacity", 0.5)
+	# The faded edge copies stay faint; no outline through other figures.
+	(copy.material_override as ShaderMaterial).next_pass = null
 	return copy
 
 

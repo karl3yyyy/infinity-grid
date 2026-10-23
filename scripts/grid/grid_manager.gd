@@ -9,11 +9,11 @@ const CELL_SIZE: float = 1.4
 var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
 ## Panel borders of the neutral middle row and of unskinned halves.
-const NEUTRAL_GLOW := Color("1f7a99")
+const NEUTRAL_GLOW := Color("3f8fd8")
 ## Board skin per player half: {"tint", "glow"} (see CharacterRoster.BOARD_SKINS).
 var _side_skins: Array[Dictionary] = [
-	{"tint": Color.WHITE, "glow": NEUTRAL_GLOW},
-	{"tint": Color.WHITE, "glow": NEUTRAL_GLOW},
+	{"id": "standard", "tint": Color.WHITE, "glow": NEUTRAL_GLOW},
+	{"id": "standard", "tint": Color.WHITE, "glow": NEUTRAL_GLOW},
 ]
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
 var wrap_projection_count: int = 0
@@ -264,56 +264,30 @@ func _create_wrap_seams() -> void:
 		add_child(seam)
 
 
-## Dark glass panels with a glowing circuit border. The border is the
-## emission texture, so skins and highlights only light up the edges; the
-## masters' home squares and the centre carry an extra ring.
+## Board squares are textured by the skin of their half (BoardSkinPainter); the
+## glow mask is the emission texture, so only traces and edges light up.
 func _tile_material(coordinate: Vector2i) -> StandardMaterial3D:
-	var is_light_square := (coordinate.x + coordinate.y) % 2 == 0
-	var has_ring := coordinate.x == 2 and coordinate.y in [0, 2, 4]
-	var key := "%s_%s" % [is_light_square, has_ring]
-	if not _tile_textures.has(key):
-		_tile_textures[key] = _make_tile_textures(is_light_square, has_ring)
-	var textures: Array = _tile_textures[key]
 	var material := StandardMaterial3D.new()
-	material.albedo_texture = textures[0]
-	material.emission_texture = textures[1]
-	# Multiply: only the border pixels of the mask light up.
+	# Multiply: only the lit pixels of the mask glow.
 	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	material.metallic = 0.55
-	material.roughness = 0.22
+	material.metallic = 0.35
+	material.roughness = 0.4
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_apply_skin_textures(material, coordinate, str(_side_skin_at(coordinate)["id"]))
 	return material
 
 
-## [albedo, emission mask] for one kind of panel.
-func _make_tile_textures(light: bool, ring: bool) -> Array:
-	var size := 64
-	var albedo := Image.create(size, size, true, Image.FORMAT_RGBA8)
-	var mask := Image.create(size, size, true, Image.FORMAT_RGBA8)
-	albedo.fill(Color("141c28") if light else Color("0b1018"))
-	mask.fill(Color.BLACK)
-	for y: int in range(size):
-		for x: int in range(size):
-			var edge := mini(mini(x, y), mini(size - 1 - x, size - 1 - y))
-			var lit := 0.0
-			if edge <= 1:
-				lit = 1.0
-			elif edge == 4 and (x + y) % 6 < 3:
-				# Dashed inner line, like a circuit trace.
-				lit = 0.45
-			var corner := (x < 10 or x > size - 11) and (y < 10 or y > size - 11) and edge <= 3
-			if corner:
-				lit = 1.0
-			if ring:
-				var distance := Vector2(x - size / 2.0, y - size / 2.0).length()
-				if absf(distance - 17.0) < 1.2:
-					lit = maxf(lit, 0.8)
-			if lit > 0.0:
-				mask.set_pixel(x, y, Color(lit, lit, lit))
-				albedo.set_pixel(x, y, albedo.get_pixel(x, y).lerp(Color("5a6a80"), lit * 0.6))
-	albedo.generate_mipmaps()
-	mask.generate_mipmaps()
-	return [ImageTexture.create_from_image(albedo), ImageTexture.create_from_image(mask)]
+func _apply_skin_textures(material: StandardMaterial3D, coordinate: Vector2i, skin_id: String) -> void:
+	var light := (coordinate.x + coordinate.y) % 2 == 0
+	var ring := coordinate.x == 2 and coordinate.y in [0, 2, 4]
+	var variant := posmod(coordinate.x * 3 + coordinate.y * 5, 4)
+	var key := "%s|%s|%s|%d" % [skin_id, light, ring, variant]
+	if not _tile_textures.has(key):
+		var images := BoardSkinPainter.paint(skin_id, light, ring, variant)
+		_tile_textures[key] = [ImageTexture.create_from_image(images[0]), ImageTexture.create_from_image(images[1])]
+	var textures: Array = _tile_textures[key]
+	material.albedo_texture = textures[0]
+	material.emission_texture = textures[1]
 
 
 func _refresh_coordinate(coordinate: Vector2i) -> void:
@@ -334,8 +308,7 @@ func _refresh_cell(cell: GridCell) -> void:
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
-	# Normal tiles show the wood texture, tinted by the skin of that player's
-	# half; highlights tint and glow.
+	# Normal tiles show their skin texture; highlights tint and glow.
 	var skin := _side_skin_at(cell.coordinate)
 	var normal_tile := cell.highlight == GridCellData.Highlight.NORMAL
 	var tile_color: Color = skin["tint"] if normal_tile else _colors[cell.highlight]
@@ -353,10 +326,16 @@ func _update_cell_visual(cell: GridCell) -> void:
 		_apply_cell_material(projection["material"], tile_color, float(projection["opacity"]), glow, energy)
 
 
-## Skin for the two rows nearest a player; the middle row stays neutral.
-func set_side_skin(team: int, tint: Color, glow: Color) -> void:
-	_side_skins[team] = {"tint": tint, "glow": glow}
+## Skin (an entry of CharacterRoster.BOARD_SKINS) for the two rows nearest a
+## player; the middle row keeps the standard circuit board.
+func set_side_skin(team: int, skin: Dictionary) -> void:
+	_side_skins[team] = {"id": str(skin.get("id", "standard")), "tint": skin.get("tint", Color.WHITE), "glow": skin.get("glow", NEUTRAL_GLOW)}
 	for cell: GridCell in cells.values():
+		if cell.material != null:
+			var skin_id := str(_side_skin_at(cell.coordinate)["id"])
+			_apply_skin_textures(cell.material, cell.coordinate, skin_id)
+			for projection: Variant in _wrap_materials.get(cell.coordinate, []):
+				_apply_skin_textures((projection as Dictionary)["material"], cell.coordinate, skin_id)
 		_update_cell_visual(cell)
 
 
@@ -365,7 +344,7 @@ func _side_skin_at(coordinate: Vector2i) -> Dictionary:
 		return _side_skins[0]
 	if coordinate.y <= 1:
 		return _side_skins[1]
-	return {"tint": Color.WHITE, "glow": NEUTRAL_GLOW}
+	return {"id": "standard", "tint": Color.WHITE, "glow": NEUTRAL_GLOW}
 
 
 func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, glow: Color, energy: float) -> void:

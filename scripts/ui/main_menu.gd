@@ -419,29 +419,33 @@ func _show_board_picker() -> void:
 	_content.add_child(_make_text("So sehen die zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid(CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
 		func(entry: Dictionary) -> Texture2D:
-			var image := _board_preview(entry)
-			image.resize(image.get_width() * 4, image.get_height() * 4, Image.INTERPOLATE_NEAREST)
-			return ImageTexture.create_from_image(image),
+			return ImageTexture.create_from_image(_board_preview(entry)),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("board", entry["id"])
 			_show_board_picker())
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 
 
-## Two rows of five tiles in the skin's colours, with its glow along the top.
+## Two rows of three real board squares of the skin, glow added on top.
 func _board_preview(entry: Dictionary) -> Image:
-	var tint: Color = entry["tint"]
 	var glow: Color = entry["glow"]
-	# Dark glass panels (tinted like on the board) with glowing borders.
-	var image := Image.create(36, 24, false, Image.FORMAT_RGBA8)
+	var square := 60
+	var image := Image.create(square * 3 + 8, square * 2 + 6, false, Image.FORMAT_RGBA8)
 	image.fill(Color("05070a"))
 	for row: int in range(2):
-		for column: int in range(5):
-			var panel := (Color("141c28") if (row + column) % 2 == 0 else Color("0b1018")) * tint
-			var cell := Rect2i(3 + column * 6, 3 + row * 9, 6, 9)
-			image.fill_rect(cell, glow.darkened(0.15))
-			image.fill_rect(cell.grow(-1), panel)
-	image.fill_rect(Rect2i(2, 22, 32, 1), glow)
+		for column: int in range(3):
+			var images := BoardSkinPainter.paint(str(entry["id"]), (row + column) % 2 == 0, false, row * 3 + column)
+			var albedo: Image = images[0]
+			var mask: Image = images[1]
+			albedo.clear_mipmaps()
+			mask.clear_mipmaps()
+			albedo.resize(square, square, Image.INTERPOLATE_BILINEAR)
+			mask.resize(square, square, Image.INTERPOLATE_BILINEAR)
+			for y: int in range(square):
+				for x: int in range(square):
+					var lit := mask.get_pixel(x, y).r
+					var color := albedo.get_pixel(x, y) + glow * lit * 0.7
+					image.set_pixel(4 + column * (square + 1) + x, 3 + row * (square + 1) + y, Color(minf(color.r, 1.0), minf(color.g, 1.0), minf(color.b, 1.0)))
 	return image
 
 

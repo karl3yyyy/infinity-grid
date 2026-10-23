@@ -24,7 +24,7 @@ const CHARACTERS: Array[Dictionary] = [
 		"body": "male", "skin": "dark", "tint": Color("9fe07a"), "scale": 1.18, "gear": ["horns", "spikes"], "glow_eyes": true, "glow_color": Color("ff4a1c"),
 		"outfit": {"top": Color("2a221c"), "bottom": Color("2a221c"), "sleeves": "none", "skin_only": false}},
 	{"id": "baby", "style": "sorcerer", "name": "BABY NULL", "line": "Fliegt im Hightech-Kinderwagen. Steuert ihn selbst.",
-		"body": "male", "skin": "light", "hair": "buzzed", "hair_color": Color("e2c27a"), "gear": ["pram"], "glow_color": Color("2ad4ff"),
+		"body": "male", "skin": "light", "hair": "buzzed", "hair_color": Color("e2c27a"), "gear": ["pram"], "glow_color": Color("2ad4ff"), "head_scale": 1.6,
 		"outfit": {"top": Color("dfe9f2"), "bottom": Color("dfe9f2")}},
 	{"id": "agent", "style": "gunner", "name": "DIE AGENTIN", "line": "Arbeitet für das System. Angeblich.",
 		"body": "female", "skin": "dark", "hair": "buns", "hair_color": Color("0f0f12"), "gear": ["shades", "coat"],
@@ -34,7 +34,7 @@ const CHARACTERS: Array[Dictionary] = [
 		"outfit": {"top": Color("3c2f4a"), "bottom": Color("1e1a26")}},
 	{"id": "opa", "style": "gunner", "name": "OPA HEINZ", "line": "Spielt seit 1987. Hat nie verloren. Sagt er.",
 		"body": "male", "skin": "light", "hair": "parted", "beard": true, "hair_color": Color("cfcac0"), "gear": ["round_glasses"],
-		"outfit": {"top": Color("5a4a36"), "bottom": Color("3a3026")}},
+		"outfit": {"top": Color("6b5a3c"), "bottom": Color("3a3026"), "plain": true}},
 	{"id": "punk", "style": "brawler", "name": "RIK", "line": "Hat die Wand eingetreten. Die Wand war unendlich.",
 		"body": "male", "skin": "dark", "hair": "buzzed", "hair_color": Color("e05aa8"), "gear": ["implants"], "glow_color": Color("ff2fd0"),
 		"outfit": {"top": Color("201a24"), "bottom": Color("101012"), "sleeves": "none"}},
@@ -43,10 +43,10 @@ const CHARACTERS: Array[Dictionary] = [
 		"outfit": {"top": Color("8a9098"), "bottom": Color("2a2c30")}},
 	{"id": "monk", "style": "mage", "name": "BRUDER ODO", "line": "Meditiert, bis die Felder stillstehen.",
 		"body": "male", "skin": "dark", "glow_eyes": true, "glow_color": Color("ffc23a"), "gear": ["implants"],
-		"outfit": {"top": Color("7a4a1c"), "bottom": Color("5a3412"), "sleeves": "short"}},
+		"outfit": {"top": Color("d2691e"), "bottom": Color("8e3b12"), "sleeves": "short", "plain": true}},
 	{"id": "kid", "style": "gunner", "name": "JUNO", "line": "Zu jung für die Arena. Trotzdem hier.",
-		"body": "female", "skin": "dark", "hair": "buzzed_f", "hair_color": Color("1e1612"), "scale": 0.86,
-		"outfit": {"top": Color("c9a23a"), "bottom": Color("2a3a4a")}},
+		"body": "female", "skin": "dark", "hair": "buzzed_f", "hair_color": Color("1e1612"), "scale": 0.86, "head_scale": 1.12, "glow_color": Color("ffc23a"),
+		"outfit": {"top": Color("e8b23a"), "bottom": Color("23303e"), "shoes": Color("e8e8e8")}},
 ]
 
 ## Fighting styles: how a side moves and captures (see UnitMovement.perform_move).
@@ -67,12 +67,12 @@ const ECHO_STYLES: Array[Dictionary] = [
 
 ## Panel tint and border glow for the two rows of a player's half.
 const BOARD_SKINS: Array[Dictionary] = [
-	{"id": "standard", "name": "CYAN", "line": "Das Standard-Raster.", "tint": Color(1, 1, 1), "glow": Color("2ad4ff")},
-	{"id": "matrix", "name": "MATRIX", "line": "Schwarz mit grünem Code-Schimmer.", "tint": Color("a8ffb0"), "glow": Color("2fd23a")},
-	{"id": "blood", "name": "BLUTROT", "line": "Für Spieler ohne Gnade.", "tint": Color("ff9a9a"), "glow": Color("e0261e")},
-	{"id": "neon", "name": "NEON", "line": "Blau und pink wie eine Nachtstadt.", "tint": Color("c8a8ff"), "glow": Color("ff2fd0")},
-	{"id": "gold", "name": "GOLD", "line": "Für Gewinner. Oder Angeber.", "tint": Color("ffe0a0"), "glow": Color("ffc23a")},
-	{"id": "void", "name": "LEERE", "line": "Fast nichts. Nur Umrisse im Dunkeln.", "tint": Color("8a80a0"), "glow": Color("5a3aa0")},
+	{"id": "standard", "name": "PLATINE", "line": "Retro-Mainboard in Blau: Leiterbahnen, Chips, Lötpunkte.", "tint": Color(1, 1, 1), "glow": Color("4fb6ff")},
+	{"id": "matrix", "name": "CODE", "line": "Grüner Code läuft über deine Felder.", "tint": Color(1, 1, 1), "glow": Color("2fd23a")},
+	{"id": "blood", "name": "LAVA", "line": "Schwarzer Fels mit glühenden Rissen.", "tint": Color(1, 1, 1), "glow": Color("ff6a1c")},
+	{"id": "neon", "name": "SYNTHWAVE", "line": "Neon-Raster und Sonnenuntergang wie in den 80ern.", "tint": Color(1, 1, 1), "glow": Color("ff2fd0")},
+	{"id": "gold", "name": "GOLD", "line": "Goldene Schaltkreise mit Ornamenten. Für Angeber.", "tint": Color(1, 1, 1), "glow": Color("ffc23a")},
+	{"id": "void", "name": "LEERE", "line": "Sterne und Nebel. Dein Feld schwebt im All.", "tint": Color(1, 1, 1), "glow": Color("8a6aff")},
 ]
 
 

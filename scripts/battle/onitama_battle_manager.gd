@@ -111,7 +111,7 @@ func _spawn_armies() -> void:
 			# Figurines face the opposing side, like pieces on a real board.
 			unit.rest_yaw = PI if team_id == 0 else 0.0
 			unit.rotation.y = unit.rest_yaw
-			unit.scale = Vector3.ONE * (1.18 if is_master else 1.0)
+			unit.scale = Vector3.ONE * (1.08 if is_master else 1.0)
 			units_parent.add_child(unit)
 			unit.position = grid_manager.grid_to_world(coordinate)
 			unit.create_wrap_projections(units_parent, float(grid_manager.grid_size.x) * GridManager.CELL_SIZE)
@@ -317,7 +317,7 @@ func apply_team_look(team: int, look: Dictionary) -> void:
 			fighter.build(CharacterRoster.echo_look(echo, character, tint), tint, 0.75 if echo == "echo" else 0.0)
 		unit.refresh_projections()
 	var skin := CharacterRoster.board_skin(str(look.get("board", "")))
-	grid_manager.set_side_skin(team, skin["tint"], skin["glow"])
+	grid_manager.set_side_skin(team, skin)
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:

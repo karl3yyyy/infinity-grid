@@ -213,9 +213,9 @@ export class Room {
       return;
     }
     if (message.type === "look") {
-      // Cosmetic choice (character, echoes, board skin); kept for resumes.
+      // Cosmetic choice (character and its skin, echoes, board skin); kept for resumes.
       const look = { type: "look" };
-      for (const key of ["character", "echo", "board"]) {
+      for (const key of ["character", "skin", "echo", "board"]) {
         look[key] = String(message[key] || "").slice(0, 32);
       }
       room.looks = room.looks || [null, null];

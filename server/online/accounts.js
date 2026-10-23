@@ -30,6 +30,30 @@ export const PRICES = {
   "board:neon": 250,
   "board:void": 300,
   "board:gold": 500,
+  "skin:shadow_white": 250,
+  "skin:shadow_red": 350,
+  "skin:wired_rust": 250,
+  "skin:wired_ice": 250,
+  "skin:nova_solar": 250,
+  "skin:nova_glitch": 250,
+  "skin:brute_magma": 250,
+  "skin:brute_frost": 250,
+  "skin:baby_gold": 350,
+  "skin:baby_rowdy": 250,
+  "skin:agent_red": 250,
+  "skin:agent_white": 350,
+  "skin:mira_night": 250,
+  "skin:mira_rose": 250,
+  "skin:opa_sunday": 250,
+  "skin:opa_hacker": 250,
+  "skin:punk_toxic": 250,
+  "skin:punk_chrome": 350,
+  "skin:doc_toxic": 250,
+  "skin:doc_black": 250,
+  "skin:monk_shadow": 250,
+  "skin:monk_jade": 250,
+  "skin:kid_pink": 250,
+  "skin:kid_street": 250,
 };
 
 const START_CREDITS = 300;
@@ -115,6 +139,8 @@ export class Account {
       const price = PRICES[item];
       if (price === undefined) {
         [status, error] = [400, "not_for_sale"];
+      } else if (needsCharacter(item, data.owned)) {
+        [status, error] = [403, "needs_character"];
       } else if (data.owned.includes(item)) {
         [status, error] = [409, "owned"];
       } else if (data.credits < price) {
@@ -173,4 +199,13 @@ function today() {
 
 function json(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json", ...CORS } });
+}
+
+// Skins ("skin:<character>_<name>") can only be bought for an owned character.
+function needsCharacter(item, owned) {
+  if (!item.startsWith("skin:")) {
+    return false;
+  }
+  const character = "character:" + item.slice(5).split("_")[0];
+  return PRICES[character] !== undefined && !owned.includes(character);
 }

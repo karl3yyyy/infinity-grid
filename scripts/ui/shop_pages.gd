@@ -5,7 +5,7 @@ extends RefCounted
 ## the account code for moving to another device. They are drawn into the
 ## MainMenu's terminal frame with its page helpers.
 
-const KIND_NAMES := {"character": "Charakter", "echo": "Echos", "board": "Spielfeld"}
+const KIND_NAMES := {"character": "Charakter", "skin": "Skin", "echo": "Echos", "board": "Spielfeld"}
 
 var menu: MainMenu
 var account: AccountService
@@ -33,6 +33,9 @@ func show_shop() -> void:
 	var heading := ""
 	for item: String in CharacterRoster.PRICES:
 		if AccountService.owns(item):
+			continue
+		# Skins are offered once their character is unlocked.
+		if item.begins_with("skin:") and not AccountService.owns(CharacterRoster.item_id("character", str(CharacterSkins.skin(item.get_slice(":", 1))["character"]))):
 			continue
 		offered += 1
 		var kind := item.get_slice(":", 0)
@@ -66,7 +69,7 @@ func confirm_buy(item: String, back_action: Callable) -> void:
 			await account.buy(item)
 			if AccountService.owns(item):
 				# Wear it straight away.
-				CharacterRoster.save_look_value(item.get_slice(":", 0), item.get_slice(":", 1))
+				CharacterRoster.equip(item)
 				back_action.call()
 			else:
 				status.text = _error_text(account._last_error))
@@ -124,6 +127,9 @@ func item_name(item: String) -> String:
 func _entry(item: String) -> Dictionary:
 	var id := item.get_slice(":", 1)
 	match item.get_slice(":", 0):
+		"skin":
+			var skin := CharacterSkins.skin(id)
+			return {"name": "%s · %s" % [CharacterRoster.character(str(skin["character"]))["name"], skin["name"]], "line": skin["line"]}
 		"character":
 			return CharacterRoster.character(id)
 		"echo":
@@ -146,6 +152,8 @@ func _error_text(error: String) -> String:
 			return "Nicht genug Credits."
 		"owned":
 			return "Gehört dir schon."
+		"needs_character":
+			return "Kauf zuerst den Charakter."
 		"no_account":
 			return "Diesen Code gibt es nicht."
 		"offline":

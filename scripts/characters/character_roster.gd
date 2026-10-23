@@ -93,6 +93,30 @@ const PRICES: Dictionary = {
 	"board:neon": 250,
 	"board:void": 300,
 	"board:gold": 500,
+	"skin:shadow_white": 250,
+	"skin:shadow_red": 350,
+	"skin:wired_rust": 250,
+	"skin:wired_ice": 250,
+	"skin:nova_solar": 250,
+	"skin:nova_glitch": 250,
+	"skin:brute_magma": 250,
+	"skin:brute_frost": 250,
+	"skin:baby_gold": 350,
+	"skin:baby_rowdy": 250,
+	"skin:agent_red": 250,
+	"skin:agent_white": 350,
+	"skin:mira_night": 250,
+	"skin:mira_rose": 250,
+	"skin:opa_sunday": 250,
+	"skin:opa_hacker": 250,
+	"skin:punk_toxic": 250,
+	"skin:punk_chrome": 350,
+	"skin:doc_toxic": 250,
+	"skin:doc_black": 250,
+	"skin:monk_shadow": 250,
+	"skin:monk_jade": 250,
+	"skin:kid_pink": 250,
+	"skin:kid_street": 250,
 }
 
 static func character(id: String) -> Dictionary:
@@ -113,6 +137,14 @@ static func random_character_id(exclude: String = "") -> String:
 	return str(options.pick_random()["id"])
 
 
+## The original look or one of the character's skins, at random.
+static func random_skin_id(character_id: String) -> String:
+	var options: Array[String] = [""]
+	for skin: Dictionary in CharacterSkins.for_character(character_id):
+		options.append(str(skin["id"]))
+	return options.pick_random()
+
+
 ## The player's current choice: {"character", "echo", "board"}.
 static func load_look() -> Dictionary:
 	var config := ConfigFile.new()
@@ -127,7 +159,43 @@ static func load_look() -> Dictionary:
 	for key: String in look:
 		if not AccountService.owns("%s:%s" % [key, look[key]]):
 			look[key] = defaults[key]
+	# Each character remembers its own skin; "" is the original look.
+	var skin_id := str(config.get_value("skins", look["character"], ""))
+	if skin_id != "" and not AccountService.owns(item_id("skin", skin_id)):
+		skin_id = ""
+	look["skin"] = skin_id
 	return look
+
+
+## The master character of a look (character + skin) as FighterModel builds it.
+static func dressed_character(look: Dictionary) -> Dictionary:
+	return CharacterSkins.dress(character(str(look.get("character", ""))), str(look.get("skin", "")))
+
+
+## The skin last chosen for a character ("" = original), owned or not.
+static func saved_skin(character_id: String) -> String:
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	return str(config.get_value("skins", character_id, ""))
+
+
+static func save_skin(character_id: String, skin_id: String) -> void:
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	config.set_value("skins", character_id, skin_id)
+	config.save(PROFILE_PATH)
+
+
+## Wears a cosmetic right after buying it; a skin also picks its character.
+static func equip(item: String) -> void:
+	var kind := item.get_slice(":", 0)
+	var id := item.get_slice(":", 1)
+	if kind == "skin":
+		var entry := CharacterSkins.skin(id)
+		save_look_value("character", str(entry["character"]))
+		save_skin(str(entry["character"]), id)
+	else:
+		save_look_value(kind, id)
 
 
 ## Shop id of a cosmetic, e.g. "board:gold".

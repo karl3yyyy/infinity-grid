@@ -8,8 +8,9 @@ extends Control
 ## the pixel sprite used on the board. Swipe (or the arrows) for the next one.
 
 signal closed
-signal chosen(character_id: String)
-signal buy_requested(character_id: String)
+signal chosen(character_id: String, skin_id: String)
+## item is a shop id: the locked character or the locked skin shown.
+signal buy_requested(item: String)
 
 const STYLE_COLORS := {
 	"mage": Color("2ad4ff"),
@@ -63,11 +64,15 @@ var _select_button: Button
 var _flash: ColorRect
 var _backdrop: Control
 var _fighters: Node3D
+## Skin shown on the current page ("" = original) and the row choosing it.
+var _skin_id: String = ""
+var _skin_row: HBoxContainer
 
 
 func open(start_index: int, selected_id: String) -> void:
 	index = clampi(start_index, 0, CharacterRoster.CHARACTERS.size() - 1)
 	_selected_id = selected_id
+	_skin_id = CharacterRoster.saved_skin(str(CharacterRoster.CHARACTERS[index]["id"]))
 	_build_shell()
 	_show_slide(0)
 
@@ -130,6 +135,16 @@ func _build_shell() -> void:
 	next.pressed.connect(step.bind(1))
 	bottom.add_child(next)
 
+	_skin_row = HBoxContainer.new()
+	_skin_row.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	_skin_row.offset_left = 20.0
+	_skin_row.offset_right = -20.0
+	_skin_row.offset_top = -168.0
+	_skin_row.offset_bottom = -112.0
+	_skin_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_skin_row.add_theme_constant_override("separation", 10)
+	add_child(_skin_row)
+
 	_flash = ColorRect.new()
 	_flash.color = Color(1, 1, 1, 0)
 	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -150,7 +165,37 @@ func step(direction: int) -> void:
 	if _busy:
 		return
 	index = posmod(index + direction, CharacterRoster.CHARACTERS.size())
+	_skin_id = CharacterRoster.saved_skin(str(CharacterRoster.CHARACTERS[index]["id"]))
 	_show_slide(direction)
+
+
+## Shows the page again in another skin.
+func show_skin(skin_id: String) -> void:
+	if _busy or skin_id == _skin_id:
+		return
+	_skin_id = skin_id
+	_show_slide(0)
+
+
+func _fill_skin_row(character: Dictionary, accent: Color) -> void:
+	for chip: Node in _skin_row.get_children():
+		chip.queue_free()
+	var options: Array[Dictionary] = [{"id": "", "name": "ORIGINAL"}]
+	options.append_array(CharacterSkins.for_character(str(character["id"])))
+	for option: Dictionary in options:
+		var chip := Button.new()
+		var skin_id := str(option["id"])
+		var locked := skin_id != "" and not AccountService.owns(CharacterRoster.item_id("skin", skin_id))
+		chip.text = str(option["name"])
+		chip.add_theme_font_size_override("font_size", 24)
+		chip.focus_mode = Control.FOCUS_NONE
+		if skin_id == _skin_id:
+			chip.add_theme_stylebox_override("normal", TerminalTheme.bar(accent))
+			chip.add_theme_color_override("font_color", Color("05070a"))
+		elif locked:
+			chip.self_modulate = Color(1.0, 1.0, 1.0, 0.5)
+		chip.pressed.connect(show_skin.bind(skin_id))
+		_skin_row.add_child(chip)
 
 
 func _show_slide(direction: int) -> void:
@@ -169,9 +214,10 @@ func _show_slide(direction: int) -> void:
 	var accent: Color = STYLE_COLORS.get(character.get("style", "brawler"), TerminalTheme.GREEN)
 	_counter.text = "%02d / %02d" % [index + 1, CharacterRoster.CHARACTERS.size()]
 	_update_select_button(character)
+	_fill_skin_row(character, accent)
 	(_backdrop as SpeedLines).accent = accent
 	_backdrop.queue_redraw()
-	_slide = _build_slide(character, accent)
+	_slide = _build_slide(CharacterSkins.dress(character, _skin_id), accent)
 	add_child(_slide)
 	move_child(_slide, _backdrop.get_index() + 1)
 	await _intro(_slide, accent)
@@ -259,7 +305,12 @@ func _build_slide(character: Dictionary, accent: Color) -> Control:
 	text.add_theme_constant_override("separation", 8)
 	info.add_child(text)
 	text.add_child(_text("> SO IM SPIEL", 28, accent))
-	text.add_child(_text(str(character["line"]), 26, TerminalTheme.GREEN_BRIGHT))
+	var skin := CharacterSkins.skin(_skin_id)
+	if skin.is_empty():
+		text.add_child(_text(str(character["line"]), 26, TerminalTheme.GREEN_BRIGHT))
+	else:
+		text.add_child(_text("SKIN: %s" % skin["name"], 26, accent.lightened(0.3)))
+		text.add_child(_text(str(skin["line"]), 26, TerminalTheme.GREEN_BRIGHT))
 	text.add_child(_text("KAMPFSTIL: %s" % str(style.get("name", "")), 26, TerminalTheme.GREEN))
 	text.add_child(_text(str(style.get("line", "")), 24, TerminalTheme.GREEN_DIM))
 	return slide
@@ -340,24 +391,37 @@ func _intro(slide: Control, accent: Color) -> void:
 
 
 func _update_select_button(character: Dictionary) -> void:
-	var active := str(character["id"]) == _selected_id
-	var item := CharacterRoster.item_id("character", str(character["id"]))
-	if not AccountService.owns(item):
-		_select_button.text = "KAUFEN · %d CR" % CharacterRoster.PRICES[item]
+	var id := str(character["id"])
+	var item := _locked_item(id)
+	if item != "":
+		_select_button.text = ("SKIN · %d CR" if item.begins_with("skin:") else "KAUFEN · %d CR") % CharacterRoster.PRICES[item]
 		_select_button.disabled = false
 		return
+	var active := id == _selected_id and _skin_id == CharacterRoster.saved_skin(id)
 	_select_button.text = "AUSGEWÄHLT" if active else "AUSWÄHLEN"
 	_select_button.disabled = active
 
 
-## Locked characters are not selected here; the menu offers to buy them.
+## The shop item standing between the player and this page's look, or "".
+func _locked_item(character_id: String) -> String:
+	var character_item := CharacterRoster.item_id("character", character_id)
+	if not AccountService.owns(character_item):
+		return character_item
+	if _skin_id != "" and not AccountService.owns(CharacterRoster.item_id("skin", _skin_id)):
+		return CharacterRoster.item_id("skin", _skin_id)
+	return ""
+
+
+## Locked looks are not selected here; the menu offers to buy them.
 func _choose() -> void:
 	var id := str(CharacterRoster.CHARACTERS[index]["id"])
-	if not AccountService.owns(CharacterRoster.item_id("character", id)):
-		buy_requested.emit(id)
+	var item := _locked_item(id)
+	if item != "":
+		buy_requested.emit(item)
 		return
 	_selected_id = id
-	chosen.emit(_selected_id)
+	CharacterRoster.save_skin(id, _skin_id)
+	chosen.emit(_selected_id, _skin_id)
 	_update_select_button(CharacterRoster.CHARACTERS[index])
 
 

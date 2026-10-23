@@ -161,7 +161,7 @@ func send_pass(seq: int, slot: int) -> void:
 
 ## Tells the opponent which character, echoes and board skin to show.
 func send_look(look: Dictionary) -> void:
-	_send_now({"type": "look", "character": str(look.get("character", "")), "echo": str(look.get("echo", "")), "board": str(look.get("board", ""))})
+	_send_now({"type": "look", "character": str(look.get("character", "")), "skin": str(look.get("skin", "")), "echo": str(look.get("echo", "")), "board": str(look.get("board", ""))})
 
 
 func is_reconnecting() -> bool:

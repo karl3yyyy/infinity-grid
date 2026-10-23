@@ -307,6 +307,8 @@ func _add_gear(gear: String, look: Dictionary) -> void:
 			_shades()
 		"round_glasses":
 			_round_glasses()
+		"visor":
+			_visor(glow)
 		"coat":
 			_coat(look.get("coat_color", Color("0d0f12")))
 		"tubes":
@@ -357,6 +359,15 @@ func _shades() -> void:
 	_box(head, Vector3(0.19, 0.045, 0.02), _head_point(Vector3(0.0, 0.085, 0.105)), black)
 	for side: float in [-1.0, 1.0]:
 		_box(head, Vector3(0.012, 0.012, 0.12), _head_point(Vector3(side * 0.095, 0.09, 0.05)), black)
+
+
+## Glowing band across the eyes, wrapping round to the temples.
+func _visor(glow: Color) -> void:
+	var head := _head_attachment()
+	var light := _flat(glow, 3.0)
+	_box(head, Vector3(0.2, 0.035, 0.02), _head_point(Vector3(0.0, 0.085, 0.108)), light)
+	for side: float in [-1.0, 1.0]:
+		_box(head, Vector3(0.015, 0.03, 0.09), _head_point(Vector3(side * 0.098, 0.085, 0.06)), _flat(Color("15171a"), 0.0, 0.8))
 
 
 func _round_glasses() -> void:

@@ -289,8 +289,10 @@ func refresh_turn_instruction() -> void:
 func _apply_match_looks(own_team: int) -> void:
 	var own := CharacterRoster.load_look()
 	apply_team_look(own_team, own)
+	var rival := CharacterRoster.random_character_id(own["character"])
 	apply_team_look(1 - own_team, {
-		"character": CharacterRoster.random_character_id(own["character"]),
+		"character": rival,
+		"skin": CharacterRoster.random_skin_id(rival),
 		"echo": CharacterRoster.ECHO_STYLES.pick_random()["id"],
 		"board": CharacterRoster.BOARD_SKINS.pick_random()["id"],
 	})
@@ -299,7 +301,7 @@ func _apply_match_looks(own_team: int) -> void:
 ## Shows a team's master portrait, student echoes and board half skin.
 func apply_team_look(team: int, look: Dictionary) -> void:
 	team_looks[team] = look
-	var character := CharacterRoster.character(str(look.get("character", "")))
+	var character := CharacterRoster.dressed_character(look)
 	var echo := str(CharacterRoster.echo_style(str(look.get("echo", "")))["id"])
 	var tint: Color = OnitamaUI.TEAM_COLORS[team]
 	var team_units: Array[BattleUnit] = players if team == 0 else enemies

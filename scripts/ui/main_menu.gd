@@ -406,7 +406,7 @@ func adopt_account_profile() -> void:
 func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
 	var look := CharacterRoster.load_look()
-	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.character(look["character"])["name"], _show_character_picker)
+	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
@@ -424,10 +424,10 @@ func _show_character_picker() -> void:
 	var showcase := CharacterShowcase.new()
 	showcase.name = "CharacterShowcase"
 	add_child(showcase)
-	showcase.chosen.connect(func(character_id: String) -> void: CharacterRoster.save_look_value("character", character_id))
-	showcase.buy_requested.connect(func(character_id: String) -> void:
+	showcase.chosen.connect(func(character_id: String, _skin_id: String) -> void: CharacterRoster.save_look_value("character", character_id))
+	showcase.buy_requested.connect(func(item: String) -> void:
 		showcase.queue_free()
-		_shop.confirm_buy(CharacterRoster.item_id("character", character_id), _show_character_picker))
+		_shop.confirm_buy(item, _show_character_picker))
 	showcase.closed.connect(func() -> void:
 		showcase.queue_free()
 		_show_collection())

@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1792783118|7602394';
+const CACHE_VERSION = '1792785276|10821625';
 /** @type {string} */
 const CACHE_PREFIX = 'Infinity Grid-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

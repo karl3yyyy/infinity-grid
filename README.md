@@ -26,7 +26,11 @@ The interface language is German.
 - **Board skins:** circuit board, code rain, lava, synthwave, gold and starfield
   patterns for your half of the board.
 - **Accounts:** play as a guest, then sign in with e-mail and password or
-  Google; credits, purchases and the profile picture follow the account.
+  Google and choose a permanent username; credits, purchases and the profile
+  picture follow the account.
+- **Ranked and friends:** Elo-rated ranked games refereed by the server
+  (tiers Bit-Runner to Root Sovereign, leaderboard), friends by username with
+  online status, challenges and invitations.
 - **Shop:** credits are earned through daily bonuses and bot wins and spent on
   characters, skins, echoes and board skins; credit packs can be bought with
   Stripe (currently in test mode).
@@ -39,7 +43,7 @@ The interface language is German.
 2. Pick one of your pieces. Highlighted squares show where the card allows it to go.
 3. Move there. Landing on an opposing piece captures it.
 4. The card you played swaps with the pass card; your opponent gets the old pass card next.
-5. Capture the opposing KERN to win.
+5. Capture the opposing KERN, or move any of your pieces onto its starting square, to win.
 
 Cards show a 5×5 diagram: the dark square is the piece, coloured squares are
 its targets. Moves past the left or right edge come back on the other side.

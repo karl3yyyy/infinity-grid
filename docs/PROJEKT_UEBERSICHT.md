@@ -95,11 +95,10 @@ Testkauf: im Spiel Shop → Paket → im neuen Fenster mit Testkarte
 
 ## 7. Offene Punkte
 
-**In Arbeit: Freunde, Ranked, fester Benutzername, neues Menü.** Der Server ist
-fertig und live (Ranked mit Elo, Rängen BRONZE bis KERN, Rangliste; Freunde
-über Benutzernamen; Benutzername einmal wählbar). Es fehlen noch die Seiten im
-Spiel: Benutzername wählen, SPIELEN-Übersicht mit Ranked, Freunde-Tab, die
-Menü-Animationen und Tests.
+**Neu:** Freunde, Ranked (Ränge Bit-Runner → Data-Net Rogue → System Cipher →
+Core Master → Root Sovereign, Rangliste), fester Benutzername, neues Menü mit
+Animationen, Siegregel „Figur auf dem Startfeld des gegnerischen KERNs“.
+Nächster Schritt: das Design-Konzept (v4) gemeinsam durchgehen.
 
 
 1. **Google-Anmeldung einrichten**: Google-Cloud-Projekt + OAuth-Client anlegen,

@@ -26,6 +26,8 @@ func add_section(parent: Control) -> void:
 		menu._add_menu_button(parent, "ANMELDEN", "Mit Google oder E-Mail", show_login)
 	else:
 		parent.add_child(menu._make_text("ANGEMELDET: " + account.email(), 22, TerminalTheme.GREEN_BRIGHT))
+		if account.username().is_empty():
+			menu._add_menu_button(parent, "BENUTZERNAMEN WÄHLEN", "Brauchst du für Freunde und Ranked", show_choose_username)
 		menu._add_menu_button(parent, "ABMELDEN", "Dieses Gerät vom Konto trennen", _confirm_logout)
 
 
@@ -99,7 +101,35 @@ func _google() -> void:
 
 func _signed_in() -> void:
 	menu.adopt_account_profile()
-	menu._show_profile()
+	if account.username().is_empty():
+		show_choose_username()
+	else:
+		menu._show_profile()
+
+
+## Once per account: the name others see, for good.
+func show_choose_username() -> void:
+	menu._set_page("BENUTZERNAME", menu._show_profile)
+	menu._content.add_child(menu._make_text("Wähle deinen Namen im Grid. Freunde finden dich darüber, und er steht in der Rangliste.", MainMenu.TEXT_FONT_SIZE))
+	menu._content.add_child(menu._make_text("3 bis 16 Zeichen: Buchstaben, Ziffern, _ . Achtung: Du kannst ihn danach NIE mehr ändern.", 22, TerminalTheme.GREEN_DIM))
+	var field := _field("z. B. NeoRunner", false)
+	field.max_length = 16
+	var status := menu._make_text("", MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
+	menu._add_menu_button(menu._content, "FESTLEGEN", "Dieser Name gehört dann dir", func() -> void:
+		var wanted := field.text.strip_edges()
+		if not RegEx.create_from_string("^[A-Za-z0-9_]{3,16}$").search(wanted):
+			status.text = "3 bis 16 Zeichen, nur Buchstaben, Ziffern und _."
+			return
+		status.text = "Prüfe ..."
+		await account.choose_username(wanted)
+		if account._last_error.is_empty():
+			menu.adopt_account_profile()
+			menu._show_profile()
+		elif status.is_inside_tree():
+			status.text = _error_text(account._last_error))
+	menu._content.add_child(status)
+	menu._add_menu_button(menu._content, "SPÄTER", "Ohne Namen keine Freunde und kein Ranked", menu._show_profile)
+	field.grab_focus.call_deferred()
 
 
 func _confirm_logout() -> void:
@@ -137,6 +167,12 @@ func _error_text(error: String) -> String:
 			return "E-Mail oder Passwort stimmt nicht."
 		"locked":
 			return "Zu viele Versuche. Warte 15 Minuten."
+		"username_taken":
+			return "Den Namen gibt es schon. Versuch einen anderen."
+		"username_set":
+			return "Du hast schon einen Namen."
+		"bad_username":
+			return "3 bis 16 Zeichen, nur Buchstaben, Ziffern und _."
 		"google_off":
 			return "Google-Anmeldung ist noch nicht eingerichtet."
 		"offline":

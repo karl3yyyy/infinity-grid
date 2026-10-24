@@ -93,6 +93,11 @@ Players start as guests and may sign in with e-mail + password or Google
 (`server/online/auth.js`, PBKDF2 password hashes); a login only leads to an
 account. Apple sign-in is approved but waits for an Apple developer account.
 
+Approved: ranked play and friends. Signed-in players choose a permanent,
+unique username. Ranked rooms referee every move on the server
+(`server/online/rules.js`) and rate results there (`ranked.js`, Elo with the
+design bible's tiers); friends (`friends.js`) are found by username.
+
 Approved: credit packs bought with real money through Stripe Checkout
 (`server/online/payments.js`). Credits are only granted from a verified Stripe
 webhook, never from the client. Secret keys live in Cloudflare secrets and are

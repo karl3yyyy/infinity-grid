@@ -17,11 +17,6 @@ signal quit_requested
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const CardViewScript := preload("res://scripts/ui/card_view.gd")
-const DIFFICULTY_OPTIONS: Array[Dictionary] = [
-	{"title": "LEICHT", "subtitle": "Zum Reinkommen – macht auch mal Fehler"},
-	{"title": "MITTEL", "subtitle": "Denkt einen Zug voraus"},
-	{"title": "SCHWER", "subtitle": "Rechnet mehrere Züge tief"},
-]
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
 const ENTRY_FONT_SIZE: int = 46
 const TEXT_FONT_SIZE: int = 26
@@ -47,6 +42,10 @@ var _previews: Node3D
 var account: AccountService
 var _shop: ShopPages
 var _login: LoginPages
+var _play: PlayPages
+var _friends: FriendsPages
+## Entries added to the current page, for the staggered entrance.
+var _entry_count: int = 0
 
 
 func _ready() -> void:
@@ -57,11 +56,19 @@ func _ready() -> void:
 	add_child(account)
 	_shop = ShopPages.new(self, account)
 	_login = LoginPages.new(self, account)
+	_play = PlayPages.new(self, account)
+	_friends = FriendsPages.new(self, account)
 	account.changed.connect(_update_profile_button)
 	# Headless test runs must not open accounts on the live server.
 	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
 	if MatchClient.is_online_available() and not is_test_run:
 		_connect_account.call_deferred()
+		# Friends see us as online while the game keeps checking in.
+		var heartbeat := Timer.new()
+		heartbeat.wait_time = 90.0
+		heartbeat.autostart = true
+		heartbeat.timeout.connect(func() -> void: account.refresh_if_stale())
+		add_child(heartbeat)
 	_build_shell()
 	_show_home()
 
@@ -98,7 +105,12 @@ func _build_shell() -> void:
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(background)
+	var rain := MenuMotion.CodeRain.new()
+	rain.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(rain)
 	add_child(_radial_overlay(Color(TerminalTheme.GREEN, 0.07), Color(0, 0, 0, 0), Vector2(0.5, 0.42)))
+	var scan := MenuMotion.ScanBar.new()
+	add_child(scan)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -254,100 +266,13 @@ func _show_home() -> void:
 			online_resume_requested.emit(session))
 	if _resume_available:
 		_add_menu_button(_content, "ZUR PARTIE", "Zurück ins laufende Spiel", close_menu)
+	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, mit Code, lokal", _play.show_play)
 	if MatchClient.is_online_available():
-		_add_menu_button(_content, "SCHNELLES ONLINE-SPIEL", "Zufälliger Gegner, ohne Code", func() -> void:
-			close_menu()
-			online_quick_requested.emit())
-	_add_menu_button(_content, "GEGEN DEN BOT", "Schwierigkeit wählen", _show_difficulty)
-	_add_menu_button(_content, "MULTIPLAYER", "Ein Gerät, WLAN oder online mit Code", _show_multiplayer)
-	_add_menu_button(_content, "SAMMLUNG", "Alle Bewegungskarten ansehen", _show_collection)
+		_add_menu_button(_content, "FREUNDE", _friends.summary(), _friends.show_friends)
+	_add_menu_button(_content, "SAMMLUNG", "Charaktere, Skins, Spielfeld, Profilbild, Karten", _show_collection)
 	_add_menu_button(_content, "SHOP", "Charaktere, Echos und Spielfelder für Credits", _shop.show_shop)
-	_add_menu_button(_content, "BEENDEN", "Spiel schließen", func() -> void: quit_requested.emit())
-	_focus_first_entry()
-
-
-func _show_difficulty() -> void:
-	_set_page("BOT", _show_home)
-	for level: int in range(DIFFICULTY_OPTIONS.size()):
-		var option: Dictionary = DIFFICULTY_OPTIONS[level]
-		var marker := " *" if level == bot_difficulty else ""
-		_add_menu_button(_content, str(option["title"]) + marker, str(option["subtitle"]), _choose_difficulty.bind(level))
-	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
-	_focus_first_entry(bot_difficulty)
-
-
-func _choose_difficulty(level: int) -> void:
-	bot_difficulty = level
-	_save_profile()
-	_start_bot_training()
-
-
-func _show_multiplayer() -> void:
-	_set_page("MULTIPLAYER", _show_home)
-	_add_menu_button(_content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person spielen", _start_local_multiplayer)
-	_add_menu_button(_content, "IM WLAN SPIELEN", "Zwei Handys, der PC ist Gastgeber", _start_lan_match)
-	if MatchClient.is_online_available():
-		_add_menu_button(_content, "ONLINE", "Zufälliger Gegner oder Raum-Code", _show_online_play)
-	else:
-		_add_menu_button(_content, "ONLINE", "Noch nicht verfügbar: Spielserver fehlt", _show_online_page.bind("ONLINE"))
-	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
-	_focus_first_entry()
-
-
-func _show_online_play() -> void:
-	_set_page("ONLINE", _show_multiplayer)
-	_add_menu_button(_content, "SCHNELLES SPIEL", "Zufälliger Gegner, sofort los", func() -> void:
-		close_menu()
-		online_quick_requested.emit())
-	_add_menu_button(_content, "SPIEL ERSTELLEN", "Du bekommst einen Raum-Code", func() -> void:
-		close_menu()
-		online_create_requested.emit(""))
-	var code_input := LineEdit.new()
-	code_input.placeholder_text = "RAUM-CODE  ____"
-	code_input.max_length = 4
-	code_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-	code_input.custom_minimum_size = Vector2(300.0, 56.0)
-	code_input.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	code_input.add_theme_font_size_override("font_size", 36)
-	_content.add_child(code_input)
-	var join := func() -> void:
-		var code := code_input.text.strip_edges()
-		if code.length() != 4 or not code.is_valid_int():
-			code_input.placeholder_text = "4 ZIFFERN!"
-			code_input.text = ""
-			return
-		close_menu()
-		online_join_requested.emit(code)
-	code_input.text_submitted.connect(func(_text: String) -> void: join.call())
-	_add_menu_button(_content, "BEITRETEN", "Mit dem Code deines Gegners", join)
-	_add_menu_button(_content, "< ZURÜCK", "Zu Multiplayer", _show_multiplayer)
-	_focus_first_entry()
-
-
-func _start_lan_match() -> void:
-	if not MatchClient.is_lan_available():
-		_show_lan_help()
-		return
-	close_menu()
-	lan_match_requested.emit()
-
-
-func _show_lan_help() -> void:
-	_set_page("WLAN", _show_multiplayer)
-	_content.add_child(_make_text(
-		"Starte am PC „WLAN-Spiel starten“ und öffne auf beiden Handys die Adresse, die dort angezeigt wird. Diese Version kommt aus dem Internet und kann sich nicht mit deinem PC verbinden.",
-		TEXT_FONT_SIZE
-	))
-	_add_menu_button(_content, "< ZURÜCK", "Zu Multiplayer", _show_multiplayer)
-	_focus_first_entry()
-
-
-func _show_online_page(mode_name: String) -> void:
-	_set_page(mode_name, _show_home)
-	_update_profile_button()
-	_content.add_child(_make_text("Noch nicht verfügbar. Dafür fehlt die Verbindung zum Spielserver.", TEXT_FONT_SIZE))
-	_content.add_child(_make_text("Dein Profilname wird nur auf diesem Gerät gespeichert.", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
-	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
+	if not OS.has_feature("web"):
+		_add_menu_button(_content, "BEENDEN", "Spiel schließen", func() -> void: quit_requested.emit())
 	_focus_first_entry()
 
 
@@ -366,32 +291,24 @@ func _show_profile() -> void:
 	naming.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(naming)
 	naming.add_child(_make_text("NAME", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
-	var name_input := LineEdit.new()
-	name_input.text = profile_name
-	name_input.max_length = 20
-	name_input.placeholder_text = "Dein Anzeigename"
-	name_input.custom_minimum_size.y = 52.0
-	name_input.add_theme_font_size_override("font_size", 32)
-	naming.add_child(name_input)
-	_add_menu_button(_content, "SPEICHERN", "Namen übernehmen", func() -> void:
-		profile_name = name_input.text.strip_edges()
-		if profile_name.is_empty():
-			profile_name = "Spieler"
-		_save_profile()
-		account.save_profile(profile_name, avatar_id)
-		_show_home()
-	)
+	# The name is the account's username and cannot be edited.
+	var shown := account.username() if not account.username().is_empty() else "GAST"
+	naming.add_child(_make_text(shown, 40, TerminalTheme.GREEN_BRIGHT))
+	if not account.account.is_empty():
+		naming.add_child(_make_text("%s  ·  %d PUNKTE" % [str(account.account.get("rank", "")), int(account.account.get("rating", 1000))], 22, TerminalTheme.GREEN_DIM))
 	_add_menu_button(_content, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", _show_avatar_picker.bind(_show_profile))
 	_shop.add_account_section(_content)
 	_login.add_section(_content)
-	_add_menu_button(_content, "< ZURÜCK", "Ohne Speichern zurück", _show_home)
-	name_input.grab_focus.call_deferred()
+	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
+	_focus_first_entry()
 
 
 ## Opens the account on first start, afterwards refreshes it (daily bonus).
 func _connect_account() -> void:
 	var is_new := not account.has_account()
 	await account.connect_account()
+	if not account.account.is_empty():
+		adopt_account_profile()
 	if is_new and account.has_account():
 		# A new account takes over the name chosen on this device.
 		account.save_profile(profile_name, avatar_id)
@@ -399,7 +316,7 @@ func _connect_account() -> void:
 
 ## After signing in or out, use the account's name and picture here.
 func adopt_account_profile() -> void:
-	profile_name = str(account.account.get("name", profile_name))
+	profile_name = account.username() if not account.username().is_empty() else "Gast"
 	avatar_id = AvatarGallery.valid(str(account.account.get("avatar", avatar_id)))
 	_save_profile()
 	_update_profile_button()
@@ -594,6 +511,8 @@ func _set_page(title: String, back_action: Callable) -> void:
 	_back_action = back_action
 	_page_title.text = "-------- %s --------" % title
 	_description.text = ""
+	MenuMotion.type_in(_page_title)
+	_entry_count = 0
 
 
 ## One menu entry; the subtitle appears below the list while it is selected.
@@ -608,6 +527,8 @@ func _add_menu_button(parent: Control, title: String, subtitle: String, action: 
 	button.focus_entered.connect(func() -> void: _description.text = "> " + subtitle if not subtitle.is_empty() else "")
 	button.pressed.connect(action)
 	parent.add_child(button)
+	MenuMotion.enter(button, _entry_count)
+	_entry_count += 1
 
 
 func _focus_first_entry(preferred_index: int = 0) -> void:
@@ -670,7 +591,7 @@ func _load_profile() -> void:
 		return
 	profile_name = str(config.get_value("profile", "name", profile_name))
 	avatar_id = AvatarGallery.valid(str(config.get_value("profile", "avatar_id", avatar_id)))
-	bot_difficulty = clampi(int(config.get_value("profile", "bot_difficulty", bot_difficulty)), 0, DIFFICULTY_OPTIONS.size() - 1)
+	bot_difficulty = clampi(int(config.get_value("profile", "bot_difficulty", bot_difficulty)), 0, PlayPages.DIFFICULTY_OPTIONS.size() - 1)
 
 
 func _save_profile() -> void:

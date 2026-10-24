@@ -19,18 +19,17 @@ const LEADERBOARD_SIZE = 50;
 const MATCH_GAP = 100;
 const MATCH_GAP_PER_SECOND = 20;
 
-// Must match RankedRules.TIERS in scripts/network/ranked_rules.gd (checked by tests/lan_test.gd).
+// Rank tiers of the design bible; the game shows the names the server sends.
 export const TIERS = [
-  ["BRONZE", 0],
-  ["SILBER", 1100],
-  ["GOLD", 1250],
-  ["PLATIN", 1400],
-  ["DIAMANT", 1550],
-  ["KERN", 1700],
+  ["BIT-RUNNER", 0],
+  ["DATA-NET ROGUE", 1150],
+  ["SYSTEM CIPHER", 1300],
+  ["CORE MASTER", 1450],
+  ["ROOT SOVEREIGN", 1600],
 ];
 
 export function rankOf(rating, games) {
-  if (games < PLACEMENT_GAMES) return "PLATZIERUNG";
+  if (games < PLACEMENT_GAMES) return "KALIBRIERUNG";
   let name = TIERS[0][0];
   for (const [tier, floor] of TIERS) {
     if (rating >= floor) name = tier;

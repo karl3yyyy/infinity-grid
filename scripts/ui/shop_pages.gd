@@ -86,8 +86,10 @@ func confirm_buy(item: String, back_action: Callable) -> void:
 
 
 ## Real-money purchase of a credit pack on Stripe's checkout page. The credits
-## arrive when Stripe tells the server, never from the game itself.
+## arrive when Stripe tells the server, never from the game itself; this page
+## stays open meanwhile and picks them up.
 func buy_pack(pack: Dictionary) -> void:
+	StripeCheckout.reserve_window()
 	menu._set_page("KASSE", show_shop)
 	menu._content.add_child(menu._make_text("+%d CREDITS für %s" % [int(pack["credits"]), str(pack["label"])], 34, TerminalTheme.GREEN_BRIGHT))
 	var status := menu._make_text("Kasse wird geöffnet ...", MainMenu.TEXT_FONT_SIZE)
@@ -97,43 +99,40 @@ func buy_pack(pack: Dictionary) -> void:
 	var before := account.credits()
 	var details := await account.start_checkout(str(pack["id"]))
 	if details.is_empty():
+		StripeCheckout.release_window()
 		status.text = _error_text(account._last_error)
 		return
-	StripeCheckout.open(str(details.get("url", "")))
-	if OS.has_feature("web"):
-		# The page leaves for Stripe and comes back via show_checkout_return().
-		status.text = "Weiter zu Stripe ..."
-		return
-	status.text = "Die Kasse ist im Browser offen. Zurück hier: „GUTHABEN PRÜFEN“."
-	menu._add_menu_button(menu._content, "GUTHABEN PRÜFEN", "Nach der Zahlung die Credits abholen", func() -> void:
+	match StripeCheckout.open(str(details.get("url", ""))):
+		"page":
+			status.text = "Weiter zu Stripe ..."
+			return
+		"window":
+			status.text = "Bezahle im neuen Fenster. Lass dieses hier offen – die Credits kommen dann von selbst."
+		_:
+			status.text = "Die Kasse ist im Browser offen. Die Credits kommen hier von selbst an."
+	menu._add_menu_button(menu._content, "GUTHABEN PRÜFEN", "Credits jetzt abholen", func() -> void:
 		await _wait_for_credits(before, status, 1))
+	# Paying takes a while; keep asking the server as long as this page is open.
+	await _wait_for_credits(before, status, 150, false)
 
 
-## After Stripe sent the player back into the (reloaded) web game.
-## credits_before: the balance cached on this device before leaving for Stripe.
-func show_checkout_return(result: String, credits_before: int) -> void:
-	menu._set_page("KASSE", show_shop)
-	var status := menu._make_text("", MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
-	menu._content.add_child(status)
-	menu._add_menu_button(menu._content, "ZUM SHOP", "Credits ausgeben", show_shop)
-	menu._focus_first_entry()
-	if result != "success":
-		status.text = "Kauf abgebrochen, nichts bezahlt."
-		return
-	# Today's login bonus may have arrived on the same refresh.
-	await _wait_for_credits(credits_before + int(account.account.get("bonus", 0)), status, 10)
-
-
-func _wait_for_credits(before: int, status: Label, attempts: int) -> void:
-	status.text = "Zahlung angekommen? Credits werden abgeholt ..."
+## Asks the server until the balance rose above `before` or the page closed.
+## announce = false keeps the current status text while waiting.
+func _wait_for_credits(before: int, status: Label, attempts: int, announce: bool = true) -> void:
+	if announce:
+		status.text = "Credits werden abgeholt ..."
 	for attempt: int in range(attempts):
+		if not status.is_inside_tree():
+			return
 		await account.connect_account()
+		# Today's login bonus can arrive with the same answer; it is not the purchase.
+		before += int(account.account.get("bonus", 0))
 		if account.credits() > before:
 			if status.is_inside_tree():
 				status.text = "Danke! +%d Credits. Du hast jetzt %d." % [account.credits() - before, account.credits()]
 			return
-		await menu.get_tree().create_timer(2.0).timeout
-	if status.is_inside_tree():
+		await menu.get_tree().create_timer(4.0).timeout
+	if announce and status.is_inside_tree():
 		status.text = "Noch keine Credits da. Das kann eine Minute dauern – schau gleich nochmal ins Profil."
 
 

@@ -3,8 +3,10 @@
 // 1. The game asks POST /api/account/checkout {pack}. The server creates a
 //    Stripe Checkout Session for the pack's price, tagged with the account
 //    key (a SHA-256 hash of the account code), and answers {url}.
-// 2. The game sends the player to that Stripe page. Afterwards Stripe sends
-//    them back to the game (/?checkout=success or /?checkout=cancel).
+// 2. The game opens that Stripe page in its own window and stays open itself,
+//    waiting for the credits. Afterwards Stripe shows /checkout/done, a small
+//    thank-you page. It deliberately does not load the game: an installed web
+//    app or another browser would have other storage, so another account.
 // 3. Stripe calls POST /api/stripe/webhook. Only a correctly signed, paid
 //    "checkout.session.completed" (or "...async_payment_succeeded") event adds
 //    the pack's credits, once per session. The game never reports a payment.
@@ -40,8 +42,8 @@ export function offeredPacks(env) {
     .map(([id, pack]) => ({ id, credits: pack.credits, label: pack.label }));
 }
 
-// returnPage: the game page (origin and path, no trailing slash) to come back to.
-export async function createCheckout(env, accountKey, packId, returnPage) {
+// gamePage: where the thank-you page links back to (checked by gameLink).
+export async function createCheckout(env, accountKey, packId, serverOrigin, gamePage) {
   const pack = PACKS[packId];
   if (!paymentsEnabled(env) || !pack || !env[pack.price]) {
     return { status: 503, body: { error: "payments_off" } };
@@ -52,8 +54,8 @@ export async function createCheckout(env, accountKey, packId, returnPage) {
     "line_items[0][quantity]": "1",
     client_reference_id: accountKey,
     "metadata[pack]": packId,
-    success_url: returnPage + "/?checkout=success",
-    cancel_url: returnPage + "/?checkout=cancel",
+    success_url: `${serverOrigin}/checkout/done?result=success&back=${encodeURIComponent(gamePage)}`,
+    cancel_url: `${serverOrigin}/checkout/done?result=cancel&back=${encodeURIComponent(gamePage)}`,
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
@@ -125,4 +127,32 @@ function timingSafeEqual(a, b) {
     difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
   }
   return difference === 0;
+}
+
+// Only this server's game and GitHub Pages copies of it are linked back to.
+function gameLink(page, origin) {
+  const text = String(page || "");
+  if (/^https:\/\/[a-z0-9-]+\.github\.io(\/[A-Za-z0-9._-]+)*\/?$/.test(text) || text === origin || text === origin + "/") {
+    return text;
+  }
+  return origin + "/";
+}
+
+// Where Stripe sends the player after paying or cancelling.
+export function donePage(url) {
+  const paid = url.searchParams.get("result") === "success";
+  const back = gameLink(url.searchParams.get("back"), url.origin);
+  const message = paid
+    ? "Danke! Deine Credits sind unterwegs und erscheinen gleich im Spiel."
+    : "Kauf abgebrochen, nichts bezahlt.";
+  const html = `<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infinity Grid – Kasse</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0e09;color:#6ee65a;font:20px/1.5 monospace;text-align:center;padding:16px}a{color:#a6ff8f}small{color:#3f8a35}</style>
+</head><body><main><p>${message}</p>
+<p><small>Du kannst dieses Fenster jetzt schließen. Das Spiel ist im anderen Fenster noch offen.</small></p>
+<p><a href="${back.replace(/"/g, "")}">Zurück zum Spiel</a></p></main>
+<script>setTimeout(function () { window.close(); }, 4000);</script>
+</body></html>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }

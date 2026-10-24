@@ -152,7 +152,7 @@ func packs() -> Array:
 func start_checkout(pack_id: String) -> Dictionary:
 	var body := {"pack": pack_id}
 	if OS.has_feature("web"):
-		# Come back to this very page: its browser storage holds this account.
+		# The thank-you page links back to this very page.
 		body["return_to"] = str(JavaScriptBridge.eval("window.location.origin + window.location.pathname"))
 	await _call("checkout", HTTPClient.METHOD_POST, "/checkout", body)
 	return _last_response if _last_error.is_empty() else {}

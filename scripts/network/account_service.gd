@@ -21,6 +21,8 @@ var busy: bool = false
 var _last_error: String = ""
 ## Full answer of the last request (checkout details live here).
 var _last_response: Dictionary = {}
+## When the server was last asked (Time.get_ticks_msec), for refresh_if_stale().
+var _refreshed_at: int = -100000
 
 
 func _ready() -> void:
@@ -108,6 +110,7 @@ func _call(action: String, method: int, path: String, body: Dictionary) -> void:
 	var payload := "" if method == HTTPClient.METHOD_GET else JSON.stringify(body)
 	_last_error = "offline"
 	_last_response = {}
+	_refreshed_at = Time.get_ticks_msec()
 	if request.request(api_url() + path, headers, method, payload) == OK:
 		var response: Array = await request.request_completed
 		var status: int = response[1]
@@ -149,3 +152,10 @@ func packs() -> Array:
 func start_checkout(pack_id: String) -> Dictionary:
 	await _call("checkout", HTTPClient.METHOD_POST, "/checkout", {"pack": pack_id})
 	return _last_response if _last_error.is_empty() else {}
+
+
+## Asks the server again unless that happened in the last few seconds.
+func refresh_if_stale() -> void:
+	if busy or not has_account() or Time.get_ticks_msec() - _refreshed_at < 5000:
+		return
+	await connect_account()

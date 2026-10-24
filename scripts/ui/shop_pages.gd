@@ -21,7 +21,7 @@ func show_shop() -> void:
 	if not account.has_account() or account.account.is_empty():
 		_offline_notice(show_shop)
 		return
-	menu._content.add_child(menu._make_text("CREDITS: %d" % account.credits(), MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT))
+	menu._content.add_child(_credits_label())
 	menu._content.add_child(menu._make_text("Credits gibt es für Siege gegen den Bot (+10 / +20 / +40, bis zu 15 pro Tag) und jeden Tag +25 Bonus.", 22, TerminalTheme.GREEN_DIM))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 470.0
@@ -142,7 +142,7 @@ func add_account_section(parent: Control) -> void:
 	if not account.has_account() or account.account.is_empty():
 		parent.add_child(menu._make_text("KONTO: offline – Name und Käufe werden verbunden, sobald du online bist.", 22, TerminalTheme.GREEN_DIM))
 		return
-	parent.add_child(menu._make_text("CREDITS: %d" % account.credits(), MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT))
+	parent.add_child(_credits_label())
 	menu._add_menu_button(parent, "KONTO-CODE", "Damit holst du dein Konto auf ein anderes Gerät", show_code)
 
 
@@ -229,4 +229,15 @@ func _error_text(error: String) -> String:
 func _heading(text: String) -> Label:
 	var label := menu._make_text("// " + text, 22, TerminalTheme.GREEN_DIM)
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	return label
+
+
+## Credit balance that follows the account; opening it also asks the server
+## again, so credits bought or earned elsewhere show up without a restart.
+func _credits_label() -> Label:
+	var label := menu._make_text("CREDITS: %d" % account.credits(), MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
+	account.changed.connect(func() -> void:
+		if is_instance_valid(label):
+			label.text = "CREDITS: %d" % account.credits())
+	account.refresh_if_stale()
 	return label

@@ -21,6 +21,14 @@ config/icon="res://icon.svg"
 
 general/text_to_speech=true
 
+[debug]
+
+gdscript/warnings/unused_signal=0
+gdscript/warnings/shadowed_variable=0
+gdscript/warnings/shadowed_variable_base_class=0
+gdscript/warnings/shadowed_global_identifier=0
+gdscript/warnings/integer_division=0
+
 [display]
 
 window/size/viewport_width=720

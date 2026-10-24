@@ -137,9 +137,9 @@ func show_friends() -> void:
 	_fill(list, status)
 	await _refresh(list, status)
 	# Keep the list current while the page is open.
-	while list.is_inside_tree():
+	while (is_instance_valid(list) and list.is_inside_tree()):
 		await menu.get_tree().create_timer(REFRESH_SECONDS).timeout
-		if list.is_inside_tree():
+		if (is_instance_valid(list) and list.is_inside_tree()):
 			await _refresh(list, status)
 
 
@@ -147,7 +147,7 @@ func _refresh(list: VBoxContainer, status: Label) -> void:
 	var answer := await account.friends()
 	if not answer.is_empty():
 		overview = answer
-	if list.is_inside_tree():
+	if (is_instance_valid(list) and list.is_inside_tree()):
 		_fill(list, status)
 
 
@@ -212,7 +212,7 @@ func _act(action: String, body: Dictionary, status: Label, list: VBoxContainer =
 		var already := (overview.get("friends", []) as Array).any(func(person: Dictionary) -> bool: return str(person["username"]).to_lower() == who.to_lower())
 		status.text = "Ihr seid jetzt befreundet." if already else "Anfrage an %s geschickt. Die Person muss sie annehmen." % who
 	var target := list if list != null else menu._content.find_child("FriendList", true, false) as VBoxContainer
-	if target != null and target.is_inside_tree():
+	if is_instance_valid(target) and target.is_inside_tree():
 		_fill(target, status)
 
 

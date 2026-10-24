@@ -129,12 +129,18 @@ export class Account {
       if (data) {
         return json({ error: "exists" }, 409);
       }
-      data = { name: "Spieler", avatar: 0, credits: START_CREDITS, owned: [], bonusDay: today(), botDay: today(), botWins: 0 };
+      data = { name: "Spieler", avatar: "symbol:code", credits: START_CREDITS, owned: [], bonusDay: today(), botDay: today(), botWins: 0 };
       await storage.put("account", data);
       return json({ account: view(data) });
     }
     if (!data) {
       return json({ error: "no_account" }, 404);
+    }
+    if (op === "link") {
+      // A login (e-mail or Google) now leads to this account; shown as "signed in as".
+      data.email = String(body.email || "").slice(0, 254);
+      await storage.put("account", data);
+      return json({ account: view(data) });
     }
     if (op === "grant") {
       // Paid credit pack (from the verified Stripe webhook); once per checkout session.
@@ -157,7 +163,9 @@ export class Account {
     if (op === "profile") {
       const name = String(body.name || "").trim().slice(0, 20);
       data.name = name || "Spieler";
-      data.avatar = Math.max(0, Math.min(4, Math.floor(Number(body.avatar) || 0)));
+      // Profile picture id from the game's avatar gallery ("symbol:code", "character:nova").
+      const avatar = String(body.avatar || "");
+      data.avatar = /^[a-z]+:[a-z_]{1,24}$/.test(avatar) ? avatar : "symbol:code";
     } else if (op === "buy") {
       const item = String(body.item || "");
       const price = PRICES[item];
@@ -199,8 +207,23 @@ export class Account {
 }
 
 function view(data) {
-  return { name: data.name, avatar: data.avatar, credits: data.credits, owned: data.owned, prices: PRICES };
+  const avatar = typeof data.avatar === "string" ? data.avatar : "symbol:code";
+  return { name: data.name, avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES };
 }
+
+// For the login routes (auth.js): ask an account Durable Object by code.
+// op "create" opens a new account under that code.
+export async function accountCall(env, code, op, body = {}) {
+  const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(await accountKey(code)));
+  const answer = await account.fetch("https://account/" + op, { method: "POST", body: JSON.stringify(body) });
+  const result = await answer.json();
+  if (result.account) {
+    result.account.packs = offeredPacks(env);
+  }
+  return { status: answer.status, body: result };
+}
+
+export { newAccountCode, normaliseCode, json, CORS };
 
 function newAccountCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(12));

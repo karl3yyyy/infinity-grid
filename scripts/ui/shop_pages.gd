@@ -1,9 +1,8 @@
 class_name ShopPages
 extends RefCounted
 
-## The menu pages around the player's account: the shop, the buy dialog and
-## the account code for moving to another device. They are drawn into the
-## MainMenu's terminal frame with its page helpers.
+## The shop pages: cosmetics for credits, credit packs for real money and the
+## buy dialog, drawn into the MainMenu's terminal frame with its page helpers.
 
 const KIND_NAMES := {"character": "Charakter", "skin": "Skin", "echo": "Echos", "board": "Spielfeld"}
 
@@ -89,7 +88,7 @@ func confirm_buy(item: String, back_action: Callable) -> void:
 ## arrive when Stripe tells the server, never from the game itself; this page
 ## stays open meanwhile and picks them up.
 func buy_pack(pack: Dictionary) -> void:
-	StripeCheckout.reserve_window()
+	ExternalWindow.reserve("Kasse wird geöffnet …")
 	menu._set_page("KASSE", show_shop)
 	menu._content.add_child(menu._make_text("+%d CREDITS für %s" % [int(pack["credits"]), str(pack["label"])], 34, TerminalTheme.GREEN_BRIGHT))
 	var status := menu._make_text("Kasse wird geöffnet ...", MainMenu.TEXT_FONT_SIZE)
@@ -99,10 +98,10 @@ func buy_pack(pack: Dictionary) -> void:
 	var before := account.credits()
 	var details := await account.start_checkout(str(pack["id"]))
 	if details.is_empty():
-		StripeCheckout.release_window()
+		ExternalWindow.release()
 		status.text = _error_text(account._last_error)
 		return
-	match StripeCheckout.open(str(details.get("url", ""))):
+	match ExternalWindow.open(str(details.get("url", ""))):
 		"page":
 			status.text = "Weiter zu Stripe ..."
 			return
@@ -136,46 +135,10 @@ func _wait_for_credits(before: int, status: Label, attempts: int, announce: bool
 		status.text = "Noch keine Credits da. Das kann eine Minute dauern – schau gleich nochmal ins Profil."
 
 
-## Credits and the account code on the profile page.
+## The credit balance on the profile page (logins are in LoginPages).
 func add_account_section(parent: Control) -> void:
-	if not account.has_account() or account.account.is_empty():
-		parent.add_child(menu._make_text("KONTO: offline – Name und Käufe werden verbunden, sobald du online bist.", 22, TerminalTheme.GREEN_DIM))
-		return
-	parent.add_child(_credits_label())
-	menu._add_menu_button(parent, "KONTO-CODE", "Damit holst du dein Konto auf ein anderes Gerät", show_code)
-
-
-func show_code() -> void:
-	menu._set_page("KONTO", menu._show_profile)
-	menu._content.add_child(menu._make_text("DEIN KONTO-CODE", MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
-	menu._content.add_child(menu._make_text(account.code, 54, TerminalTheme.GREEN_BRIGHT))
-	menu._content.add_child(menu._make_text("Schreib ihn dir auf und zeig ihn niemandem: Wer den Code hat, hat dein Konto mit allen Käufen. Auf einem neuen Gerät gibst du ihn unter „CODE EINGEBEN“ ein.", 22, TerminalTheme.GREEN_DIM))
-	menu._add_menu_button(menu._content, "CODE EINGEBEN", "Ein Konto von einem anderen Gerät holen", show_restore)
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Profil", menu._show_profile)
-	menu._focus_first_entry(1)
-
-
-func show_restore() -> void:
-	menu._set_page("CODE EINGEBEN", show_code)
-	menu._content.add_child(menu._make_text("Das Konto auf diesem Gerät wird ersetzt. Merk dir vorher seinen Code, wenn du es behalten willst.", 22, TerminalTheme.GREEN_DIM))
-	var input := LineEdit.new()
-	input.max_length = 14
-	input.placeholder_text = "XXXX-XXXX-XXXX"
-	input.custom_minimum_size.y = 52.0
-	input.add_theme_font_size_override("font_size", 36)
-	menu._content.add_child(input)
-	var status := menu._make_text("", MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
-	menu._add_menu_button(menu._content, "KONTO HOLEN", "Mit diesem Code anmelden", func() -> void:
-		status.text = "Suche Konto ..."
-		await account.use_code(input.text)
-		if account._last_error.is_empty():
-			menu.adopt_account_profile()
-			menu._show_profile()
-		else:
-			status.text = _error_text(account._last_error))
-	menu._content.add_child(status)
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Konto-Code", show_code)
-	input.grab_focus.call_deferred()
+	if account.has_account() and not account.account.is_empty():
+		parent.add_child(_credits_label())
 
 
 func item_name(item: String) -> String:
@@ -235,8 +198,9 @@ func _heading(text: String) -> Label:
 ## again, so credits bought or earned elsewhere show up without a restart.
 func _credits_label() -> Label:
 	var label := menu._make_text("CREDITS: %d" % account.credits(), MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
-	account.changed.connect(func() -> void:
-		if is_instance_valid(label):
-			label.text = "CREDITS: %d" % account.credits())
+	var update := func() -> void: label.text = "CREDITS: %d" % account.credits()
+	account.changed.connect(update)
+	# Stop listening when the page goes away.
+	label.tree_exiting.connect(func() -> void: account.changed.disconnect(update))
 	account.refresh_if_stale()
 	return label

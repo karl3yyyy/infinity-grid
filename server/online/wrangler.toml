@@ -34,6 +34,15 @@ class_name = "Account"
 tag = "v3"
 new_sqlite_classes = ["Account"]
 
+# Player logins: e-mail + password and Google (see auth.js).
+[[durable_objects.bindings]]
+name = "LOGINS"
+class_name = "Login"
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["Login"]
+
 # Credit packs paid through Stripe Checkout (see payments.js). Empty price ids
 # switch the packs off. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are secrets
 # and are set with `npx wrangler secret put <NAME>`, never written here.
@@ -41,3 +50,5 @@ new_sqlite_classes = ["Account"]
 STRIPE_PRICE_SMALL = "price_1UTywbChrUtwv0Dvr8ZrWEkS"
 STRIPE_PRICE_MEDIUM = "price_1UTyxQChrUtwv0DvsQOYT46A"
 STRIPE_PRICE_LARGE = "price_1UTyyBChrUtwv0DvtJAfPohy"
+# Google sign-in: OAuth client id (public); GOOGLE_CLIENT_SECRET is a secret.
+GOOGLE_CLIENT_ID = ""

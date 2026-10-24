@@ -89,6 +89,9 @@ Approved backend milestone: player accounts and a cosmetics shop paid with
 in-game credits. `server/online/accounts.js` (one Durable Object per account,
 opened with an account code, no passwords or e-mail) alone decides credits and
 ownership; `scripts/network/account_service.gd` only displays and caches them.
+Players start as guests and may sign in with e-mail + password or Google
+(`server/online/auth.js`, PBKDF2 password hashes); a login only leads to an
+account. Apple sign-in is approved but waits for an Apple developer account.
 
 Approved: credit packs bought with real money through Stripe Checkout
 (`server/online/payments.js`). Credits are only granted from a verified Stripe

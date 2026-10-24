@@ -21,14 +21,12 @@ const DIFFICULTY_OPTIONS: Array[Dictionary] = [
 	{"title": "SCHWER", "subtitle": "Rechnet mehrere Züge tief"},
 ]
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
-const AVATAR_COLORS: Array[Color] = [
-	Color("55b8d4"), Color("e78b62"), Color("7ca77a"), Color("cfaa55"), Color("a287c2"),
-]
 const ENTRY_FONT_SIZE: int = 46
 const TEXT_FONT_SIZE: int = 26
 
 var profile_name: String = "Spieler"
-var avatar_index: int = 0
+## Profile picture, an AvatarGallery id.
+var avatar_id: String = AvatarGallery.DEFAULT_ID
 ## BotAI.Difficulty value chosen for quick play; saved with the profile.
 var bot_difficulty: int = 1
 ## The block holding the current page's entries and texts.
@@ -37,6 +35,7 @@ var _content: VBoxContainer
 var _page_title: Label
 var _description: Label
 var _profile_button: Button
+var _profile_picture: TextureRect
 var _resume_available: bool = false
 ## What Escape / the back key does on the current page.
 var _back_action: Callable
@@ -45,6 +44,7 @@ var _previews: Node3D
 ## The online account (credits, owned cosmetics) and its menu pages.
 var account: AccountService
 var _shop: ShopPages
+var _login: LoginPages
 
 
 func _ready() -> void:
@@ -54,6 +54,7 @@ func _ready() -> void:
 	account.name = "Account"
 	add_child(account)
 	_shop = ShopPages.new(self, account)
+	_login = LoginPages.new(self, account)
 	account.changed.connect(_update_profile_button)
 	# Headless test runs must not open accounts on the live server.
 	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
@@ -118,11 +119,14 @@ func _build_shell() -> void:
 	top_bar.add_child(top_spacer)
 	_profile_button = Button.new()
 	_profile_button.add_theme_font_size_override("font_size", 26)
-	_profile_button.icon = TerminalTheme.arrow_texture("right", 20)
-	_profile_button.icon_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_profile_button.add_theme_constant_override("h_separation", 10)
 	_profile_button.focus_mode = Control.FOCUS_NONE
 	_profile_button.pressed.connect(_show_profile)
+	_profile_picture = TextureRect.new()
+	_profile_picture.custom_minimum_size = Vector2(40.0, 40.0)
+	_profile_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_profile_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_profile_picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	top_bar.add_child(_profile_picture)
 	top_bar.add_child(_profile_button)
 
 	var push_center := Control.new()
@@ -347,41 +351,37 @@ func _show_online_page(mode_name: String) -> void:
 
 func _show_profile() -> void:
 	_set_page("PROFIL", _show_home)
-	_content.add_child(_make_text("NAME", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 16)
+	_content.add_child(head)
+	var picture := TextureRect.new()
+	picture.texture = AvatarGallery.picture(avatar_id, _previews_root())
+	picture.custom_minimum_size = Vector2(112.0, 112.0)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	head.add_child(picture)
+	var naming := VBoxContainer.new()
+	naming.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(naming)
+	naming.add_child(_make_text("NAME", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
 	var name_input := LineEdit.new()
 	name_input.text = profile_name
 	name_input.max_length = 20
 	name_input.placeholder_text = "Dein Anzeigename"
 	name_input.custom_minimum_size.y = 52.0
 	name_input.add_theme_font_size_override("font_size", 32)
-	_content.add_child(name_input)
-	_content.add_child(_make_text("AVATARFARBE", TEXT_FONT_SIZE, TerminalTheme.GREEN_DIM))
-	var color_choices := HBoxContainer.new()
-	color_choices.add_theme_constant_override("separation", 10)
-	_content.add_child(color_choices)
-	for index: int in range(AVATAR_COLORS.size()):
-		var color_button := Button.new()
-		color_button.custom_minimum_size = Vector2(52.0, 46.0)
-		color_button.add_theme_stylebox_override("normal", TerminalTheme.bar(AVATAR_COLORS[index]))
-		color_button.add_theme_stylebox_override("hover", TerminalTheme.bar(AVATAR_COLORS[index].lightened(0.25)))
-		color_button.add_theme_stylebox_override("focus", TerminalTheme.bar(AVATAR_COLORS[index].lightened(0.25)))
-		color_button.add_theme_color_override("font_color", TerminalTheme.INK)
-		color_button.text = "X" if index == avatar_index else ""
-		color_button.pressed.connect(func() -> void:
-			avatar_index = index
-			for button_index: int in range(color_choices.get_child_count()):
-				(color_choices.get_child(button_index) as Button).text = "X" if button_index == avatar_index else ""
-		)
-		color_choices.add_child(color_button)
-	_add_menu_button(_content, "SPEICHERN", "Name und Farbe übernehmen", func() -> void:
+	naming.add_child(name_input)
+	_add_menu_button(_content, "SPEICHERN", "Namen übernehmen", func() -> void:
 		profile_name = name_input.text.strip_edges()
 		if profile_name.is_empty():
 			profile_name = "Spieler"
 		_save_profile()
-		account.save_profile(profile_name, avatar_index)
+		account.save_profile(profile_name, avatar_id)
 		_show_home()
 	)
+	_add_menu_button(_content, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", _show_avatar_picker.bind(_show_profile))
 	_shop.add_account_section(_content)
+	_login.add_section(_content)
 	_add_menu_button(_content, "< ZURÜCK", "Ohne Speichern zurück", _show_home)
 	name_input.grab_focus.call_deferred()
 
@@ -392,13 +392,13 @@ func _connect_account() -> void:
 	await account.connect_account()
 	if is_new and account.has_account():
 		# A new account takes over the name chosen on this device.
-		account.save_profile(profile_name, avatar_index)
+		account.save_profile(profile_name, avatar_id)
 
 
-## After restoring an account from its code, use its name and colour here.
+## After signing in or out, use the account's name and picture here.
 func adopt_account_profile() -> void:
 	profile_name = str(account.account.get("name", profile_name))
-	avatar_index = clampi(int(account.account.get("avatar", avatar_index)), 0, AVATAR_COLORS.size() - 1)
+	avatar_id = AvatarGallery.valid(str(account.account.get("avatar", avatar_id)))
 	_save_profile()
 	_update_profile_button()
 
@@ -409,6 +409,7 @@ func _show_collection() -> void:
 	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
+	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
 	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
@@ -666,21 +667,46 @@ func _load_profile() -> void:
 	if config.load(PROFILE_PATH) != OK:
 		return
 	profile_name = str(config.get_value("profile", "name", profile_name))
-	avatar_index = clampi(int(config.get_value("profile", "avatar", avatar_index)), 0, AVATAR_COLORS.size() - 1)
+	avatar_id = AvatarGallery.valid(str(config.get_value("profile", "avatar_id", avatar_id)))
 	bot_difficulty = clampi(int(config.get_value("profile", "bot_difficulty", bot_difficulty)), 0, DIFFICULTY_OPTIONS.size() - 1)
 
 
 func _save_profile() -> void:
+	# The same file holds the account and the look; keep them.
 	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
 	config.set_value("profile", "name", profile_name)
-	config.set_value("profile", "avatar", avatar_index)
+	config.set_value("profile", "avatar_id", avatar_id)
 	config.set_value("profile", "bot_difficulty", bot_difficulty)
 	config.save(PROFILE_PATH)
+
+
+## Renders portraits that outlive a page (the top bar picture).
+func _previews_root() -> Node:
+	var root := get_node_or_null("Portraits")
+	if root == null:
+		root = Node3D.new()
+		root.name = "Portraits"
+		add_child(root)
+	return root
+
+
+func _show_avatar_picker(back: Callable) -> void:
+	AvatarPicker.new(self, back).show()
+
+
+## Called by the avatar picker.
+func choose_avatar(id: String) -> void:
+	avatar_id = AvatarGallery.valid(id)
+	_save_profile()
+	account.save_profile(profile_name, avatar_id)
+	_update_profile_button()
 
 
 func _update_profile_button() -> void:
 	if _profile_button == null:
 		return
 	_profile_button.text = profile_name.to_upper()
+	_profile_picture.texture = AvatarGallery.picture(avatar_id, _previews_root())
 	if not account.account.is_empty():
 		_profile_button.text += "  %d CR" % account.credits()

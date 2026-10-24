@@ -14,10 +14,13 @@
 // Server events: opponent_away {seconds}, opponent_back, opponent_left, error {reason}.
 // Every client runs the rules itself; the server only checks turn order.
 // Player accounts for the cosmetics shop live in accounts.js (/api/account);
-// credit packs paid through Stripe Checkout in payments.js (/api/stripe/webhook).
+// credit packs paid through Stripe Checkout in payments.js (/api/stripe/webhook);
+// signing in with e-mail or Google in auth.js (/api/auth, /auth/google).
 
 import { handleAccountApi } from "./accounts.js";
 import { donePage, handleWebhook } from "./payments.js";
+import { handleAuthApi, handleGooglePages } from "./auth.js";
+export { Login } from "./auth.js";
 export { Account } from "./accounts.js";
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
@@ -44,6 +47,12 @@ export default {
     }
     if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
       return handleWebhook(request, env);
+    }
+    if (url.pathname.startsWith("/api/auth/")) {
+      return handleAuthApi(request, env, url);
+    }
+    if (url.pathname === "/auth/google/start" || url.pathname === "/auth/google/callback") {
+      return handleGooglePages(request, env, url);
     }
     if (url.pathname === "/checkout/done") {
       return donePage(url);

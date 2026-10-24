@@ -1,8 +1,8 @@
 class_name AccountService
 extends Node
 
-## The player's account on the online server: name, avatar, credits and owned
-## cosmetics. The server decides all of it (server/online/accounts.js); this
+## The player's account on the online server: name, profile picture, credits,
+## owned cosmetics and the e-mail it is signed in with (none for a guest). The server decides all of it (server/online/accounts.js); this
 ## node only asks and keeps the last answer on the device, so the collection
 ## still works offline. Without a connection nothing can be bought or earned.
 
@@ -42,6 +42,11 @@ static func api_url() -> String:
 	return base.replace("wss://", "https://").replace("ws://", "http://") + "/api/account"
 
 
+## Login routes (server/online/auth.js) next to the account routes.
+static func auth_url() -> String:
+	return api_url().replace("/api/account", "/api/auth")
+
+
 ## True for free items and those the account owns (as last reported).
 static func owns(item: String) -> bool:
 	if not CharacterRoster.PRICES.has(item):
@@ -74,21 +79,46 @@ func connect_account() -> void:
 		await _call("create", HTTPClient.METHOD_POST, "", {})
 
 
-## Switches to an account from another device by its code.
-func use_code(new_code: String) -> void:
-	var previous := code
-	code = new_code.strip_edges().to_upper()
-	await _call("restore", HTTPClient.METHOD_GET, "", {})
-	if account.is_empty() or _last_error != "":
-		code = previous
-		_store()
+## "" for a guest, else the e-mail address the account is signed in with.
+func email() -> String:
+	return str(account.get("email", ""))
+
+
+## Ties this device's guest account to a new e-mail login.
+func register(address: String, password: String) -> void:
+	await _call("register", HTTPClient.METHOD_POST, "/register", {"email": address, "password": password}, auth_url())
+
+
+## Switches this device to the account behind an e-mail login.
+func login(address: String, password: String) -> void:
+	await _call("login", HTTPClient.METHOD_POST, "/login", {"email": address, "password": password}, auth_url())
+
+
+## Starts a Google sign-in; returns {nonce, url} or {} (see _last_error).
+func begin_google() -> Dictionary:
+	await _call("google", HTTPClient.METHOD_POST, "/google", {}, auth_url())
+	return _last_response if _last_error.is_empty() else {}
+
+
+## True once the Google sign-in with this nonce finished (the account is switched).
+func collect_google(nonce: String) -> bool:
+	await _call("collect", HTTPClient.METHOD_GET, "/pending/" + nonce, {}, auth_url())
+	return _last_error.is_empty() and _last_response.has("code")
+
+
+## Forgets the account on this device and starts again as a new guest.
+func logout() -> void:
+	code = ""
+	account = {}
+	_store()
+	await connect_account()
 
 
 func buy(item: String) -> void:
 	await _call("buy", HTTPClient.METHOD_POST, "/buy", {"item": item})
 
 
-func save_profile(profile_name: String, avatar: int) -> void:
+func save_profile(profile_name: String, avatar: String) -> void:
 	if has_account():
 		await _call("profile", HTTPClient.METHOD_POST, "/profile", {"name": profile_name, "avatar": avatar})
 
@@ -99,7 +129,7 @@ func report_bot_win(difficulty: int) -> void:
 
 
 
-func _call(action: String, method: int, path: String, body: Dictionary) -> void:
+func _call(action: String, method: int, path: String, body: Dictionary, base: String = "") -> void:
 	busy = true
 	var request := HTTPRequest.new()
 	request.timeout = 10.0
@@ -111,7 +141,7 @@ func _call(action: String, method: int, path: String, body: Dictionary) -> void:
 	_last_error = "offline"
 	_last_response = {}
 	_refreshed_at = Time.get_ticks_msec()
-	if request.request(api_url() + path, headers, method, payload) == OK:
+	if request.request((base if not base.is_empty() else api_url()) + path, headers, method, payload) == OK:
 		var response: Array = await request.request_completed
 		var status: int = response[1]
 		# Not JSON (an old server, a proxy page) counts as offline.
@@ -123,9 +153,10 @@ func _call(action: String, method: int, path: String, body: Dictionary) -> void:
 			_last_response = data
 			if data.has("account"):
 				account = data["account"]
-				if action == "create":
-					code = str(data.get("code", ""))
-			elif status == 404 or status == 401:
+				# New accounts and logins hand this device the account's code.
+				if data.has("code"):
+					code = str(data["code"])
+			elif (status == 404 or status == 401) and _last_error.is_empty():
 				_last_error = "no_account"
 	request.queue_free()
 	busy = false

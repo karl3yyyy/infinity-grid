@@ -39,6 +39,12 @@ var opponent_label: String = "BOT"
 var viewer_team: int = 0
 var result_overlay: ColorRect
 var result_label: Label
+var _header_text: String = ""
+var _header_color: Color = Color.WHITE
+var _timer_seconds: int = -1
+var _clock_row: HBoxContainer
+var _own_clock: Label
+var _opponent_clock: Label
 var result_detail: Label
 ## Added under the headline, e.g. the XP of this match.
 var result_extra: String = ""
@@ -85,8 +91,60 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func update_header(current_player: int, round_number: int) -> void:
 	var mover := "%s AM ZUG" % _team_name(current_player)
-	round_label.text = "RUNDE %02d  •  %s" % [round_number, mover]
+	_header_text = "RUNDE %02d  •  %s" % [round_number, mover]
+	round_label.text = _header_text
 	round_label.modulate = TerminalTheme.GREEN_BRIGHT if current_player == viewer_team else TEAM_COLORS[current_player].lightened(0.35)
+	_header_color = round_label.modulate
+	set_turn_timer(_timer_seconds)
+
+
+## Seconds left for the player's move, shown after the turn text (-1: no clock).
+## The last five seconds turn red.
+func set_turn_timer(seconds_left: int) -> void:
+	_timer_seconds = seconds_left
+	if seconds_left < 0:
+		round_label.text = _header_text
+		round_label.modulate = _header_color
+		return
+	round_label.text = "%s  •  %d s" % [_header_text, seconds_left]
+	round_label.modulate = Color("ff6a55") if seconds_left <= 5 else _header_color
+	if seconds_left <= 5 and seconds_left > 0:
+		SoundBoard.play("click", -6.0)
+
+
+## Ranked chess clock, own bank and the opponent's (-1 hides it). The running
+## bank is bright, the last ten seconds red.
+func set_chess_clock(own_seconds: int, opponent_seconds: int, own_running: bool) -> void:
+	_clock_row.visible = own_seconds >= 0
+	if own_seconds < 0:
+		return
+	_show_clock(_own_clock, "DU", own_seconds, own_running)
+	_show_clock(_opponent_clock, "GEGNER", opponent_seconds, not own_running)
+	var running := own_seconds if own_running else opponent_seconds
+	if own_running and running <= 10 and running > 0:
+		SoundBoard.play("click", -6.0)
+
+
+func _show_clock(label: Label, owner_name: String, seconds: int, running: bool) -> void:
+	label.text = "%s %s%d:%02d" % [owner_name, "> " if running else "", floori(seconds / 60.0), seconds % 60]
+	if seconds <= 10:
+		label.modulate = Color("ff6a55")
+	else:
+		label.modulate = TerminalTheme.GREEN_BRIGHT if running else TerminalTheme.GREEN_DIM
+
+
+func _add_clock_row(parent: Control) -> void:
+	_clock_row = HBoxContainer.new()
+	_clock_row.visible = false
+	parent.add_child(_clock_row)
+	_own_clock = Label.new()
+	_opponent_clock = Label.new()
+	for label: Label in [_own_clock, _opponent_clock]:
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.add_theme_font_size_override("font_size", 30)
+		_outline(label)
+		_clock_row.add_child(label)
+	_opponent_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
 func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
@@ -261,6 +319,7 @@ func _build_ui() -> void:
 	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
 	menu_button.add_theme_font_size_override("font_size", 28)
 	menu_button.pressed.connect(func() -> void: toggle_menu(true))
+	_add_clock_row(top_box)
 	_add_hand_row(top_box, 1)
 	_add_hand_title(top_box, 1)
 	emote_wheel = EmoteWheel.new()

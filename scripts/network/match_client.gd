@@ -25,6 +25,8 @@ signal ranked_result(result: Dictionary)
 ## Node Ping (online): both picks and the signal; winner -1 is a collision.
 signal ping_result(result: Dictionary)
 signal starter_chosen(team: int)
+## Ranked chess clock from the server: both banks in ms and who is to move.
+signal clock_synced(left_ms: Array, to_move: int)
 signal opponent_emote(emote_id: String)
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
@@ -192,6 +194,12 @@ func send_choose(starter: int) -> void:
 	_send_now({"type": "choose", "starter": starter})
 
 
+func _emit_clock(message: Dictionary) -> void:
+	var left: Array = message.get("left", [])
+	if left.size() == 2:
+		clock_synced.emit(left, int(message.get("to_move", 0)))
+
+
 func send_look(look: Dictionary) -> void:
 	_send_now({"type": "look", "character": str(look.get("character", "")), "skin": str(look.get("skin", "")), "echo": str(look.get("echo", "")), "board": str(look.get("board", ""))})
 
@@ -304,7 +312,11 @@ func _handle_message(text: String) -> void:
 			resumed.emit(int(message["team"]), message["cards"] as Array, message.get("moves", []) as Array)
 			if message.get("opponent_look") is Dictionary:
 				opponent_look.emit(message["opponent_look"])
+			if message.get("clock") is Dictionary:
+				_emit_clock(message["clock"])
 			_flush_outbox()
+		"clock":
+			_emit_clock(message)
 		"move", "pass":
 			opponent_moved.emit(message)
 		"ranked_result":

@@ -23,6 +23,8 @@ var _quick_wait: float = -1.0
 var ranked: bool = false
 ## A friend to invite once the room code is known (challenge from the friends list).
 var invite_username: String = ""
+## Ranked only; the server's clock replaces the per-move timer of normal games.
+var chess_clock: ChessClock
 
 
 func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
@@ -43,7 +45,14 @@ func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
 	client.matched.connect(func(opponent: Dictionary) -> void:
 		if ranked and opponent.has("name"):
 			ui.set_instruction("Gegner gefunden: %s  ·  %s %d" % [opponent["name"], opponent.get("rank", ""), int(opponent.get("rating", 0))]))
-	client.ranked_result.connect(battle.show_ranked_result)
+	chess_clock = ChessClock.new()
+	chess_clock.name = "ChessClock"
+	add_child(chess_clock)
+	chess_clock.ticked.connect(ui.set_chess_clock)
+	client.clock_synced.connect(_on_clock_synced)
+	client.ranked_result.connect(func(result: Dictionary) -> void:
+		chess_clock.stop()
+		battle.show_ranked_result(result))
 	client.opponent_emote.connect(func(emote_id: String) -> void:
 		if battle.network_team >= 0:
 			battle.show_emote(1 - battle.network_team, emote_id))
@@ -92,11 +101,23 @@ func send_local_turn(message: Dictionary) -> void:
 
 ## The match ended on the board; nothing is left to resume.
 func finished() -> void:
+	chess_clock.stop()
 	client.forget_session()
+
+
+func _on_clock_synced(left_ms: Array, to_move: int) -> void:
+	if battle.battle_over or battle.network_team < 0:
+		return
+	# Only ranked rooms send a clock, also after a reload where `ranked` was unknown.
+	ranked = true
+	battle.turn_timer.stop()
+	chess_clock.viewer_team = battle.network_team
+	chess_clock.sync(left_ms, to_move)
 
 
 ## The player quits (restart, menu); the opponent is told right away.
 func leave() -> void:
+	chess_clock.stop()
 	client.leave()
 
 

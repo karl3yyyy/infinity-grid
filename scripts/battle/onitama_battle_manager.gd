@@ -50,6 +50,11 @@ static var _replay_mode: String = ""
 var match_cards: Array[MovementCard] = []
 ## Look per team: {"character", "echo", "board"} (see CharacterRoster).
 var team_looks: Array[Dictionary] = [{}, {}]
+## Normal online games: seconds per move, and how many in a row may run out.
+const MOVE_SECONDS: float = 30.0
+const MAX_TIMEOUTS_IN_A_ROW: int = 3
+var turn_timer: TurnTimer
+var _timeouts_in_a_row: int = 0
 
 
 func setup(
@@ -70,6 +75,10 @@ func setup(
 	player_controller = player_input
 	unit_movement = movement
 	units_parent = unit_container
+	turn_timer = TurnTimer.new()
+	add_child(turn_timer)
+	turn_timer.ticked.connect(battle_ui.set_turn_timer)
+	turn_timer.expired.connect(_on_turn_timeout)
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
@@ -206,6 +215,8 @@ func show_ranked_result(result: Dictionary) -> void:
 	battle_ui.hide_side_action()
 	var score := float(result.get("score", 0.0))
 	var title := "SIEG!" if score > 0.75 else ("UNENTSCHIEDEN" if score > 0.25 else "NIEDERLAGE")
+	if str(result.get("reason", "")) == "time":
+		title += "  ·  ZEIT ABGELAUFEN" if score < 0.25 else "  ·  GEGNER OHNE ZEIT"
 	battle_ui.show_result("%s
 %+d PUNKTE  ·  %d  %s" % [title, int(result.get("delta", 0)), int(result.get("after", 0)), str(result.get("rank", ""))])
 	battle_ui.main_menu.account.connect_account()
@@ -395,6 +406,7 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 	SoundBoard.play("click")
 	if must_pass:
 		if network_match != null:
+			_timeouts_in_a_row = 0
 			network_match.send_local_turn({"type": "pass", "seq": turns_played, "slot": slot})
 		_pass_turn(slot)
 		return
@@ -421,6 +433,7 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		return
 	if selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
 		if network_match != null:
+			_timeouts_in_a_row = 0
 			network_match.send_local_turn({"type": "move", "seq": turns_played, "from": selected_unit.grid_position, "slot": selected_card_slot, "to": coordinate})
 		await _perform_move(coordinate)
 	elif selected_card_slot < 0:
@@ -537,6 +550,10 @@ func _begin_turn(repetitions: int) -> void:
 	must_pass = not _has_legal_move(current_player)
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	var remote_turn := network_team >= 0 and current_player != network_team
+	if network_team >= 0 and not remote_turn and not network_match.ranked and not battle_over:
+		turn_timer.start(MOVE_SECONDS)
+	else:
+		turn_timer.stop()
 	input_locked = bot_turn or remote_turn
 	player_controller.enabled = not input_locked
 	_refresh_ui()
@@ -554,6 +571,35 @@ func _begin_turn(repetitions: int) -> void:
 		battle_ui.set_instruction("Wähle eine Karte und eine Figur.")
 	else:
 		battle_ui.set_instruction("Spieler %d: Wähle eine Karte und eine Figur." % (current_player + 1))
+
+
+## The clock ran out in a normal online game: the grid plays a loose move for
+## the player; three in a row forfeit the match.
+func _on_turn_timeout() -> void:
+	if battle_over or input_locked or network_team < 0 or current_player != network_team:
+		return
+	_timeouts_in_a_row += 1
+	if _timeouts_in_a_row >= MAX_TIMEOUTS_IN_A_ROW:
+		battle_ui.set_instruction("Dreimal nicht gezogen. Das Grid gibt für dich auf.")
+		network_match.leave()
+		_finish_battle(1 - network_team)
+		return
+	battle_ui.set_instruction("Zeit abgelaufen. Das Grid zieht für dich.")
+	var result := BotAIScript.new(BotAI.Difficulty.EASY).choose_move(build_ai_state(), current_player)
+	if result.is_empty():
+		return
+	input_locked = true
+	if result.has("pass"):
+		network_match.send_local_turn({"type": "pass", "seq": turns_played, "slot": int(result["slot"])})
+		_pass_turn(int(result["slot"]))
+		return
+	var unit := grid_manager.get_unit_at(result["from"]) as BattleUnit
+	if unit == null:
+		return
+	selected_card_slot = int(result["slot"])
+	_select_unit(unit)
+	network_match.send_local_turn({"type": "move", "seq": turns_played, "from": unit.grid_position, "slot": selected_card_slot, "to": result["to"]})
+	await _perform_move(result["to"])
 
 
 func _pass_instruction() -> String:
@@ -682,6 +728,7 @@ func _on_unit_died(unit: BattleUnit) -> void:
 ## winner -1 means a draw by repetition.
 func _finish_battle(winner: int) -> void:
 	battle_over = true
+	turn_timer.stop()
 	var local_won := winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
 	# Only ranked and normal online matches count (not bot or hot-seat games).
 	if winner >= 0 and network_team >= 0:

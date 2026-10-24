@@ -31,6 +31,7 @@ import { handleAuthApi, handleGooglePages } from "./auth.js";
 import { handleFriendsApi } from "./friends.js";
 import { handleRankedApi, settle } from "./ranked.js";
 import { newGame, pingDistance, play, setStarter } from "./rules.js";
+import { chargeMove, clockDeadline, clockView, startClock } from "./clock.js";
 export { Login } from "./auth.js";
 export { RankedLobby } from "./ranked.js";
 export { Account } from "./accounts.js";
@@ -134,6 +135,36 @@ export class Room {
     await this.state.storage.put("room", room);
   }
 
+  // A room has one alarm but up to two deadlines: the room's own (join,
+  // reconnect or idle; `baseAt`) and a ranked clock running out. The alarm is
+  // set to the earlier one; alarm() tells them apart. `baseAt` is stored
+  // without touching the room so idle rooms still expire.
+  async arm(room, baseAt) {
+    if (baseAt !== undefined) {
+      room.baseAt = baseAt;
+      await this.state.storage.put("room", room);
+    }
+    const clock = this.runningClock(room);
+    const at = Math.min(room.baseAt || Infinity, clock ? clockDeadline(clock) : Infinity);
+    if (at !== Infinity) await this.state.storage.setAlarm(at);
+  }
+
+  runningClock(room) {
+    const ranked = room.ranked;
+    return ranked && ranked.clock && !ranked.settled && room.phase === "playing" ? ranked.clock : null;
+  }
+
+  // Both players get the clock as the server sees it right now.
+  sendClock(room) {
+    const clock = this.runningClock(room);
+    if (!clock) return;
+    const view = clockView(clock, Date.now());
+    for (const seat of [0, 1]) {
+      const socket = this.socketFor(seat);
+      if (socket) send(socket, view);
+    }
+  }
+
   // The open connection of a seat; a socket that is closing does not count.
   socketFor(seat, except = null) {
     return this.state.getWebSockets(String(seat)).find((socket) => socket !== except && socket.readyState === 1) || null;
@@ -145,8 +176,9 @@ export class Room {
       // A ranked pairing from ranked.js: both seats are known, the server referees.
       const body = await request.json();
       const cards = drawCards(5);
-      await this.save({ code: "", phase: "matching", cards, tokens: [null, null], moves: [], ranked: { players: body.players, game: newGame(cards) } });
-      await this.state.storage.setAlarm(Date.now() + MATCH_JOIN_SECONDS * 1000);
+      const room = { code: "", phase: "matching", cards, tokens: [null, null], moves: [], ranked: { players: body.players, game: newGame(cards) } };
+      await this.save(room);
+      await this.arm(room, Date.now() + MATCH_JOIN_SECONDS * 1000);
       return new Response("ok");
     }
     const mode = url.searchParams.get("mode");
@@ -163,7 +195,7 @@ export class Room {
       }
       room = { code, phase: "waiting", cards: drawCards(5), tokens: [newToken(), null], moves: [] };
       await this.save(room);
-      await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_SECONDS * 1000);
+      await this.arm(room, Date.now() + ROOM_IDLE_SECONDS * 1000);
       return this.accept(0, { type: "room", code });
     }
 
@@ -186,7 +218,7 @@ export class Room {
       }
       if (!room) {
         room = { code, phase: "matching", cards: drawCards(5), tokens: [null, null], moves: [] };
-        await this.state.storage.setAlarm(Date.now() + MATCH_JOIN_SECONDS * 1000);
+        await this.arm(room, Date.now() + MATCH_JOIN_SECONDS * 1000);
       }
       room.code = code;
       if (room.phase !== "matching" || room.tokens[team]) {
@@ -196,7 +228,7 @@ export class Room {
       const ready = room.tokens[0] && room.tokens[1];
       if (ready) {
         room.phase = "playing";
-        await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_SECONDS * 1000);
+        await this.arm(room, Date.now() + ROOM_IDLE_SECONDS * 1000);
       }
       await this.save(room);
       const response = this.accept(team, ready ? null : { type: "queued" });
@@ -220,6 +252,7 @@ export class Room {
         type: "resume", team: seat, cards: room.cards, code: room.code, token, moves: room.moves,
         starter: room.starter === undefined ? -1 : room.starter, ping: room.ping || null,
         opponent_look: (room.looks || [null, null])[1 - seat],
+        clock: this.runningClock(room) ? clockView(room.ranked.clock, Date.now()) : null,
       });
       if (old) {
         old.close(1000, "replaced");
@@ -227,7 +260,7 @@ export class Room {
       const other = this.socketFor(1 - seat);
       if (other) {
         send(other, { type: "opponent_back" });
-        await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_SECONDS * 1000);
+        await this.arm(room, Date.now() + ROOM_IDLE_SECONDS * 1000);
       }
       return response;
     }
@@ -281,12 +314,24 @@ export class Room {
     if (room.starter !== undefined || !room.ping || room.ping.winner !== seat) return;
     const starter = Number(message.starter) === 1 ? 1 : 0;
     room.starter = starter;
-    if (room.ranked) setStarter(room.ranked.game, starter);
+    if (room.ranked) {
+      setStarter(room.ranked.game, starter);
+      room.ranked.clock = startClock(starter, Date.now(), Number(this.env.RANKED_CLOCK_MS) || undefined);
+    }
     await this.save(room);
+    await this.arm(room);
     for (const s of [0, 1]) {
       const socket = this.socketFor(s);
       if (socket) send(socket, { type: "starter", team: starter });
     }
+    this.sendClock(room);
+  }
+
+  // The player to move has no time left: a normal ranked loss.
+  async timeOut(room) {
+    const loser = room.ranked.clock.toMove;
+    room.ranked.clock.left[loser] = 0;
+    await this.finishRanked(room, loser === 0 ? [0, 1] : [1, 0], "time");
   }
 
   async webSocketMessage(socket, text) {
@@ -351,17 +396,29 @@ export class Room {
     }
     let outcome = null;
     if (room.ranked) {
+      const clock = this.runningClock(room);
+      if (clock && clock.left[seat] - (Date.now() - clock.turnStart) <= 0) {
+        // Arrived after the flag fell (the alarm may not have fired yet).
+        await this.timeOut(room);
+        return;
+      }
       outcome = play(room.ranked.game, seat, message);
       if (!outcome.ok) {
         send(socket, { type: "error", reason: "invalid_move" });
         return;
       }
     }
+    const clock = this.runningClock(room);
+    if (clock) chargeMove(clock, seat, Date.now());
     room.moves.push(message);
     await this.save(room);
     const other = this.socketFor(1 - seat);
     if (other) {
       send(other, message);
+    }
+    if (clock && outcome.winner === undefined && !outcome.draw) {
+      await this.arm(room);
+      this.sendClock(room);
     }
     if (outcome && outcome.winner !== undefined) {
       await this.finishRanked(room, outcome.winner === 0 ? [1, 0] : [0, 1]);
@@ -371,7 +428,7 @@ export class Room {
   }
 
   // Rates a ranked game once and tells both players their new rating.
-  async finishRanked(room, scores) {
+  async finishRanked(room, scores, reason = "") {
     if (!room.ranked || room.ranked.settled) {
       return;
     }
@@ -382,7 +439,7 @@ export class Room {
     for (const seat of [0, 1]) {
       const socket = this.socketFor(seat);
       if (socket) {
-        send(socket, { type: "ranked_result", score: scores[seat], ...results[seat] });
+        send(socket, { type: "ranked_result", score: scores[seat], reason, ...results[seat] });
       }
     }
   }
@@ -408,7 +465,7 @@ export class Room {
         return;
       }
       send(other, { type: "opponent_away", seconds: RECONNECT_SECONDS });
-      await this.state.storage.setAlarm(Date.now() + RECONNECT_SECONDS * 1000);
+      await this.arm(room, Date.now() + RECONNECT_SECONDS * 1000);
     }
   }
 
@@ -428,6 +485,18 @@ export class Room {
       await this.state.storage.deleteAll();
       return;
     }
+    const clock = this.runningClock(room);
+    if (clock && Date.now() >= clockDeadline(clock)) {
+      // The clock fell; this also holds while the player to move is away.
+      await this.timeOut(room);
+      await this.arm(room);
+      return;
+    }
+    if (room.baseAt && Date.now() < room.baseAt) {
+      // Woken for the clock, but no time ran out and the room's own deadline is later.
+      await this.arm(room);
+      return;
+    }
     const missing = [0, 1].filter((seat) => !this.socketFor(seat));
     if (room.phase === "playing" && missing.length === 1) {
       await this.end(room, missing[0]);
@@ -437,7 +506,7 @@ export class Room {
       await this.state.storage.deleteAll();
       return;
     }
-    await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_SECONDS * 1000);
+    await this.arm(room, Date.now() + ROOM_IDLE_SECONDS * 1000);
   }
 
   // The player in seat `leaver` is gone for good; the other one is told so.

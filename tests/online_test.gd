@@ -23,6 +23,7 @@ func _run_tests() -> void:
 		return
 	await _test_quick_match_and_reconnect()
 	await _test_room_codes_and_leave()
+	await _test_ranked_clock()
 	if failures.is_empty():
 		print("TEST RESULT: PASS (all online assertions succeeded)")
 	else:
@@ -110,6 +111,83 @@ func _test_room_codes_and_leave() -> void:
 	_expect(_count("l", "rejected") == 1 and _last("l", "rejected")[0] == "match_over", "A finished match cannot be resumed")
 
 
+## Ranked chess clock: starts with the starter, gains the increment per move,
+## keeps running while the player to move reconnects, and a fallen flag is a
+## rated loss. Needs RANKED_CLOCK_MS (e.g. 20000; reconnecting takes a few seconds) in server/online/.dev.vars.
+func _test_ranked_clock() -> void:
+	var tickets: Array[String] = []
+	for index: int in range(2):
+		tickets.append(await _ranked_ticket("clk%d%d" % [index, Time.get_ticks_msec() % 100000]))
+	if "" in tickets:
+		_expect(false, "Two signed-in players get ranked tickets")
+		return
+	var a := _client("ra")
+	var b := _client("rb")
+	a.connect_to_host(MatchClient.online_ranked_url(tickets[0]))
+	b.connect_to_host(MatchClient.online_ranked_url(tickets[1]))
+	await _wait_until(func() -> bool: return _count("ra", "start") == 1 and _count("rb", "start") == 1)
+	var team0: MatchClient = a if int(_last("ra", "start")[0]) == 0 else b
+	var team1: MatchClient = b if team0 == a else a
+	var name0 := "ra" if team0 == a else "rb"
+	var name1 := "rb" if team0 == a else "ra"
+	_expect(await _settle_ping(team0, team1, name0, name1), "A ranked match starts after the Node Ping")
+	await _wait_until(func() -> bool: return _count(name0, "clock") > 0 and _count(name1, "clock") > 0)
+	var start_clock := _last(name1, "clock")
+	var base := int(start_clock[0][0]) if not start_clock.is_empty() else 0
+	_expect(base > 0 and int(start_clock[1]) == 0, "The clock starts with the starter once the Node Ping is over")
+	if base > 30000:
+		_expect(false, "RANKED_CLOCK_MS is set short for the test (got %d ms)" % base)
+		return
+
+	await _wait_frames(800)
+	var card := MovementCard.cards_from_names(_last(name0, "start")[1])[0]
+	var origin := Vector2i(0, 4)
+	var target := card.destinations(origin, 0, 5).filter(func(cell: Vector2i) -> bool: return cell.y >= 1 and cell.y <= 3)[0] as Vector2i
+	var clocks_before := _count(name1, "clock")
+	team0.send_move(0, origin, 0, target)
+	await _wait_until(func() -> bool: return _count(name1, "clock") > clocks_before)
+	var after_move := _last(name1, "clock")
+	_expect(int(after_move[1]) == 1 and int(after_move[0][0]) > base, "After a move the other clock runs and the mover gained the increment")
+
+	# The player to move drops; the clock keeps running while they come back.
+	var clocks_before_drop := _count(name1, "clock")
+	team1._socket.close()
+	team1._on_socket_lost()
+	await _wait_until(func() -> bool: return _count(name1, "resume") > 0, 30000)
+	await _wait_until(func() -> bool: return _count(name1, "clock") > clocks_before_drop)
+	var resumed := _last(name1, "clock")
+	_expect(_count(name1, "resume") > 0 and int(resumed[1]) == 1 and int(resumed[0][1]) < base, "A resume carries the clock, still running for the player to move")
+
+	await _wait_until(func() -> bool: return _count(name0, "ranked_result") > 0 and _count(name1, "ranked_result") > 0, base + 8000)
+	var winner_result: Dictionary = _last(name0, "ranked_result")[0] if _count(name0, "ranked_result") > 0 else {}
+	var loser_result: Dictionary = _last(name1, "ranked_result")[0] if _count(name1, "ranked_result") > 0 else {}
+	_expect(str(loser_result.get("reason", "")) == "time" and float(loser_result.get("score", 1.0)) == 0.0 and float(winner_result.get("score", 0.0)) == 1.0, "Running out of time loses the ranked game")
+	_expect(int(loser_result.get("delta", 0)) < 0 and int(winner_result.get("delta", 0)) > 0, "A loss on time is rated like any other loss")
+
+
+## Guest account, e-mail login and username, then a ranked ticket ("" on failure).
+func _ranked_ticket(username: String) -> String:
+	var account := await _post(AccountService.api_url(), {}, "")
+	var code := str(account.get("code", ""))
+	await _post(AccountService.api_url().replace("/api/account", "/api/auth") + "/register", {"email": "%s@example.com" % username, "password": "longenough1"}, code)
+	await _post(AccountService.api_url() + "/username", {"username": username}, code)
+	var ticket := await _post(AccountService.api_url().replace("/api/account", "/api/ranked") + "/ticket", {}, code)
+	return str(ticket.get("ticket", ""))
+
+
+func _post(url: String, body: Dictionary, code: String) -> Dictionary:
+	var request := HTTPRequest.new()
+	root.add_child(request)
+	var headers: PackedStringArray = ["Content-Type: application/json"]
+	if not code.is_empty():
+		headers.append("Authorization: Bearer " + code)
+	request.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	var answer: Array = await request.request_completed
+	request.queue_free()
+	var parsed: Variant = JSON.parse_string((answer[3] as PackedByteArray).get_string_from_utf8())
+	return parsed if parsed is Dictionary else {}
+
+
 func _client(name: String) -> MatchClient:
 	var client: MatchClient = MatchClientScript.new()
 	root.add_child(client)
@@ -127,6 +205,8 @@ func _client(name: String) -> MatchClient:
 	client.connection_lost.connect(func() -> void: _log(name, "lost", []))
 	client.ping_result.connect(func(result: Dictionary) -> void: _log(name, "ping_result", [result]))
 	client.starter_chosen.connect(func(team: int) -> void: _log(name, "starter", [team]))
+	client.clock_synced.connect(func(left: Array, to_move: int) -> void: _log(name, "clock", [left, to_move]))
+	client.ranked_result.connect(func(result: Dictionary) -> void: _log(name, "ranked_result", [result]))
 	return client
 
 

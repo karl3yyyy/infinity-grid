@@ -419,6 +419,8 @@ func _perform_move(destination: Vector2i) -> void:
 	var source := moving_unit.grid_position
 	var captured_unit := grid_manager.get_unit_at(destination) as BattleUnit
 	var captured_master := captured_unit != null and captured_unit.is_master
+	# Any piece reaching the enemy KERN's starting square wins too.
+	var reached_temple := destination == temple_of(1 - current_player)
 	grid_manager.clear_highlights()
 	# Each side moves in its master character's fighting style.
 	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))
@@ -430,10 +432,15 @@ func _perform_move(destination: Vector2i) -> void:
 	grid_manager.move_occupant(moving_unit, source, destination)
 	_exchange_card(selected_card_slot)
 	_deselect_unit()
-	if captured_master:
+	if captured_master or reached_temple:
 		_finish_battle(current_player)
 		return
 	_advance_turn()
+
+
+## Where a team's KERN starts; any enemy piece stepping onto it wins.
+static func temple_of(team: int) -> Vector2i:
+	return Vector2i(2, 4 if team == 0 else 0)
 
 
 ## Gives the card in slot to the pass space and takes the waiting card.

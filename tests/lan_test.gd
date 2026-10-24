@@ -81,6 +81,7 @@ func _run_tests() -> void:
 	_server = null
 	_test_online_server_cards()
 	_test_shop_prices()
+	_test_server_rules_cards()
 
 	await _test_remote_move_replay()
 
@@ -128,6 +129,19 @@ func _test_online_server_cards() -> void:
 		if not worker.contains("\"%s\"" % card.card_name):
 			missing.append(card.card_name)
 	_expect(not worker.is_empty() and missing.is_empty(), "The online server deals from the same card pool (missing: %s)" % ", ".join(missing))
+
+
+## The ranked referee (server/online/rules.js) must know the same cards.
+func _test_server_rules_cards() -> void:
+	var rules := FileAccess.get_file_as_string("res://server/online/rules.js")
+	var mismatched: Array[String] = []
+	for card: MovementCard in MovementCard.create_deck():
+		var parts: PackedStringArray = []
+		for offset: Vector2i in card.offsets:
+			parts.append("[%d, %d]" % [offset.x, offset.y])
+		if not rules.contains("%s: [%s]," % [card.card_name, ", ".join(parts)]):
+			mismatched.append(card.card_name)
+	_expect(not rules.is_empty() and mismatched.is_empty(), "The ranked referee uses the same card moves (differ: %s)" % ", ".join(mismatched))
 
 
 func _test_shop_prices() -> void:

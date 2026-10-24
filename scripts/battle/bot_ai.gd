@@ -12,6 +12,8 @@ const WIN_SCORE: int = 100000
 const STUDENT_VALUE: int = 100
 const WIDTH: int = 5
 const HEIGHT: int = 5
+## Cell where each team's master starts; any enemy piece reaching it wins.
+const TEMPLE_CELLS: Array[int] = [22, 2]
 
 var difficulty: int = Difficulty.MEDIUM
 var max_think_msec: int = 1400
@@ -63,6 +65,8 @@ func _choose_easy(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 	for move: Array in moves:
 		if pieces[move[2]] == 2 and teams[move[2]] != team:
 			return move
+		if move[0] >= 0 and move[2] == TEMPLE_CELLS[1 - team]:
+			return move
 	if randf() < 0.45:
 		return moves.pick_random()
 	return _search_root(pieces, teams, hands, pass_card, team, moves, 1, 1000000)
@@ -108,7 +112,7 @@ func _search_root(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 
 
 func _negamax(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, pass_card: int, team: int, depth: int, alpha: int, beta: int, ply: int) -> int:
-	if not _master_alive(pieces, teams, team):
+	if not _master_alive(pieces, teams, team) or _temple_taken(pieces, teams, team):
 		return -WIN_SCORE + ply
 	if depth <= 0:
 		return _evaluate(pieces, teams, hands, team)
@@ -235,6 +239,12 @@ func _undo(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, team
 	teams[from] = teams[to]
 	pieces[to] = int(undo["captured_piece"])
 	teams[to] = int(undo["captured_team"])
+
+
+## An enemy piece stands on this team's KERN starting square: the game is lost.
+func _temple_taken(pieces: PackedInt32Array, teams: PackedInt32Array, team: int) -> bool:
+	var temple: int = TEMPLE_CELLS[team]
+	return pieces[temple] != 0 and teams[temple] != team
 
 
 func _master_alive(pieces: PackedInt32Array, teams: PackedInt32Array, team: int) -> bool:

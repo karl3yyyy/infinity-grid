@@ -338,7 +338,7 @@ func _build_ui() -> void:
 		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",
 		"> Links und rechts ist das Brett endlos: Wer rechts rausgeht, kommt links wieder rein.",
 		"> Kann keine Figur ziehen, gibst du eine Karte ab.",
-		"> Schlag den gegnerischen KERN und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
+		"> Schlag den gegnerischen KERN – oder stell irgendeine deiner Figuren auf sein Startfeld – und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
 	])
 	_rules_box.add_child(rules)
 	var rules_back := _make_button("< ZURÜCK", _rules_box)

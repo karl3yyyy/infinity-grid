@@ -98,7 +98,8 @@ static func _add_backdrop(viewport: SubViewport) -> void:
 static func _snapshot(id: String, live: FighterSprite) -> void:
 	for frame: int in range(4):
 		await live.get_tree().process_frame
-	if not is_instance_valid(live):
+	# Headless runs have no renderer to read back; the live portrait stays then.
+	if not is_instance_valid(live) or DisplayServer.get_name() == "headless":
 		return
 	_portrait_cache[id] = ImageTexture.create_from_image(live.viewport.get_texture().get_image())
 	live.queue_free()

@@ -51,4 +51,4 @@ STRIPE_PRICE_SMALL = "price_1UTywbChrUtwv0Dvr8ZrWEkS"
 STRIPE_PRICE_MEDIUM = "price_1UTyxQChrUtwv0DvsQOYT46A"
 STRIPE_PRICE_LARGE = "price_1UTyyBChrUtwv0DvtJAfPohy"
 # Google sign-in: OAuth client id (public); GOOGLE_CLIENT_SECRET is a secret.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "421002041560-4tlnqeir7dvq0ipgcflhnh6kaej7i6tu.apps.googleusercontent.com"

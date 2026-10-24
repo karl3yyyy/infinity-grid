@@ -47,6 +47,9 @@ var menu_button: Button
 ## Optional button under the instruction, e.g. "play the bot instead".
 var side_action_button: Button
 var _side_action: Callable
+## Second button for two-way choices (who starts after the Node Ping).
+var side_choice_button: Button
+var _side_choice: Callable
 var _pause_box: VBoxContainer
 var _rules_box: VBoxContainer
 var _new_match_button: Button
@@ -127,6 +130,15 @@ func show_side_action(label_text: String, action: Callable) -> void:
 
 func hide_side_action() -> void:
 	side_action_button.visible = false
+	side_choice_button.visible = false
+
+
+## Two buttons side by side; either one closes both.
+func show_choice(first_text: String, first: Callable, second_text: String, second: Callable) -> void:
+	show_side_action(first_text, first)
+	_side_choice = second
+	side_choice_button.text = second_text
+	side_choice_button.visible = true
 
 
 func set_opponent_remote(enabled: bool) -> void:
@@ -252,9 +264,16 @@ func _build_ui() -> void:
 	side_action_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	side_action_button.visible = false
 	side_action_button.pressed.connect(func() -> void:
-		side_action_button.visible = false
+		hide_side_action()
 		if _side_action.is_valid():
 			_side_action.call())
+	side_choice_button = _make_button("", bottom_box)
+	side_choice_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	side_choice_button.visible = false
+	side_choice_button.pressed.connect(func() -> void:
+		hide_side_action()
+		if _side_choice.is_valid():
+			_side_choice.call())
 	_add_hand_title(bottom_box, 0)
 	_add_hand_row(bottom_box, 0)
 	# Titles were appended bottom-last; keep index = position.

@@ -22,6 +22,9 @@ signal opponent_left
 signal matched(opponent: Dictionary)
 ## Rating change after a ranked game: {score, before, after, delta, rank}.
 signal ranked_result(result: Dictionary)
+## Node Ping (online): both picks and the signal; winner -1 is a collision.
+signal ping_result(result: Dictionary)
+signal starter_chosen(team: int)
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
 signal reconnecting
@@ -53,6 +56,10 @@ var _pong_wait: float = -1.0
 var _quick_base: String = ""
 ## "quick" or "ranked" while waiting in a lobby, else "".
 var _lobby_mode: String = ""
+## The server runs a Node Ping before the first move (the PC host does not).
+var ping_required: bool = false
+## Starter known from a resume (-1: the ping is still open).
+var resumed_starter: int = -1
 
 
 ## Address of the PC host. In the browser it is the PC that served this page;
@@ -172,6 +179,14 @@ func send_pass(seq: int, slot: int) -> void:
 
 
 ## Tells the opponent which character, echoes and board skin to show.
+func send_node_ping(cell: Vector2i) -> void:
+	_send_now({"type": "node_ping", "cell": [cell.x, cell.y]})
+
+
+func send_choose(starter: int) -> void:
+	_send_now({"type": "choose", "starter": starter})
+
+
 func send_look(look: Dictionary) -> void:
 	_send_now({"type": "look", "character": str(look.get("character", "")), "skin": str(look.get("skin", "")), "echo": str(look.get("echo", "")), "board": str(look.get("board", ""))})
 
@@ -273,9 +288,12 @@ func _handle_message(text: String) -> void:
 		"room":
 			room_created.emit(str(message.get("code", "")))
 		"start":
+			ping_required = bool(message.get("ping", false))
 			_remember(message)
 			match_started.emit(int(message["team"]), message["cards"] as Array)
 		"resume":
+			ping_required = true
+			resumed_starter = int(message.get("starter", -1))
 			_remember(message)
 			_reconnect_time_left = -1.0
 			resumed.emit(int(message["team"]), message["cards"] as Array, message.get("moves", []) as Array)
@@ -286,6 +304,10 @@ func _handle_message(text: String) -> void:
 			opponent_moved.emit(message)
 		"ranked_result":
 			ranked_result.emit(message)
+		"ping_result":
+			ping_result.emit(message)
+		"starter":
+			starter_chosen.emit(int(message.get("team", 0)))
 		"opponent_away":
 			opponent_away.emit(int(message.get("seconds", 60)))
 		"opponent_back":

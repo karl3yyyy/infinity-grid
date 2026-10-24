@@ -46,6 +46,7 @@ func _test_quick_match_and_reconnect() -> void:
 	_expect(teams == [0, 1] and _last("a", "start")[1] == _last("b", "start")[1], "Paired players get opposite teams and the same cards")
 	var first: MatchClient = a if int(_last("a", "start")[0]) == 0 else b
 	var second: MatchClient = b if first == a else a
+	_expect(await _settle_ping(first, second, "a" if first == a else "b", "b" if first == a else "a"), "Node Ping decides the starter before any move")
 	var second_name := "b" if first == a else "a"
 	var first_name := "a" if first == a else "b"
 
@@ -124,11 +125,30 @@ func _client(name: String) -> MatchClient:
 	client.rejected.connect(func(reason: String) -> void: _log(name, "rejected", [reason]))
 	client.reconnecting.connect(func() -> void: _log(name, "reconnecting", []))
 	client.connection_lost.connect(func() -> void: _log(name, "lost", []))
+	client.ping_result.connect(func(result: Dictionary) -> void: _log(name, "ping_result", [result]))
+	client.starter_chosen.connect(func(team: int) -> void: _log(name, "starter", [team]))
 	return client
 
 
 func _log(name: String, kind: String, values: Array) -> void:
 	(events[name] as Array).append([kind, values])
+
+
+## Plays Node Pings until one side wins, then lets team 0 start.
+## team0/team1 are the clients by team, with their log names.
+func _settle_ping(team0: MatchClient, team1: MatchClient, name0: String, name1: String) -> bool:
+	for attempt: int in range(12):
+		var before := _count(name0, "ping_result")
+		team0.send_node_ping(Vector2i(randi_range(0, 4), randi_range(0, 4)))
+		team1.send_node_ping(Vector2i(randi_range(0, 4), randi_range(0, 4)))
+		await _wait_until(func() -> bool: return _count(name0, "ping_result") > before and _count(name1, "ping_result") > before)
+		var winner := int((_last(name0, "ping_result")[0] as Dictionary).get("winner", -1))
+		if winner < 0:
+			continue
+		(team0 if winner == 0 else team1).send_choose(0)
+		await _wait_until(func() -> bool: return _count(name0, "starter") > 0 and _count(name1, "starter") > 0)
+		return int(_last(name0, "starter")[0]) == 0 and int(_last(name1, "starter")[0]) == 0
+	return false
 
 
 func _count(name: String, kind: String) -> int:

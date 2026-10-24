@@ -122,7 +122,11 @@ func _on_match_started(team: int, card_names: Array) -> void:
 		return
 	_started = true
 	client.send_look(CharacterRoster.load_look())
-	ui.set_instruction("Du beginnst. Wähle eine Karte und eine Figur." if team == 0 else "Der Gegner beginnt ...")
+	# The online server runs a Node Ping first; the PC host lets team 0 start.
+	var starter := 0
+	if client.ping_required:
+		starter = await battle._ping_phase().run_network(client, team)
+	battle.set_starter(starter)
 
 
 func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
@@ -131,7 +135,14 @@ func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
 			battle.end_with_message("FEHLER BEIM START")
 			return
 		_started = true
-	client.send_look(CharacterRoster.load_look())
+		client.send_look(CharacterRoster.load_look())
+		# Back after a reload: the starter is known, or the Node Ping is still open.
+		var starter := client.resumed_starter
+		if starter < 0:
+			starter = await battle._ping_phase().run_network(client, team)
+		battle.set_starter(starter)
+	else:
+		client.send_look(CharacterRoster.load_look())
 	for index: int in range(moves.size()):
 		var turn: Dictionary = moves[index]
 		turn["seq"] = index

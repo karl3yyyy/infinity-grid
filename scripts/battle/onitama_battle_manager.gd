@@ -24,6 +24,10 @@ var selected_unit: BattleUnit
 var selected_card_slot: int = -1
 var movement_targets: Array[Vector2i] = []
 var current_player: int = 0
+## Who moved first; rounds count from this side. Decided by the Node Ping.
+var starting_player: int = 0
+## True during the Node Ping; board clicks go to the ping instead.
+var pinging: bool = false
 var round_number: int = 1
 var input_locked: bool = true
 var battle_over: bool = false
@@ -149,11 +153,9 @@ func _start_bot_training() -> void:
 	bot_opponent_enabled = true
 	bot_difficulty = battle_ui.main_menu.bot_difficulty
 	battle_ui.set_opponent_bot(true, BotAI.label_for(bot_difficulty))
-	input_locked = false
-	player_controller.enabled = true
-	camera_controller.set_player_view(current_player)
+	camera_controller.set_player_view(0)
 	_refresh_ui()
-	battle_ui.set_instruction("Wähle eine Karte und eine Figur, dann ein leuchtendes Feld.")
+	set_starter(await _ping_phase().run_local(true))
 
 
 func _start_local_multiplayer() -> void:
@@ -164,12 +166,10 @@ func _start_local_multiplayer() -> void:
 	grid_manager.get_parent().visible = true
 	bot_opponent_enabled = false
 	battle_ui.set_opponent_bot(false)
-	input_locked = false
-	player_controller.enabled = true
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	match_mode = "local"
-	battle_ui.set_instruction("Spieler 1 beginnt. Nach jedem Zug das Gerät weitergeben.")
+	set_starter(await _ping_phase().run_local(false))
 
 
 func _start_lan_match() -> void:
@@ -249,8 +249,28 @@ func begin_network_match(team: int, card_names: Array) -> bool:
 	_record_position()
 	_apply_match_looks(team)
 	camera_controller.set_player_view(team)
-	_begin_turn(1)
+	# Online the Node Ping (or a resume) decides who starts; see set_starter().
 	return true
+
+
+## Starts play with the side the Node Ping chose.
+func set_starter(team: int) -> void:
+	pinging = false
+	starting_player = team
+	current_player = team
+	position_counts.clear()
+	_record_position()
+	if not bot_opponent_enabled and network_team < 0:
+		camera_controller.set_player_view(team)
+	_begin_turn(1)
+
+
+func _ping_phase() -> PingPhase:
+	var phase := PingPhase.new()
+	phase.name = "PingPhase"
+	add_child(phase)
+	phase.setup(self, battle_ui, grid_manager, player_controller)
+	return phase
 
 
 ## Plays one turn received over the network for whichever side is to move.
@@ -365,7 +385,7 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 
 
 func _on_cell_clicked(coordinate: Vector2i) -> void:
-	if input_locked or battle_over or not grid_manager.is_inside(coordinate):
+	if pinging or input_locked or battle_over or not grid_manager.is_inside(coordinate):
 		return
 	if must_pass:
 		battle_ui.set_instruction(_pass_instruction())
@@ -464,7 +484,7 @@ func _advance_turn() -> void:
 	current_player = 1 - current_player
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(current_player)
-	if current_player == 0:
+	if current_player == starting_player:
 		round_number += 1
 	selected_card_slot = -1
 	var repetitions := _record_position()

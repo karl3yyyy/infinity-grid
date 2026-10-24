@@ -11,6 +11,11 @@
 //   mode=match&code=<12>&team=0|1    -> both: start (the lobby sends players here)
 //   mode=resume&code=..&token=..     -> {"type":"resume","team","cards","code","token","moves":[...]}
 // Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"look", ...}, {"type":"leave"}, raw "ping".
+// Node Ping before every match ("start" carries ping:true): both send
+// {"type":"node_ping", cell:[x,y]}; the server rolls the signal and answers
+// {"type":"ping_result", picks, signal, winner} (winner -1 = collision, ping
+// again); the winner sends {"type":"choose", starter} and both get
+// {"type":"starter", team}. Moves are accepted only after that.
 // Server events: opponent_away {seconds}, opponent_back, opponent_left, error {reason}.
 // Every client runs the rules itself; the server only checks turn order.
 // Player accounts for the cosmetics shop live in accounts.js (/api/account);
@@ -25,7 +30,7 @@ import { donePage, handleWebhook } from "./payments.js";
 import { handleAuthApi, handleGooglePages } from "./auth.js";
 import { handleFriendsApi } from "./friends.js";
 import { handleRankedApi, settle } from "./ranked.js";
-import { newGame, play } from "./rules.js";
+import { newGame, pingDistance, play, setStarter } from "./rules.js";
 export { Login } from "./auth.js";
 export { RankedLobby } from "./ranked.js";
 export { Account } from "./accounts.js";
@@ -206,6 +211,7 @@ export class Room {
       const old = this.socketFor(seat);
       const response = this.accept(seat, {
         type: "resume", team: seat, cards: room.cards, code: room.code, token, moves: room.moves,
+        starter: room.starter === undefined ? -1 : room.starter, ping: room.ping || null,
         opponent_look: (room.looks || [null, null])[1 - seat],
       });
       if (old) {
@@ -234,8 +240,45 @@ export class Room {
     for (const seat of [0, 1]) {
       const socket = this.socketFor(seat);
       if (socket) {
-        send(socket, { type: "start", team: seat, cards: room.cards, code: room.code, token: room.tokens[seat] });
+        send(socket, { type: "start", team: seat, cards: room.cards, code: room.code, token: room.tokens[seat], ping: true });
       }
+    }
+  }
+
+  // Node Ping: both picks in, roll the signal; equal distance means another round.
+  async nodePing(room, seat, message) {
+    if (room.starter !== undefined) return;
+    const cell = message.cell || [];
+    const x = Number(cell[0]), y = Number(cell[1]);
+    if (!(x >= 0 && x < 5 && y >= 0 && y < 5)) return;
+    room.ping = room.ping || { picks: [null, null], winner: -1 };
+    if (room.ping.winner >= 0) return;
+    room.ping.picks[seat] = [x, y];
+    if (room.ping.picks.some((pick) => !pick)) {
+      await this.save(room);
+      return;
+    }
+    const signal = [Math.floor(Math.random() * 5), Math.floor(Math.random() * 5)];
+    const [a, b] = room.ping.picks.map((pick) => pingDistance(pick, signal));
+    const winner = a === b ? -1 : (a < b ? 0 : 1);
+    const result = { type: "ping_result", picks: room.ping.picks, signal, winner };
+    room.ping = winner < 0 ? { picks: [null, null], winner: -1 } : { picks: room.ping.picks, winner };
+    await this.save(room);
+    for (const s of [0, 1]) {
+      const socket = this.socketFor(s);
+      if (socket) send(socket, result);
+    }
+  }
+
+  async chooseStarter(room, seat, message) {
+    if (room.starter !== undefined || !room.ping || room.ping.winner !== seat) return;
+    const starter = Number(message.starter) === 1 ? 1 : 0;
+    room.starter = starter;
+    if (room.ranked) setStarter(room.ranked.game, starter);
+    await this.save(room);
+    for (const s of [0, 1]) {
+      const socket = this.socketFor(s);
+      if (socket) send(socket, { type: "starter", team: starter });
     }
   }
 
@@ -270,13 +313,22 @@ export class Room {
       }
       return;
     }
-    if (message.type !== "move" && message.type !== "pass") {
+    if (message.type === "node_ping") {
+      await this.nodePing(room, seat, message);
       return;
     }
-    // Team 0 moves first and every turn is exactly one move or pass, so the
-    // sequence number decides whose turn it is. Repeats after a reconnect are dropped.
+    if (message.type === "choose") {
+      await this.chooseStarter(room, seat, message);
+      return;
+    }
+    if (message.type !== "move" && message.type !== "pass" || room.starter === undefined) {
+      return;
+    }
+    // The starter moves first and every turn is exactly one move or pass, so
+    // the sequence number decides whose turn it is. Repeats after a reconnect are dropped.
     const seq = Number(message.seq);
-    if (seq !== room.moves.length || seq % 2 !== seat) {
+    const toMove = seq % 2 === 0 ? room.starter : 1 - room.starter;
+    if (seq !== room.moves.length || toMove !== seat) {
       return;
     }
     let outcome = null;

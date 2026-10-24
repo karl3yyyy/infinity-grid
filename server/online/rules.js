@@ -71,6 +71,20 @@ export function hasLegalMove(game, team) {
   return false;
 }
 
+// The Node Ping decided who moves first.
+export function setStarter(game, team) {
+  game.turn = team;
+  game.seen = {};
+  record(game);
+}
+
+// Node Ping: distance between two cells, the board wrapping left/right.
+export function pingDistance(a, b) {
+  const dx = Math.abs(a[0] - b[0]);
+  const wrapped = Math.min(dx, SIZE - dx);
+  return wrapped * wrapped + (a[1] - b[1]) ** 2;
+}
+
 // Applies a client message ({type:"move", slot, from:[x,y], to:[x,y]} or
 // {type:"pass", slot}) for `team`. Returns {ok:false} for an illegal turn,
 // else {ok:true, winner?:0|1, draw?:true}.

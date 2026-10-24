@@ -150,7 +150,11 @@ func packs() -> Array:
 ## Starts paying for a credit pack. Returns {session, url} of the Stripe
 ## Checkout page or {} (then _last_error says why).
 func start_checkout(pack_id: String) -> Dictionary:
-	await _call("checkout", HTTPClient.METHOD_POST, "/checkout", {"pack": pack_id})
+	var body := {"pack": pack_id}
+	if OS.has_feature("web"):
+		# Come back to this very page: its browser storage holds this account.
+		body["return_to"] = str(JavaScriptBridge.eval("window.location.origin + window.location.pathname"))
+	await _call("checkout", HTTPClient.METHOD_POST, "/checkout", body)
 	return _last_response if _last_error.is_empty() else {}
 
 

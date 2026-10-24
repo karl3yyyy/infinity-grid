@@ -103,7 +103,7 @@ export async function handleAccountApi(request, env, url) {
   const answer = await account.fetch("https://account/" + (op === "checkout" ? "get" : op), { method: "POST", body: JSON.stringify(body) });
   const result = await answer.json();
   if (op === "checkout" && answer.ok) {
-    const checkout = await createCheckout(env, key,String(body.pack || ""), url.origin);
+    const checkout = await createCheckout(env, key, String(body.pack || ""), returnPage(body.return_to, url.origin));
     return json(checkout.body, checkout.status);
   }
   if (op === "create" && answer.ok) {
@@ -215,6 +215,17 @@ function normaliseCode(text) {
     return "";
   }
   return `${letters.slice(0, 4)}-${letters.slice(4, 8)}-${letters.slice(8)}`;
+}
+
+// Where Stripe sends the player back: the game page they bought from, so the
+// same browser storage (and account) is there. Only this server and GitHub
+// Pages qualify; anything else falls back to this server.
+function returnPage(page, origin) {
+  const text = String(page || "");
+  if (/^https:\/\/[a-z0-9-]+\.github\.io(\/[A-Za-z0-9._-]+)*\/?$/.test(text) || text === origin || text === origin + "/") {
+    return text.replace(/\/$/, "");
+  }
+  return origin;
 }
 
 export async function accountKey(code) {

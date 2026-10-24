@@ -40,7 +40,8 @@ export function offeredPacks(env) {
     .map(([id, pack]) => ({ id, credits: pack.credits, label: pack.label }));
 }
 
-export async function createCheckout(env, accountKey, packId, origin) {
+// returnPage: the game page (origin and path, no trailing slash) to come back to.
+export async function createCheckout(env, accountKey, packId, returnPage) {
   const pack = PACKS[packId];
   if (!paymentsEnabled(env) || !pack || !env[pack.price]) {
     return { status: 503, body: { error: "payments_off" } };
@@ -51,8 +52,8 @@ export async function createCheckout(env, accountKey, packId, origin) {
     "line_items[0][quantity]": "1",
     client_reference_id: accountKey,
     "metadata[pack]": packId,
-    success_url: origin + "/?checkout=success",
-    cancel_url: origin + "/?checkout=cancel",
+    success_url: returnPage + "/?checkout=success",
+    cancel_url: returnPage + "/?checkout=cancel",
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",

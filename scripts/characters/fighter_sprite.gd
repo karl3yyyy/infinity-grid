@@ -158,7 +158,7 @@ func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_displ
 
 	_model_pivot = Node3D.new()
 	viewport.add_child(_model_pivot)
-	model = FighterModel.new()
+	model = BoneFighterModel.new() if look.has("model_scene") else FighterModel.new()
 	model.name = "Model"
 	_model_pivot.add_child(model)
 	model.build(look)

@@ -49,6 +49,7 @@ const WASM_PARTS = ["/index.wasm.part0", "/index.wasm.part1"];
 // Must match EmoteWheel.CATALOGUE in scripts/ui/emote_wheel.gd.
 const EMOTE_IDS = [
   "dance", "spin", "hop", "shadowbox", "chill", "glitch",
+  "twerk", "smoke", "laugh", "cheer",
   "gg", "glhf", "e404", "lag", "nice", "heat",
   "haha", "what", "heart", "skull", "fire", "eyes",
 ];

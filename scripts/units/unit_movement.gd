@@ -69,6 +69,7 @@ func _crosses_wrap(source: Vector2i, destination: Vector2i, grid: GridManager) -
 ##   brawler  - runs up and punches the target apart, then steps in
 ##   gunner   - aims and shoots, then walks over
 ##   sorcerer - throws lightning, then dashes over
+##   bazooka  - rockets a target away, or blasts himself two or more fields
 func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destination: Vector2i, grid: GridManager, style: String, accent: Color) -> void:
 	var path: Array[Vector2i] = [source, destination]
 	if unit.rig == null:
@@ -91,6 +92,8 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 			await _mage(unit, victim, aim, target_position, effects_parent, accent)
 		"brawler":
 			await _brawler(unit, victim, source, destination, aim, target_position, grid, effects_parent, accent)
+		"bazooka":
+			await _bazooka(unit, victim, source, destination, aim, target_position, grid, effects_parent, accent)
 		"gunner":
 			if victim != null:
 				await unit.rig.pose("aim", 0.2)
@@ -164,6 +167,53 @@ func _brawler(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destinatio
 		unit.play_idle()
 	else:
 		await _walk_to(unit, target_position)
+
+
+## Bazooka: a capture is a rocket at the target, then a walk. Two or more
+## fields he shoots himself there (the bazooka fires backwards); one field is a plain walk.
+func _bazooka(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destination: Vector2i, aim: Vector3, target_position: Vector3, grid: GridManager, parent: Node, accent: Color) -> void:
+	var cells := _cell_distance(source, destination, grid)
+	if victim == null and cells < 2:
+		await _walk(unit, source, destination, target_position, grid)
+		return
+	await unit.rig.pose("aim", 0.2)
+	unit.rig.pose("shoot")
+	SoundBoard.play("shot")
+	var muzzle := _hand_position(unit)
+	CombatEffects.burst(parent, muzzle, Color(1.0, 0.8, 0.4), 0.5)
+	if victim != null:
+		await CombatEffects.rocket(parent, muzzle, aim + Vector3(0.0, 0.8, 0.0), accent)
+		CombatEffects.burst(parent, aim + Vector3(0.0, 0.8, 0.0), accent, 1.2)
+		await victim.shatter(unit.global_position, accent)
+		await unit.rig.release(0.15)
+		await _walk(unit, source, destination, target_position, grid)
+		return
+	await unit.rig.release(0.1)
+	var model := unit.rig.model as BoneFighterModel
+	if model != null:
+		model.aim_weapon_back(true)
+	unit.rig.model.play(&"Jump", 0.1)
+	var start := unit.position
+	var smoke := unit.create_tween().set_loops(8)
+	smoke.tween_interval(0.07)
+	smoke.tween_callback(func() -> void:
+		var back := -unit.global_transform.basis.z.normalized()
+		var behind := unit.global_position - back * 0.5 + Vector3(0.0, 0.9, 0.0)
+		CombatEffects.burst(parent, behind, Color(1.0, 0.55, 0.15), 0.4)
+		CombatEffects.burst(parent, behind - back * 0.3, Color(0.8, 0.8, 0.8), 0.35))
+	var flight := unit.create_tween()
+	flight.tween_method(func(progress: float) -> void:
+		unit.position = start.lerp(aim, progress) + Vector3.UP * sin(PI * progress) * 1.6, 0.0, 1.0, 0.6).set_trans(Tween.TRANS_SINE)
+	await flight.finished
+	CombatEffects.burst(parent, aim, Color(1.0, 0.8, 0.4), 0.7)
+	if model != null:
+		model.aim_weapon_back(false)
+	unit.play_idle()
+
+
+func _cell_distance(source: Vector2i, destination: Vector2i, grid: GridManager) -> int:
+	var across := absi(destination.x - source.x)
+	return maxi(mini(across, grid.grid_size.x - across), absi(destination.y - source.y))
 
 
 func _walk(unit: BattleUnit, source: Vector2i, destination: Vector2i, target_position: Vector3, grid: GridManager) -> void:

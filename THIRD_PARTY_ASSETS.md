@@ -12,3 +12,5 @@ account-gated files are included.
 | Universal Animation Library [Standard] | Quaternius | CC0 1.0 (License.txt in the zip) | https://opengameart.org/content/universal-animation-library | `universal_animation_librarystandard.zip` (SHA256 `18ff1a7215f4852b…`) | 2026-10-24 | `assets/characters/humans/animation_library.glb` | Godot GLB unchanged; retargeted to Godot's humanoid profile on import (`bone_map_animations.tres`). |
 
 
+
+| Evlis (dog, bone launcher) | Karl (generated with Tripo AI from his concept art) | Own work / generated model; licence depends on his Tripo plan | https://studio.tripo3d.ai | `evlis_dog.glb`, `evlis_bazooka.glb` exported from his Tripo account | 2026-10-24 | `assets/characters/evlis/dog.glb`, `assets/characters/evlis/bone_launcher.glb` | Rigged with Tripo Auto-Rig (Mixamo skeleton); animations are built in the game (`scripts/characters/evlis_animations.gd`). Check the Tripo plan allows commercial use before release. |

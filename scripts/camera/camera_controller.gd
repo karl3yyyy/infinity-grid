@@ -8,7 +8,12 @@ var target_distance: float = 11.5
 var yaw: float = 0.0
 var target_yaw: float = 0.0
 var pitch: float = deg_to_rad(54.0)
-var pan_speed: float = 7.0
+## The view the match starts in; turning and zooming stay close to it.
+var base_yaw: float = 0.0
+var base_distance: float = 11.5
+const MAX_YAW_OFFSET: float = 0.75
+const ZOOM_IN_FACTOR: float = 0.7
+const ZOOM_OUT_FACTOR: float = 1.2
 var _shake_time: float = 0.0
 var _shake_strength: float = 0.0
 ## Screen pixels covered by the card trays above and below the board.
@@ -29,26 +34,28 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var input_vector := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
-	if input_vector.length_squared() > 0.0:
-		var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
-		var right := Vector3(forward.z, 0.0, -forward.x)
-		target_focus += (right * input_vector.x + forward * input_vector.y) * pan_speed * delta
-		target_focus.x = clampf(target_focus.x, -7.5, 7.5)
-		target_focus.z = clampf(target_focus.z, -7.5, 7.5)
 	if Input.is_action_pressed("camera_rotate_left"):
 		target_yaw -= delta * 1.35
 	if Input.is_action_pressed("camera_rotate_right"):
 		target_yaw += delta * 1.35
+	_clamp_view()
 	_update_camera(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			target_distance = maxf(9.0, target_distance - 1.2)
+			target_distance -= base_distance * 0.08
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			target_distance = minf(23.0, target_distance + 1.2)
+			target_distance += base_distance * 0.08
+		_clamp_view()
+
+
+## Turning and zooming stay within a small range around the starting view.
+func _clamp_view() -> void:
+	var offset := clampf(wrapf(target_yaw - base_yaw, -PI, PI), -MAX_YAW_OFFSET, MAX_YAW_OFFSET)
+	target_yaw = base_yaw + offset
+	target_distance = clampf(target_distance, base_distance * ZOOM_IN_FACTOR, base_distance * ZOOM_OUT_FACTOR)
 
 
 func focus_on(world_position: Vector3) -> void:
@@ -57,7 +64,8 @@ func focus_on(world_position: Vector3) -> void:
 
 func set_player_view(team_id: int) -> void:
 	target_focus = Vector3.ZERO
-	target_yaw = 0.0 if team_id == 0 else PI
+	base_yaw = 0.0 if team_id == 0 else PI
+	target_yaw = base_yaw
 
 
 func set_board_insets(top_pixels: float, bottom_pixels: float) -> void:
@@ -70,21 +78,19 @@ func shake(strength: float, duration: float) -> void:
 	_shake_time = maxf(_shake_time, duration)
 
 
-func pan_by_screen_delta(relative: Vector2) -> void:
-	var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
-	var right := Vector3(forward.z, 0.0, -forward.x)
-	var scale_factor := distance * 0.0018
-	target_focus += (-right * relative.x + forward * relative.y) * scale_factor
-	target_focus.x = clampf(target_focus.x, -7.5, 7.5)
-	target_focus.z = clampf(target_focus.z, -7.5, 7.5)
-
-
 func zoom_by_gesture(distance_delta: float) -> void:
-	target_distance = clampf(target_distance - distance_delta * 0.018, 9.0, 23.0)
+	target_distance -= distance_delta * 0.018
+	_clamp_view()
 
 
 func rotate_by_gesture(angle_delta: float) -> void:
 	target_yaw += angle_delta
+	_clamp_view()
+
+
+func rotate_by_drag(horizontal_pixels: float) -> void:
+	target_yaw -= horizontal_pixels * 0.006
+	_clamp_view()
 
 
 func _update_camera(delta: float) -> void:
@@ -122,6 +128,7 @@ func _update_framing() -> void:
 	var width_fit := total_board_width / aspect_ratio
 	var height_fit := BOARD_VISUAL_DEPTH * viewport_size.y / free_height
 	target_distance = maxf(7.4, maxf(width_fit, height_fit))
+	base_distance = target_distance
 	distance = target_distance
 	_apply_inset_offset()
 

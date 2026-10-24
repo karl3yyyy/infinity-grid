@@ -117,7 +117,7 @@ func _handle_screen_drag(event: InputEventScreenDrag) -> bool:
 	if event.position.distance_to(start) >= DRAG_THRESHOLD:
 		_touch_moved[event.index] = true
 	if _touch_positions.size() == 1:
-		camera_controller.pan_by_screen_delta(event.relative)
+		camera_controller.rotate_by_drag(event.relative.x)
 		return true
 	if _touch_positions.size() == 2:
 		var indices: Array = _touch_positions.keys()

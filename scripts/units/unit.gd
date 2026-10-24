@@ -116,8 +116,8 @@ func apply_figure(figure: Node3D) -> void:
 		refresh_projections()
 
 
-## Fighters face the player so every character shows its face; while a piece
-## moves or attacks the model inside the sprite turns where the piece points.
+## Each piece faces where it points: at rest towards the opposing side (your
+## figures towards the enemy), while moving or attacking where it goes.
 func _face_viewer() -> void:
 	if rig == null or is_dead:
 		return
@@ -125,7 +125,9 @@ func _face_viewer() -> void:
 	if camera == null:
 		return
 	visual_root.rotation.y = 0.0
-	rig.turn = wrapf(global_rotation.y - camera.global_rotation.y, -PI, PI) if facing_locked else 0.0
+	# The piece's own yaw decides: at rest it points at the opposing side, so your
+	# figures look towards the enemy and the enemy's look at you.
+	rig.turn = wrapf(global_rotation.y - camera.global_rotation.y, -PI, PI)
 
 
 func set_selected(value: bool) -> void:

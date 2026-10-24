@@ -25,6 +25,9 @@ func _ready() -> void:
 		timer.autostart = true
 		timer.timeout.connect(_check_for_web_update)
 		add_child(timer)
+	var sound := SoundBoard.new()
+	sound.name = "SoundBoard"
+	add_child(sound)
 	_build_environment()
 	var battle_scene := Node3D.new()
 	battle_scene.name = "BattleScene"

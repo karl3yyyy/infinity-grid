@@ -6,6 +6,7 @@ signal movement_finished(unit: BattleUnit)
 
 
 func move_unit(unit: BattleUnit, path: Array[Vector2i], grid: GridManager) -> void:
+	SoundBoard.play("move", -4.0)
 	if path.size() <= 1 or unit.is_dead:
 		return
 	movement_started.emit(unit)
@@ -94,6 +95,7 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 			if victim != null:
 				await unit.rig.pose("aim", 0.2)
 				unit.rig.pose("shoot")
+				SoundBoard.play("shot")
 				await CombatEffects.projectile(effects_parent, _hand_position(unit), aim + Vector3(0.0, 0.8, 0.0), accent)
 				CombatEffects.burst(effects_parent, aim + Vector3(0.0, 0.8, 0.0), accent, 0.5)
 				await victim.shatter(unit.global_position, accent)
@@ -102,6 +104,7 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 		_:
 			if victim != null:
 				await unit.rig.pose("channel", 0.22)
+				SoundBoard.play("zap")
 				CombatEffects.lightning(effects_parent, _hand_position(unit), aim + Vector3(0.0, 0.7, 0.0), accent)
 				CombatEffects.burst(effects_parent, aim + Vector3(0.0, 0.7, 0.0), accent.lightened(0.4), 0.55)
 				await victim.shatter(unit.global_position, accent)
@@ -117,6 +120,7 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 
 func _mage(unit: BattleUnit, victim: BattleUnit, aim: Vector3, target_position: Vector3, parent: Node, accent: Color) -> void:
 	await unit.rig.pose("cast", 0.22)
+	SoundBoard.play("teleport")
 	var circle := CombatEffects.magic_circle(parent, aim, accent)
 	await get_tree().create_timer(0.35).timeout
 	if victim != null:
@@ -150,6 +154,7 @@ func _brawler(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destinatio
 	unit.play_idle()
 	await unit.rig.pose("wind_up", 0.14)
 	await unit.rig.pose("punch", 0.07)
+	SoundBoard.play("punch")
 	CombatEffects.burst(parent, aim + Vector3(0.0, 0.8, 0.0), Color(1.0, 0.95, 0.8), 0.45)
 	await victim.shatter(unit.global_position, accent)
 	await unit.rig.release(0.12)

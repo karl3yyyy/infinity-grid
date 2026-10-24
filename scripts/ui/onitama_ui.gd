@@ -15,6 +15,7 @@ signal restart_pressed
 signal new_match_pressed
 signal quit_pressed
 signal board_insets_changed(top_pixels: float, bottom_pixels: float)
+signal emote_picked(emote_id: String)
 
 const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
 const CardViewScript := preload("res://scripts/ui/card_view.gd")
@@ -44,6 +45,8 @@ var hud_column: Control
 var top_tray: PanelContainer
 var bottom_tray: PanelContainer
 var menu_button: Button
+var emote_button: Button
+var emote_wheel: EmoteWheel
 ## Optional button under the instruction, e.g. "play the bot instead".
 var side_action_button: Button
 var _side_action: Callable
@@ -237,12 +240,21 @@ func _build_ui() -> void:
 	selection_label.modulate = TerminalTheme.GREEN
 	_outline(selection_label)
 	header.add_child(selection_label)
+	# Emotes sit outside the menu so they are one tap away during a match.
+	emote_button = _make_button("EMOTE", header)
+	emote_button.custom_minimum_size = Vector2(52.0, 44.0)
+	emote_button.add_theme_font_size_override("font_size", 28)
+	emote_button.pressed.connect(func() -> void: emote_wheel.open())
 	menu_button = _make_button("MENÜ", header)
 	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
 	menu_button.add_theme_font_size_override("font_size", 28)
 	menu_button.pressed.connect(func() -> void: toggle_menu(true))
 	_add_hand_row(top_box, 1)
 	_add_hand_title(top_box, 1)
+	emote_wheel = EmoteWheel.new()
+	emote_wheel.name = "EmoteWheel"
+	hud_root.add_child(emote_wheel)
+	emote_wheel.picked.connect(func(emote_id: String) -> void: emote_picked.emit(emote_id))
 
 	# Viewer side: instruction text and own cards.
 	bottom_tray = _make_tray()

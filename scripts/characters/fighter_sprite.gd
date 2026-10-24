@@ -236,6 +236,23 @@ func pose(pose_name: String, _duration: float = 0.2) -> void:
 	await get_tree().create_timer(hold).timeout
 
 
+## Emotes: plays [animation, seconds] steps in order, then returns to idle.
+## `spins` turns the model around that many times meanwhile.
+func perform(steps: Array, spins: int = 0) -> void:
+	_posing = true
+	var total := 0.0
+	for step: Array in steps:
+		total += float(step[1])
+	if spins > 0:
+		var tween := model.create_tween()
+		tween.tween_property(model, "rotation:y", TAU * spins, total).from(0.0).set_trans(Tween.TRANS_SINE)
+		tween.tween_callback(func() -> void: model.rotation.y = 0.0)
+	for step: Array in steps:
+		model.play(step[0], 0.12)
+		await get_tree().create_timer(float(step[1])).timeout
+	release()
+
+
 func release(_duration: float = 0.2) -> void:
 	_posing = false
 	_update_locomotion()

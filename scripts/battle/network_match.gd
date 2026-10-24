@@ -44,6 +44,9 @@ func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
 		if ranked and opponent.has("name"):
 			ui.set_instruction("Gegner gefunden: %s  ·  %s %d" % [opponent["name"], opponent.get("rank", ""), int(opponent.get("rating", 0))]))
 	client.ranked_result.connect(battle.show_ranked_result)
+	client.opponent_emote.connect(func(emote_id: String) -> void:
+		if battle.network_team >= 0:
+			battle.show_emote(1 - battle.network_team, emote_id))
 	client.match_started.connect(_on_match_started)
 	client.resumed.connect(_on_resumed)
 	client.opponent_moved.connect(_on_opponent_moved)

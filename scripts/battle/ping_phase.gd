@@ -92,6 +92,8 @@ func run_network(client: MatchClient, team: int) -> int:
 
 
 func _begin() -> void:
+	SoundBoard.play("boot")
+	SoundBoard.say("ping")
 	battle.pinging = true
 	battle.input_locked = false
 	controller.enabled = true
@@ -113,6 +115,7 @@ func _ask_pick(text: String) -> Vector2i:
 func _on_cell_clicked(cell: Vector2i) -> void:
 	if _waiting_pick and grid.is_inside(cell):
 		_waiting_pick = false
+		SoundBoard.play("select")
 		_picked.emit(cell)
 
 
@@ -123,11 +126,14 @@ func _reveal(picks: Array, signal_cell: Vector2i, winner: int, viewer: int) -> v
 	for team: int in range(2):
 		_mark(picks[team], OnitamaUI.TEAM_COLORS[team])
 	await get_tree().create_timer(0.6).timeout
+	SoundBoard.play("signal")
 	var at := grid.grid_to_world(signal_cell)
 	CombatEffects.lightning(grid, at + Vector3(0.0, 6.0, 0.0), at, Color("e8ffe0"))
 	CombatEffects.burst(grid, at, Color("6ee65a"), 1.1)
 	CombatEffects.pillar(grid, at, Color("6ee65a"))
 	if winner < 0:
+		SoundBoard.play("glitch")
+		SoundBoard.say("collision")
 		ui.set_instruction("SIGNAL COLLISION! Beide gleich weit weg – nochmal.")
 	elif viewer >= 0:
 		ui.set_instruction("Du warst näher am Signal." if winner == viewer else "Der Gegner war näher am Signal.")

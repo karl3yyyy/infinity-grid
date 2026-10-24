@@ -342,6 +342,8 @@ func shatter(from_position: Vector3, color: Color) -> void:
 		# Knocked out first, then the body breaks apart into the grid.
 		await rig.play_death()
 	var origin := global_position + Vector3(0.0, 0.7, 0.0)
+	SoundBoard.play("capture")
+	SoundBoard.say("capture")
 	CombatEffects.shatter(get_parent(), origin, (origin - from_position).normalized(), _figure_colors(color), color)
 	visual_root.visible = false
 	for projection: Dictionary in _wrap_projections:

@@ -45,6 +45,13 @@ const CARD_NAMES = [
 // uploaded in parts (tools/publish_online.ps1) and joined here.
 const WASM_PARTS = ["/index.wasm.part0", "/index.wasm.part1"];
 
+// Must match EmoteWheel.CATALOGUE in scripts/ui/emote_wheel.gd.
+const EMOTE_IDS = [
+  "dance", "spin", "hop", "shadowbox", "chill", "glitch",
+  "gg", "glhf", "e404", "lag", "nice", "heat",
+  "haha", "what", "heart", "skull", "fire", "eyes",
+];
+
 const RECONNECT_SECONDS = 60;
 // A quick match is cancelled when both players have not arrived by then.
 const MATCH_JOIN_SECONDS = 15;
@@ -310,6 +317,17 @@ export class Room {
       const other = this.socketFor(1 - seat);
       if (other) {
         send(other, look);
+      }
+      return;
+    }
+    if (message.type === "emote") {
+      // Relayed, not stored; only known emotes, at most one per seat every 2 s.
+      const now = Date.now();
+      this.lastEmote = this.lastEmote || [0, 0];
+      if (EMOTE_IDS.includes(message.id) && now - this.lastEmote[seat] > 2000) {
+        this.lastEmote[seat] = now;
+        const other = this.socketFor(1 - seat);
+        if (other) send(other, { type: "emote", id: message.id });
       }
       return;
     }

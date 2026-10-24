@@ -80,6 +80,7 @@ func setup(
 	battle_ui.online_join_requested.connect(_start_online_join)
 	battle_ui.online_quick_requested.connect(_start_online_quick)
 	battle_ui.online_ranked_requested.connect(_start_online_ranked)
+	battle_ui.emote_picked.connect(_on_emote_picked)
 	battle_ui.online_resume_requested.connect(_start_online_resume)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.new_match_pressed.connect(_new_match)
@@ -256,6 +257,8 @@ func begin_network_match(team: int, card_names: Array) -> bool:
 ## Starts play with the side the Node Ping chose.
 func set_starter(team: int) -> void:
 	pinging = false
+	SoundBoard.play("glitch")
+	SoundBoard.say("start")
 	starting_player = team
 	current_player = team
 	position_counts.clear()
@@ -263,6 +266,27 @@ func set_starter(team: int) -> void:
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(team)
 	_begin_turn(1)
+
+
+## The local player sent an emote: show it over their KERN, pass it on.
+func _on_emote_picked(emote_id: String) -> void:
+	var team := network_team if network_team >= 0 else current_player
+	show_emote(team, emote_id)
+	if network_match != null:
+		network_match.client.send_emote(emote_id)
+	elif bot_opponent_enabled and randf() < 0.4:
+		# The bot sometimes answers.
+		await get_tree().create_timer(1.2).timeout
+		show_emote(1, EmoteWheel.CATALOGUE.pick_random()["id"])
+
+
+## Only the KERN performs emotes.
+func show_emote(team: int, emote_id: String) -> void:
+	var units: Array[BattleUnit] = players if team == 0 else enemies
+	for unit: BattleUnit in units:
+		if unit.is_master and not unit.is_dead:
+			EmoteStage.perform(units_parent, unit, team, emote_id)
+			return
 
 
 func _ping_phase() -> PingPhase:
@@ -368,6 +392,7 @@ func apply_team_look(team: int, look: Dictionary) -> void:
 func _on_card_selected(team_id: int, slot: int) -> void:
 	if input_locked or battle_over or team_id != current_player or slot < 0 or slot >= 2:
 		return
+	SoundBoard.play("click")
 	if must_pass:
 		if network_match != null:
 			network_match.send_local_turn({"type": "pass", "seq": turns_played, "slot": slot})
@@ -646,6 +671,9 @@ func _on_unit_died(unit: BattleUnit) -> void:
 ## winner -1 means a draw by repetition.
 func _finish_battle(winner: int) -> void:
 	battle_over = true
+	var local_won := winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
+	SoundBoard.play("victory" if local_won else "defeat")
+	SoundBoard.say("victory" if local_won else "defeat")
 	input_locked = true
 	player_controller.enabled = false
 	if network_match != null:

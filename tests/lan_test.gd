@@ -81,6 +81,7 @@ func _run_tests() -> void:
 	_server = null
 	_test_online_server_cards()
 	_test_shop_prices()
+	_test_emote_catalogue()
 	_test_server_rules_cards()
 
 	await _test_remote_move_replay()
@@ -162,6 +163,20 @@ func _test_shop_prices() -> void:
 	var misnamed := CharacterSkins.SKINS.filter(func(skin: Dictionary) -> bool: return not str(skin["id"]).begins_with(str(skin["character"]) + "_"))
 	_expect(misnamed.is_empty(), "Skin ids start with their character, as the server expects")
 	_expect(CharacterRoster.price("character", CharacterRoster.CHARACTERS[0]["id"]) == 0 and CharacterRoster.price("echo", "echo") == 0 and CharacterRoster.price("board", "standard") == 0, "The default look is free")
+
+
+func _test_emote_catalogue() -> void:
+	var worker := FileAccess.get_file_as_string("res://server/online/worker.js")
+	var block := worker.get_slice("const EMOTE_IDS = [", 1).get_slice("];", 0)
+	var server_ids: Array[String] = []
+	for found: RegExMatch in RegEx.create_from_string("\"([a-z0-9]+)\"").search_all(block):
+		server_ids.append(found.get_string(1))
+	var game_ids: Array[String] = []
+	for emote: Dictionary in EmoteWheel.CATALOGUE:
+		game_ids.append(str(emote["id"]))
+	_expect(server_ids == game_ids, "The online relay knows exactly the game's emotes")
+	var defaults_known := EmoteWheel.DEFAULT_LOADOUT.all(func(emote_id: String) -> bool: return emote_id in game_ids)
+	_expect(EmoteWheel.DEFAULT_LOADOUT.size() == EmoteWheel.SLOT_COUNT and defaults_known, "The default emote wheel has eight known emotes")
 
 
 func _test_remote_move_replay() -> void:

@@ -25,6 +25,7 @@ signal ranked_result(result: Dictionary)
 ## Node Ping (online): both picks and the signal; winner -1 is a collision.
 signal ping_result(result: Dictionary)
 signal starter_chosen(team: int)
+signal opponent_emote(emote_id: String)
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
 signal reconnecting
@@ -183,6 +184,10 @@ func send_node_ping(cell: Vector2i) -> void:
 	_send_now({"type": "node_ping", "cell": [cell.x, cell.y]})
 
 
+func send_emote(emote_id: String) -> void:
+	_send_now({"type": "emote", "id": emote_id})
+
+
 func send_choose(starter: int) -> void:
 	_send_now({"type": "choose", "starter": starter})
 
@@ -306,6 +311,8 @@ func _handle_message(text: String) -> void:
 			ranked_result.emit(message)
 		"ping_result":
 			ping_result.emit(message)
+		"emote":
+			opponent_emote.emit(str(message.get("id", "")))
 		"starter":
 			starter_chosen.emit(int(message.get("team", 0)))
 		"opponent_away":

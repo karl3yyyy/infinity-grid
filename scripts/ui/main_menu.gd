@@ -44,6 +44,7 @@ var _shop: ShopPages
 var _login: LoginPages
 var _play: PlayPages
 var _friends: FriendsPages
+var _emotes: EmoteLoadoutPages
 ## Entries added to the current page, for the staggered entrance.
 var _entry_count: int = 0
 
@@ -58,6 +59,7 @@ func _ready() -> void:
 	_login = LoginPages.new(self, account)
 	_play = PlayPages.new(self, account)
 	_friends = FriendsPages.new(self, account)
+	_emotes = EmoteLoadoutPages.new(self)
 	account.changed.connect(_update_profile_button)
 	# Headless test runs must not open accounts on the live server.
 	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
@@ -269,7 +271,7 @@ func _show_home() -> void:
 	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, mit Code, lokal", _play.show_play)
 	if MatchClient.is_online_available():
 		_add_menu_button(_content, "FREUNDE", _friends.summary(), _friends.show_friends)
-	_add_menu_button(_content, "SAMMLUNG", "Charaktere, Skins, Spielfeld, Profilbild, Karten", _show_collection)
+	_add_menu_button(_content, "SAMMLUNG", "Charaktere, Skins, Spielfeld, Profilbild, Emotes, Karten", _show_collection)
 	_add_menu_button(_content, "SHOP", "Charaktere, Echos und Spielfelder für Credits", _shop.show_shop)
 	if not OS.has_feature("web"):
 		_add_menu_button(_content, "BEENDEN", "Spiel schließen", func() -> void: quit_requested.emit())
@@ -297,6 +299,9 @@ func _show_profile() -> void:
 	if not account.account.is_empty():
 		naming.add_child(_make_text("%s  ·  %d PUNKTE" % [str(account.account.get("rank", "")), int(account.account.get("rating", 1000))], 22, TerminalTheme.GREEN_DIM))
 	_add_menu_button(_content, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", _show_avatar_picker.bind(_show_profile))
+	_add_menu_button(_content, "TON: %s" % ("AN" if SoundBoard.is_enabled() else "AUS"), "Musik, Effekte und Sprachansagen", func() -> void:
+		SoundBoard.set_enabled(not SoundBoard.is_enabled())
+		_show_profile())
 	_shop.add_account_section(_content)
 	_login.add_section(_content)
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
@@ -329,6 +334,7 @@ func _show_collection() -> void:
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
+	_add_menu_button(_content, "EMOTE-RAD", _emotes.summary(), _emotes.show_slots)
 	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
@@ -524,7 +530,10 @@ func _add_menu_button(parent: Control, title: String, subtitle: String, action: 
 	button.add_theme_font_size_override("font_size", ENTRY_FONT_SIZE)
 	button.focus_mode = Control.FOCUS_ALL
 	button.mouse_entered.connect(button.grab_focus)
-	button.focus_entered.connect(func() -> void: _description.text = "> " + subtitle if not subtitle.is_empty() else "")
+	button.focus_entered.connect(func() -> void:
+		_description.text = "> " + subtitle if not subtitle.is_empty() else ""
+		SoundBoard.play("click", -10.0))
+	button.pressed.connect(func() -> void: SoundBoard.play("select"))
 	button.pressed.connect(action)
 	parent.add_child(button)
 	MenuMotion.enter(button, _entry_count)

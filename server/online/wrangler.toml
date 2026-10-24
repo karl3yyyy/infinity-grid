@@ -38,6 +38,6 @@ new_sqlite_classes = ["Account"]
 # switch the packs off. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are secrets
 # and are set with `npx wrangler secret put <NAME>`, never written here.
 [vars]
-STRIPE_PRICE_SMALL = ""
-STRIPE_PRICE_MEDIUM = ""
-STRIPE_PRICE_LARGE = ""
+STRIPE_PRICE_SMALL = "price_1UTywbChrUtwv0Dvr8ZrWEkS"
+STRIPE_PRICE_MEDIUM = "price_1UTyxQChrUtwv0DvsQOYT46A"
+STRIPE_PRICE_LARGE = "price_1UTyyBChrUtwv0DvtJAfPohy"

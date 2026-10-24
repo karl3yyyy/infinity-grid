@@ -9,7 +9,7 @@ extends CanvasLayer
 signal _spot_chosen(spot: Vector2)
 signal _choice_made(index: int)
 
-const SLIDE_SECONDS: float = 0.45
+const SLIDE_SECONDS: float = 0.3
 
 var _root: Control
 var _panel: PanelContainer
@@ -109,11 +109,11 @@ func reveal(picks: Array, signal_spot: Vector2) -> void:
 	_arena.clear()
 	for team: int in range(2):
 		_arena.add_mark(picks[team], OnitamaUI.TEAM_COLORS[team], str(team + 1))
-	await get_tree().create_timer(0.7).timeout
+	await get_tree().create_timer(0.4).timeout
 	SoundBoard.play("signal")
 	_arena.signal_spot = signal_spot
 	var flash := create_tween()
-	for blink: int in range(4):
+	for blink: int in range(3):
 		flash.tween_callback(_arena.set_signal_bright.bind(true))
 		flash.tween_interval(0.08)
 		flash.tween_callback(_arena.set_signal_bright.bind(false))

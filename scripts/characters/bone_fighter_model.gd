@@ -101,3 +101,35 @@ func _add_weapon(path: String, pose: Dictionary) -> void:
 
 func _mount(bone: String) -> BoneAttachment3D:
 	return _bone_attachment(BONE_PREFIX + bone)
+
+
+## Still for portraits: mid-puff of the Smoke animation, with wisps drifting
+## from the mouth over the bazooka like a cowboy blowing over his gun.
+func show_smoke_pose(seconds: float = 2.2) -> void:
+	animation_player.play(&"Smoke")
+	# The first frame is still the rest pose; pose it one frame later.
+	await (Engine.get_main_loop() as SceneTree).process_frame
+	animation_player.seek(seconds, true)
+	animation_player.pause()
+	cigarette_in_hand(true)
+	add_smoke_puffs()
+
+
+func add_smoke_puffs() -> void:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color(0.92, 0.94, 1.0, 0.42)
+	for index: int in range(6):
+		var puff := MeshInstance3D.new()
+		var ball := SphereMesh.new()
+		ball.radius = 0.03 + 0.008 * float(index)
+		ball.height = ball.radius * 2.0
+		ball.radial_segments = 10
+		ball.rings = 6
+		puff.mesh = ball
+		puff.material_override = material
+		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_cigarette_mount.add_child(puff)
+		var from := Vector3(0.02 - 0.03 * float(index), 0.39 + 0.045 * float(index), 0.2 + 0.012 * float(index))
+		puff.transform = _bone_local(_cigarette_mount, Transform3D(Basis.IDENTITY, from))

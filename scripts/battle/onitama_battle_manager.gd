@@ -75,6 +75,8 @@ func setup(
 	player_controller = player_input
 	unit_movement = movement
 	units_parent = unit_container
+	grid_manager.intro_started.connect(func() -> void: units_parent.visible = false)
+	grid_manager.intro_finished.connect(_beam_in_units)
 	turn_timer = TurnTimer.new()
 	add_child(turn_timer)
 	turn_timer.ticked.connect(battle_ui.set_turn_timer)
@@ -123,8 +125,8 @@ func _spawn_armies() -> void:
 				unit = EnemyUnitScript.new()
 				unit.setup_enemy(display_name, coordinate)
 			unit.is_master = is_master
-			# Figurines face the opposing side, like pieces on a real board.
-			unit.rest_yaw = PI if team_id == 0 else 0.0
+			# Resting figurines look at the player; moves turn them toward the target.
+			unit.rest_yaw = FigureFacing.yaw_for(team_id, 0)
 			unit.rotation.y = unit.rest_yaw
 			unit.scale = Vector3.ONE * (1.08 if is_master else 1.0)
 			units_parent.add_child(unit)
@@ -265,13 +267,15 @@ func begin_network_match(team: int, card_names: Array) -> bool:
 	return true
 
 
-## Starts play with the side the Node Ping chose.
+## Starts play with the side the Node Ping chose; the arena flies in first.
 func set_starter(team: int) -> void:
+	starting_player = team
+	current_player = team
+	apply_figure_facing()
+	await grid_manager.play_intro()
 	pinging = false
 	SoundBoard.play("glitch")
 	SoundBoard.say("start")
-	starting_player = team
-	current_player = team
 	position_counts.clear()
 	_record_position()
 	if not bot_opponent_enabled and network_team < 0:
@@ -547,6 +551,8 @@ func _advance_turn() -> void:
 ## Unlocks input for the side to move (or hands over to the bot / the other
 ## device) and tells the player what to do.
 func _begin_turn(repetitions: int) -> void:
+	if network_team < 0 and not bot_opponent_enabled:
+		apply_figure_facing()
 	must_pass = not _has_legal_move(current_player)
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	var remote_turn := network_team >= 0 and current_player != network_team
@@ -806,3 +812,38 @@ func _restart_battle() -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().reload_current_scene()
+
+## Turns every resting figure to the look chosen in the settings. The camera
+## sits at the seat of the local player; in a two-player match on one device
+## it is the seat of whoever is to move.
+func apply_figure_facing() -> void:
+	var seat := network_team if network_team >= 0 else (current_player if not bot_opponent_enabled else 0)
+	for units: Array[BattleUnit] in [players, enemies]:
+		for unit: BattleUnit in units:
+			unit.rest_yaw = FigureFacing.yaw_for(unit.team_id, seat)
+			if not unit.facing_locked:
+				unit.rotation.y = unit.rest_yaw
+
+
+## The figures are beamed onto the platforms once these have landed: a column
+## of light, then each one grows out of it, one after another.
+func _beam_in_units() -> void:
+	var beamed: Array[BattleUnit] = []
+	for units: Array[BattleUnit] in [players, enemies]:
+		for unit: BattleUnit in units:
+			if not unit.is_dead:
+				unit.visual_root.scale = Vector3(0.05, 1.7, 0.05)
+				beamed.append(unit)
+	units_parent.visible = true
+	SoundBoard.play("teleport")
+	for index: int in range(beamed.size()):
+		_beam_in(beamed[index], float(index) * 0.05)
+
+
+func _beam_in(unit: BattleUnit, delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if not is_instance_valid(unit) or unit.is_dead:
+		return
+	CombatEffects.pillar(units_parent, unit.global_position, OnitamaUI.TEAM_COLORS[unit.team_id])
+	var grow := unit.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	grow.tween_property(unit.visual_root, "scale", Vector3.ONE, 0.25)

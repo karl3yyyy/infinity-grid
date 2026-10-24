@@ -2,14 +2,21 @@ class_name GridManager
 extends Node3D
 
 signal hovered_cell_changed(coordinate: Vector2i)
+## The arena halves fly in when a match starts; units and cell frames wait for it.
+signal intro_started
+signal intro_finished
 
 const GridCellData := preload("res://scripts/grid/grid_cell.gd")
 const CELL_SIZE: float = 1.4
+## Height of the cell frames above the arena floor.
+const MARKER_HEIGHT: float = 0.06
+const INTRO_SECONDS: float = 1.4
 
 var grid_size: Vector2i = Vector2i(5, 5)
 var cells: Dictionary = {}
 ## Panel borders of the neutral middle row and of unskinned halves.
 const NEUTRAL_GLOW := Color("3f8fd8")
+var _arena_halves: Array[ArenaHalf] = []
 ## Board skin per player half: {"tint", "glow"} (see CharacterRoster.BOARD_SKINS).
 var _side_skins: Array[Dictionary] = [
 	{"id": "standard", "tint": Color.WHITE, "glow": NEUTRAL_GLOW},
@@ -18,25 +25,15 @@ var _side_skins: Array[Dictionary] = [
 var hovered_coordinate: Vector2i = Vector2i(-1, -1)
 var wrap_projection_count: int = 0
 var _wrap_materials: Dictionary = {}
-var _block_material: StandardMaterial3D = _make_block_material()
-var _tile_textures: Dictionary = {}
 
 var _colors: Dictionary = {
 	GridCellData.Highlight.NORMAL: Color("35545b"),
 	GridCellData.Highlight.HOVER: Color("ffe2b0"),
-	GridCellData.Highlight.SELECTED: Color("ffcf5a"),
+	GridCellData.Highlight.SELECTED: Color("7ff3ff"),
 	GridCellData.Highlight.MOVE: Color("3fb8ff"),
 	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
 	GridCellData.Highlight.OCCUPIED: Color("f0e6dc"),
 }
-
-
-static func _make_block_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("0a0d12")
-	material.metallic = 0.85
-	material.roughness = 0.35
-	return material
 
 
 func setup() -> void:
@@ -53,6 +50,9 @@ func setup() -> void:
 			_create_cell_visual(cell)
 	_create_wrap_projections()
 	_create_wrap_seams()
+	_create_arena_halves()
+	if get_parent() is Node3D and not get_parent().visibility_changed.is_connected(_on_board_visibility_changed):
+		get_parent().visibility_changed.connect(_on_board_visibility_changed)
 
 
 func grid_to_world(coordinate: Vector2i) -> Vector3:
@@ -172,28 +172,16 @@ func _create_cell_visual(cell: GridCell) -> void:
 	_update_cell_visual(cell)
 
 
-## A board panel: a thin dark metal block plus a textured top face.
-## The top face's material is the one that gets tinted for highlights.
-func _create_tile_node(coordinate: Vector2i, at: Vector3, opacity: float) -> MeshInstance3D:
-	var block := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(CELL_SIZE * 0.97, 0.1, CELL_SIZE * 0.97)
-	block.mesh = box
-	block.position = at + Vector3(0.0, -0.09, 0.0)
-	block.material_override = _block_material
-	if opacity < 1.0:
-		block.transparency = 1.0 - opacity
-	add_child(block)
+## A cell marker: a flat frame just above the arena floor. Its material is the
+## one that gets tinted for highlights.
+func _create_tile_node(_coordinate: Vector2i, at: Vector3, opacity: float) -> MeshInstance3D:
 	var top := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(CELL_SIZE * 0.97, CELL_SIZE * 0.97)
 	top.mesh = plane
-	top.position = at + Vector3(0.0, -0.035, 0.0)
-	# Vary grain direction and orientation so the board doesn't look stamped.
-	top.rotation.y = float(posmod(coordinate.x * 7 + coordinate.y * 3, 4)) * PI * 0.5
-	top.material_override = _tile_material(coordinate)
-	if opacity < 1.0:
-		(top.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	top.position = at + Vector3(0.0, MARKER_HEIGHT, 0.0)
+	top.material_override = ArenaTileStyle.make_material()
+	top.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(top)
 	return top
 
@@ -264,32 +252,6 @@ func _create_wrap_seams() -> void:
 		add_child(seam)
 
 
-## Board squares are textured by the skin of their half (BoardSkinPainter); the
-## glow mask is the emission texture, so only traces and edges light up.
-func _tile_material(coordinate: Vector2i) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	# Multiply: only the lit pixels of the mask glow.
-	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	material.metallic = 0.35
-	material.roughness = 0.4
-	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_apply_skin_textures(material, coordinate, str(_side_skin_at(coordinate)["id"]))
-	return material
-
-
-func _apply_skin_textures(material: StandardMaterial3D, coordinate: Vector2i, skin_id: String) -> void:
-	var light := (coordinate.x + coordinate.y) % 2 == 0
-	var ring := coordinate.x == 2 and coordinate.y in [0, 2, 4]
-	var variant := posmod(coordinate.x * 3 + coordinate.y * 5, 4)
-	var key := "%s|%s|%s|%d" % [skin_id, light, ring, variant]
-	if not _tile_textures.has(key):
-		var images := BoardSkinPainter.paint(skin_id, light, ring, variant)
-		_tile_textures[key] = [ImageTexture.create_from_image(images[0]), ImageTexture.create_from_image(images[1])]
-	var textures: Array = _tile_textures[key]
-	material.albedo_texture = textures[0]
-	material.emission_texture = textures[1]
-
-
 func _refresh_coordinate(coordinate: Vector2i) -> void:
 	if is_inside(coordinate):
 		_refresh_cell(cells[coordinate])
@@ -308,50 +270,75 @@ func _refresh_cell(cell: GridCell) -> void:
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
-	# Normal tiles show their skin texture; highlights tint and glow.
-	var skin := _side_skin_at(cell.coordinate)
-	var normal_tile := cell.highlight == GridCellData.Highlight.NORMAL
-	var tile_color: Color = skin["tint"] if normal_tile else _colors[cell.highlight]
-	var is_emissive := cell.highlight in [
-		GridCellData.Highlight.HOVER,
-		GridCellData.Highlight.SELECTED,
-		GridCellData.Highlight.MOVE,
-		GridCellData.Highlight.ATTACK,
-	]
-	var glow: Color = _colors[cell.highlight] if is_emissive else skin["glow"]
-	var energy := 2.4 if is_emissive else 1.1
-	_apply_cell_material(cell.material, tile_color, 1.0, glow, energy)
+	# The arena model is the skin; a cell only shows a frame that fills for highlights.
+	# Occupied cells stay plain so the model underneath shows; only play highlights light up.
+	var normal_tile := cell.highlight in [GridCellData.Highlight.NORMAL, GridCellData.Highlight.OCCUPIED]
+	var color: Color = ArenaHalf.GLOW if normal_tile else _colors[cell.highlight]
+	var hover := cell.highlight == GridCellData.Highlight.HOVER
+	if hover:
+		ArenaTileStyle.paint_hover(cell.material, Color.WHITE, 1.0)
+	else:
+		ArenaTileStyle.paint(cell.material, not normal_tile, color, 1.0)
 	for projection_value: Variant in _wrap_materials.get(cell.coordinate, []):
 		var projection: Dictionary = projection_value
-		_apply_cell_material(projection["material"], tile_color, float(projection["opacity"]), glow, energy)
+		if hover:
+			ArenaTileStyle.paint_hover(projection["material"], Color.WHITE, float(projection["opacity"]))
+		else:
+			ArenaTileStyle.paint(projection["material"], not normal_tile, color, float(projection["opacity"]))
 
 
-## Skin (an entry of CharacterRoster.BOARD_SKINS) for the two rows nearest a
-## player; the middle row keeps the standard circuit board.
+## The arena halves in the skins the two players chose.
 func set_side_skin(team: int, skin: Dictionary) -> void:
 	_side_skins[team] = {"id": str(skin.get("id", "standard")), "tint": skin.get("tint", Color.WHITE), "glow": skin.get("glow", NEUTRAL_GLOW)}
-	for cell: GridCell in cells.values():
-		if cell.material != null:
-			var skin_id := str(_side_skin_at(cell.coordinate)["id"])
-			_apply_skin_textures(cell.material, cell.coordinate, skin_id)
-			for projection: Variant in _wrap_materials.get(cell.coordinate, []):
-				_apply_skin_textures((projection as Dictionary)["material"], cell.coordinate, skin_id)
-		_update_cell_visual(cell)
+	if team < _arena_halves.size():
+		_arena_halves[team].show_skin(str(skin.get("id", "standard")))
 
 
-func _side_skin_at(coordinate: Vector2i) -> Dictionary:
-	if coordinate.y >= grid_size.y - 2:
-		return _side_skins[0]
-	if coordinate.y <= 1:
-		return _side_skins[1]
-	return {"id": "standard", "tint": Color.WHITE, "glow": NEUTRAL_GLOW}
+func _create_arena_halves() -> void:
+	_arena_halves.clear()
+	for team: int in range(2):
+		var half := ArenaHalf.new()
+		half.name = "ArenaHalf%d" % team
+		add_child(half)
+		half.place(team, float(grid_size.y) * CELL_SIZE)
+		half.show_skin(str(_side_skins[team]["id"]))
+		_arena_halves.append(half)
+	var bridge := ArenaBridge.new()
+	bridge.name = "ArenaBridge"
+	add_child(bridge)
+	bridge.build()
 
 
-func _apply_cell_material(material: StandardMaterial3D, color: Color, opacity: float, glow: Color, energy: float) -> void:
-	var faded_color := color
-	faded_color.a = opacity
-	material.albedo_color = faded_color
-	material.emission_enabled = glow != Color.BLACK
-	if material.emission_enabled:
-		material.emission = glow
-		material.emission_energy_multiplier = energy
+func _on_board_visibility_changed() -> void:
+	if get_parent() is Node3D and (get_parent() as Node3D).visible:
+		hold_arena()
+
+
+## The board is shown but empty until play_intro(): no platforms, markers or
+## figures while the Node Ping runs.
+func hold_arena() -> void:
+	if _arena_halves.is_empty() or not is_inside_tree():
+		return
+	intro_started.emit()
+	for half: ArenaHalf in _arena_halves:
+		half.visible = false
+	for child: Node in get_children():
+		if child is MeshInstance3D:
+			(child as Node3D).visible = false
+
+
+## Own half (team 0) flies up from below, the opponent's down from above; they
+## meet in the middle and form the 5 x 5 board.
+func play_intro() -> void:
+	if _arena_halves.is_empty() or not is_inside_tree():
+		intro_finished.emit()
+		return
+	var last: Tween
+	for team: int in range(_arena_halves.size()):
+		_arena_halves[team].visible = true
+		last = _arena_halves[team].fly_in(team == 0, INTRO_SECONDS)
+	await last.finished
+	for child: Node in get_children():
+		if child is MeshInstance3D and is_instance_valid(child):
+			(child as Node3D).visible = true
+	intro_finished.emit()

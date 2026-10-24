@@ -62,7 +62,7 @@ void fragment() {
 		vec3 rgb = floor(color.rgb * levels + 0.5) / levels;
 		// Rim: pixels next to the silhouette edge pick up the green glow.
 		float edge = 1.0 - min(min(texture(frame, uv + vec2(texel.x * 2.0, 0.0)).a, texture(frame, uv - vec2(texel.x * 2.0, 0.0)).a), texture(frame, uv + vec2(0.0, texel.y * 2.0)).a);
-		rgb = mix(rgb, rim_color.rgb, edge * 0.45);
+		rgb = mix(rgb, rim_color.rgb, edge * 0.65);
 		float row = mod(floor(UV.y * frame_size.y), 2.0);
 		rgb *= 1.0 - row * 0.12;
 		if (hologram > 0.0) {

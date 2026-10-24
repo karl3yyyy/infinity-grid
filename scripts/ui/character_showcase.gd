@@ -334,7 +334,15 @@ func _splash_texture(character: Dictionary, accent: Color) -> Texture2D:
 	fighter.frames_per_second = 30.0
 	fighter.turn = 0.4
 	var scale_factor := float(character.get("scale", 1.0))
-	if "pram" in character.get("gear", []):
+	if character.has("splash_camera"):
+		var framing: Dictionary = character["splash_camera"]
+		fighter.camera.rotation_degrees.x = 0.0
+		fighter.camera.size = float(framing["size"])
+		fighter.camera.position = Vector3(0.0, float(framing["y"]), 4.0)
+		fighter.model.play(StringName(str(character.get("signature", "Idle"))))
+		if fighter.model is BoneFighterModel:
+			(fighter.model as BoneFighterModel).add_smoke_puffs()
+	elif "pram" in character.get("gear", []):
 		fighter.camera.rotation_degrees.x = 0.0
 		fighter.camera.size = 1.7
 		fighter.camera.position = Vector3(0.0, 0.75, 4.0)

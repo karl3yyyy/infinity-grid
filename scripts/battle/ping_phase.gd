@@ -8,7 +8,7 @@ extends Node
 ## tap again. Online the server rolls the signal.
 
 ## Without an answer the winner simply starts.
-const CHOICE_SECONDS: float = 8.0
+const CHOICE_SECONDS: float = 5.0
 
 var battle: OnitamaBattleManager
 var controller: PlayerController
@@ -48,7 +48,7 @@ func run_local(against_bot: bool) -> int:
 	var starter := 1
 	if against_bot and winner == 1:
 		overlay.set_text("Der Bot war näher und beginnt.")
-		await get_tree().create_timer(1.4).timeout
+		await get_tree().create_timer(0.8).timeout
 	else:
 		var who := "Du warst näher" if against_bot else "Spieler %d war näher" % (winner + 1)
 		starter = await _ask_choice(winner, who, not against_bot)
@@ -111,7 +111,7 @@ func _reveal(picks: Array, signal_spot: Vector2, winner: int, viewer: int) -> vo
 		overlay.set_text("Du warst näher am Signal." if winner == viewer else "Der Gegner war näher am Signal.")
 	else:
 		overlay.set_text("Spieler %d war näher am Signal." % (winner + 1))
-	await get_tree().create_timer(1.8).timeout
+	await get_tree().create_timer(1.0).timeout
 
 
 func _ask_choice(winner: int, who: String, same_device: bool) -> int:

@@ -65,7 +65,6 @@ func build() -> void:
 	_build_world_environment()
 	_build_lights()
 	_build_floor()
-	_build_platform()
 	_build_towers()
 	_build_code_rain()
 	_build_motes()
@@ -141,41 +140,6 @@ func _build_floor() -> void:
 	floor_mesh.material_override = material
 	floor_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(floor_mesh)
-
-
-## Dark metal slab under the tiles with glowing edge strips: team colours on
-## the two home rows, cyan along the wrap edges.
-func _build_platform() -> void:
-	var metal := StandardMaterial3D.new()
-	metal.albedo_color = Color("10141c")
-	metal.metallic = 0.8
-	metal.roughness = 0.3
-	var slab := MeshInstance3D.new()
-	slab.name = "Platform"
-	var box := BoxMesh.new()
-	box.size = Vector3(BOARD_HALF_WIDTH * 2.0 + 0.7, 0.35, BOARD_HALF_DEPTH * 2.0 + 0.7)
-	slab.mesh = box
-	slab.position.y = -0.33
-	slab.material_override = metal
-	add_child(slab)
-	var underside := MeshInstance3D.new()
-	var under_box := BoxMesh.new()
-	under_box.size = Vector3(BOARD_HALF_WIDTH * 2.0 - 0.6, 0.6, BOARD_HALF_DEPTH * 2.0 - 0.6)
-	underside.mesh = under_box
-	underside.position.y = -0.8
-	underside.material_override = metal
-	add_child(underside)
-
-	for team: int in range(2):
-		var z := (BOARD_HALF_DEPTH + 0.3) * (1.0 if team == 0 else -1.0)
-		_neon_strip(Vector3(0.0, -0.17, z), Vector3(BOARD_HALF_WIDTH * 2.0 + 0.7, 0.05, 0.06), TEAM_EDGES[team], 3.0)
-		_neon_strip(Vector3(0.0, -0.52, z * 0.92), Vector3(BOARD_HALF_WIDTH * 2.0 - 0.6, 0.03, 0.04), TEAM_EDGES[team], 1.6)
-	for side: int in [-1, 1]:
-		_neon_strip(Vector3(float(side) * (BOARD_HALF_WIDTH + 0.3), -0.17, 0.0), Vector3(0.06, 0.05, BOARD_HALF_DEPTH * 2.0 + 0.7), CYAN, 2.2)
-	# Corner light posts.
-	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
-		var at := Vector3(corner.x * (BOARD_HALF_WIDTH + 0.3), 0.0, corner.y * (BOARD_HALF_DEPTH + 0.3))
-		_neon_strip(at + Vector3(0.0, 0.05, 0.0), Vector3(0.12, 0.45, 0.12), MAGENTA if corner.x > 0 else CYAN, 2.5)
 
 
 func _neon_strip(at: Vector3, size: Vector3, color: Color, energy: float) -> void:

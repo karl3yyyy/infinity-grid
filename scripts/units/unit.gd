@@ -116,8 +116,8 @@ func apply_figure(figure: Node3D) -> void:
 		refresh_projections()
 
 
-## Each piece faces where it points: at rest towards the opposing side (your
-## figures towards the enemy), while moving or attacking where it goes.
+## Figures keep a fixed look in the world (see FigureFacing): the sprite is a
+## billboard, so its model turns against the camera and does not follow it.
 func _face_viewer() -> void:
 	if rig == null or is_dead:
 		return
@@ -125,8 +125,6 @@ func _face_viewer() -> void:
 	if camera == null:
 		return
 	visual_root.rotation.y = 0.0
-	# The piece's own yaw decides: at rest it points at the opposing side, so your
-	# figures look towards the enemy and the enemy's look at you.
 	rig.turn = wrapf(global_rotation.y - camera.global_rotation.y, -PI, PI)
 
 
@@ -185,28 +183,13 @@ func _build_model() -> void:
 	selection_ring.mesh = ring
 	selection_ring.position.y = 0.035
 	var ring_material := StandardMaterial3D.new()
-	ring_material.albedo_color = Color("ffe56b")
+	ring_material.albedo_color = Color("7ff3ff")
 	ring_material.emission_enabled = true
-	ring_material.emission = Color("ffe56b")
+	ring_material.emission = Color("7ff3ff")
 	ring_material.emission_energy_multiplier = 2.0
 	selection_ring.material_override = ring_material
 	selection_ring.visible = false
 	add_child(selection_ring)
-	if is_master:
-		var master_base := MeshInstance3D.new()
-		master_base.name = "MasterBase"
-		var master_base_mesh := CylinderMesh.new()
-		master_base_mesh.top_radius = 0.55
-		master_base_mesh.bottom_radius = 0.60
-		master_base_mesh.height = 0.07
-		master_base.mesh = master_base_mesh
-		master_base.position.y = 0.04
-		var master_material := StandardMaterial3D.new()
-		master_material.albedo_color = Color("e6b84f")
-		master_material.metallic = 0.58
-		master_material.roughness = 0.35
-		master_base.material_override = master_material
-		add_child(master_base)
 
 	status_label = Label3D.new()
 	status_label.name = "StatusLabel"
@@ -226,51 +209,32 @@ func _aura_color() -> Color:
 	return Color("3fa9ff") if team_id == 0 else Color("ff4f3a")
 
 
-## Glowing team ring under every figure; masters also get a gold ring.
+## A soft dark contact shadow under every figure instead of a team ring: it
+## lifts the figure off the bright platform. The team colour is the rim light.
 func _build_team_aura() -> void:
 	var aura := Node3D.new()
 	aura.name = "TeamAura"
 	visual_root.add_child(aura)
-	var color := _aura_color()
-	var glow := MeshInstance3D.new()
+	var shadow := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(1.25, 1.25)
-	glow.mesh = plane
-	glow.position.y = 0.03
-	var glow_material := StandardMaterial3D.new()
-	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glow_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	plane.size = Vector2(1.2, 1.2)
+	shadow.mesh = plane
+	shadow.position.y = 0.03
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 0.55, 0.75, 1.0])
-	gradient.colors = PackedColorArray([Color(color, 0.05), Color(color, 0.25), Color(color, 0.9), Color(color, 0.0)])
+	gradient.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	gradient.colors = PackedColorArray([Color(0.0, 0.0, 0.0, 0.65), Color(0.0, 0.0, 0.0, 0.35), Color(0.0, 0.0, 0.0, 0.0)])
 	var texture := GradientTexture2D.new()
 	texture.gradient = gradient
 	texture.fill = GradientTexture2D.FILL_RADIAL
 	texture.fill_from = Vector2(0.5, 0.5)
 	texture.fill_to = Vector2(1.0, 0.5)
-	glow_material.albedo_texture = texture
-	glow.material_override = glow_material
-	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	aura.add_child(glow)
-	if not is_master:
-		return
-	var ring := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.52
-	torus.outer_radius = 0.6
-	ring.mesh = torus
-	ring.position.y = 0.05
-	var gold := StandardMaterial3D.new()
-	gold.albedo_color = Color("e2b04a")
-	gold.metallic = 0.9
-	gold.roughness = 0.25
-	gold.emission_enabled = true
-	gold.emission = Color("c98a24")
-	gold.emission_energy_multiplier = 1.2
-	ring.material_override = gold
-	aura.add_child(ring)
-
+	material.albedo_texture = texture
+	shadow.material_override = material
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	aura.add_child(shadow)
 
 
 func _update_status_label() -> void:

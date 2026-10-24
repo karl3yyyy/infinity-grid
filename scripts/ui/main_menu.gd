@@ -291,6 +291,10 @@ func _show_settings() -> void:
 	_add_menu_button(_content, "TON: %s" % ("AN" if SoundBoard.is_enabled() else "AUS"), "Musik, Effekte und Sprachansagen", func() -> void:
 		SoundBoard.set_enabled(not SoundBoard.is_enabled())
 		_show_settings())
+	var facing := FigureFacing.mode()
+	_add_menu_button(_content, "FIGUREN: %s" % str(FigureFacing.NAMES[facing]), "%s Wirkt ab dem nächsten Spiel." % str(FigureFacing.HINTS[facing]), func() -> void:
+		FigureFacing.next_mode()
+		_show_settings())
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
 
@@ -344,6 +348,7 @@ func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
 	var look := CharacterRoster.load_look()
 	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
+	_add_menu_button(_content, "ÜBERSICHT", "Alle Charaktere auf einen Blick", CharacterOverview.new(self, _show_collection, _show_character_picker).show)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
@@ -354,11 +359,12 @@ func _show_collection() -> void:
 
 
 ## Full-screen showcase, one swipeable page per character.
-func _show_character_picker() -> void:
+func _show_character_picker(start_id: String = "") -> void:
 	var selected := str(CharacterRoster.load_look()["character"])
+	var opened := start_id if not start_id.is_empty() else selected
 	var start := 0
 	for index: int in range(CharacterRoster.CHARACTERS.size()):
-		if CharacterRoster.CHARACTERS[index]["id"] == selected:
+		if CharacterRoster.CHARACTERS[index]["id"] == opened:
 			start = index
 	var showcase := CharacterShowcase.new()
 	showcase.name = "CharacterShowcase"

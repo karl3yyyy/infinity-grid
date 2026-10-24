@@ -76,7 +76,13 @@ static func portrait(id: String, host: Node, keep_frames_low: bool = false) -> F
 		fighter.frames_per_second = 6.0
 	var size := float(character.get("scale", 1.0))
 	fighter.camera.rotation_degrees.x = 0.0
-	if "pram" in character.get("gear", []):
+	if character.has("portrait_camera"):
+		var framing: Dictionary = character["portrait_camera"]
+		fighter.camera.size = float(framing["size"])
+		fighter.camera.position = Vector3(0.0, float(framing["y"]), 4.0)
+		if fighter.model is BoneFighterModel:
+			(fighter.model as BoneFighterModel).show_smoke_pose()
+	elif "pram" in character.get("gear", []):
 		fighter.camera.size = 0.75
 		fighter.camera.position = Vector3(0.0, 1.0, 4.0)
 	else:

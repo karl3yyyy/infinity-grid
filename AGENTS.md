@@ -102,3 +102,11 @@ Approved: credit packs bought with real money through Stripe Checkout
 (`server/online/payments.js`). Credits are only granted from a verified Stripe
 webhook, never from the client. Secret keys live in Cloudflare secrets and are
 never committed; the owner sets them up and switches from test to live mode.
+
+## Token economy
+
+- Answer briefly and directly; only relevant information, no recaps of what the diff already shows.
+- Do not create extra documentation, summary or notes .md files unless asked.
+- Read only the needed parts of files (offset/limit, grep first); do not re-read files just edited.
+- Use subagents for broad searches so the main context stays small.
+- Keep this file short; put details in `docs/` and read them only when needed.

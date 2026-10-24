@@ -3,16 +3,6 @@ extends Node3D
 
 signal died(unit: BattleUnit)
 
-const MODEL_PATHS: Dictionary = {
-	0: "res://assets/characters/player/player_swordsman.glb",
-	1: "res://assets/characters/enemy/enemy_swordsman.glb",
-}
-const CreatureFigureScript := preload("res://scripts/units/creature_figure.gd")
-const ANIMATION_MAP: Dictionary = {
-	&"idle": [&"Idle", &"idle", &"Rig|Idle"],
-	&"walk": [&"Walking_A", &"Walk", &"walk", &"Rig|Walking_A"],
-	&"death": [&"Death_A", &"Death", &"death", &"Rig|Death_A"],
-}
 
 var unit_name: String = "Unit"
 var team_id: int = 0
@@ -21,29 +11,16 @@ var is_master: bool = false
 var is_dead: bool = false
 ## Yaw the figure returns to after moving (faces the opposing side).
 var rest_yaw: float = 0.0
-var animation_state: StringName = &"idle"
 
+## Holds the plinth, the team glow and the fighter (see apply_figure).
 var visual_root: Node3D
-var torso_pivot: Node3D
-var sword_arm_pivot: Node3D
-var off_arm_pivot: Node3D
-var left_leg_pivot: Node3D
-var right_leg_pivot: Node3D
-var sword_pivot: Node3D
 var selection_ring: MeshInstance3D
 var status_label: Label3D
-var imported_model: Node3D
-var animation_player: AnimationPlayer
-var using_licensed_model: bool = false
 
 var _team_color: Color = Color("3a8fe7")
 var _accent_color: Color = Color("d7ecff")
-var _materials: Array[StandardMaterial3D] = []
-var _base_colors: Array[Color] = []
-var _idle_time: float = 0.0
-var _placeholder_root: Node3D
 var _wrap_projections: Array[Dictionary] = []
-## Animates the voxel figure once one is applied.
+## The character's pixel-art fighter once applied.
 var rig: FighterSprite
 ## While true the figure faces where the piece points (moving, attacking)
 ## instead of turning to the viewer.
@@ -70,21 +47,9 @@ func _ready() -> void:
 	_update_status_label()
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	_face_viewer()
 	_sync_wrap_projections()
-	if is_dead:
-		return
-	_idle_time += delta
-	if animation_state == &"idle":
-		visual_root.position.y = sin(_idle_time * 2.2) * 0.025
-		sword_pivot.rotation_degrees.z = sin(_idle_time * 1.7) * 2.0
-	elif animation_state == &"walk":
-		var stride := sin(_idle_time * 12.0)
-		left_leg_pivot.rotation_degrees.x = stride * 25.0
-		right_leg_pivot.rotation_degrees.x = -stride * 25.0
-		sword_arm_pivot.rotation_degrees.x = -stride * 14.0
-		off_arm_pivot.rotation_degrees.x = stride * 14.0
 
 
 func create_wrap_projections(parent: Node, board_width: float) -> void:
@@ -109,20 +74,14 @@ func create_wrap_projections(parent: Node, board_width: float) -> void:
 			"visual": projection_visual,
 			"ring": projection_ring,
 			"label": projection_label,
-			"animation_player": _find_animation_player(projection_visual),
-			"animation_state": &"",
 			"offset": float(side) * board_width,
 		})
 	_sync_wrap_projections()
 
 
-## Replaces the creature figurine with a fighter (see FighterSprite) on a
-## small glowing plinth. Called whenever the players' looks are known (match
+## Puts the character's fighter (see FighterSprite) on a small glowing plinth. Called whenever the players' looks are known (match
 ## start, opponent's choice arriving).
 func apply_figure(figure: Node3D) -> void:
-	var creature := visual_root.get_node_or_null("Creature") as Node3D
-	if creature != null:
-		creature.visible = false
 	var old := visual_root.get_node_or_null("Standee")
 	if old != null:
 		visual_root.remove_child(old)
@@ -173,27 +132,12 @@ func set_selected(value: bool) -> void:
 	selection_ring.visible = value and not is_dead
 
 
-func set_animation_state(state: StringName) -> void:
-	animation_state = state
-	_play_imported_animation(state)
-	if state == &"idle":
-		visual_root.position = Vector3.ZERO
-		left_leg_pivot.rotation = Vector3.ZERO
-		right_leg_pivot.rotation = Vector3.ZERO
-		off_arm_pivot.rotation = Vector3.ZERO
-		sword_arm_pivot.rotation = Vector3.ZERO
-		torso_pivot.rotation = Vector3.ZERO
-		sword_pivot.rotation = Vector3.ZERO
-
-
 func play_idle() -> void:
-	set_animation_state(&"idle")
 	if rig != null:
 		rig.walking = false
 
 
 func play_walk() -> void:
-	set_animation_state(&"walk")
 	if rig != null:
 		rig.walking = true
 
@@ -204,31 +148,16 @@ func face_world_position(target_position: Vector3) -> void:
 		look_at(flat_target, Vector3.UP, true)
 
 
-func play_death(from_position: Vector3 = Vector3.INF) -> void:
+## Removes a captured piece that has no fighter yet (the fighters break apart
+## in shatter()).
+func play_death(_from_position: Vector3 = Vector3.INF) -> void:
 	if is_dead:
 		return
 	is_dead = true
 	_hide_auras()
-	set_animation_state(&"death")
 	selection_ring.visible = false
-	_flash(Color("ffb3b3"))
-	if from_position == Vector3.INF:
-		from_position = global_position + Vector3.BACK
-	if using_licensed_model:
-		await get_tree().create_timer(0.65).timeout
-		_restore_materials()
-		status_label.text = "%s  [DOWN]" % _role_name()
-		died.emit(self)
-		return
-	var away := (global_position - from_position).normalized()
-	var fall_sign: float = -1.0 if away.x + away.z < 0.0 else 1.0
-	var tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.set_parallel(true)
-	tween.tween_property(visual_root, "rotation_degrees:z", 88.0 * fall_sign, 0.58)
-	tween.tween_property(visual_root, "position:y", 0.18, 0.58)
-	await tween.finished
-	_restore_materials()
-	status_label.text = "%s  [DOWN]" % _role_name()
+	visual_root.visible = false
+	await get_tree().process_frame
 	died.emit(self)
 
 
@@ -246,56 +175,6 @@ func _build_model() -> void:
 	visual_root = Node3D.new()
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
-	_placeholder_root = Node3D.new()
-	_placeholder_root.name = "ProceduralFallback"
-	visual_root.add_child(_placeholder_root)
-
-	torso_pivot = Node3D.new()
-	torso_pivot.name = "TorsoPivot"
-	torso_pivot.position.y = 0.95
-	_placeholder_root.add_child(torso_pivot)
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.30
-	body_mesh.height = 0.88
-	_add_mesh(torso_pivot, body_mesh, Vector3.ZERO, _team_color)
-
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.24
-	head_mesh.height = 0.48
-	_add_mesh(torso_pivot, head_mesh, Vector3(0.0, 0.70, 0.0), Color("f2c9a5"))
-
-	left_leg_pivot = _make_limb_pivot("LeftLegPivot", _placeholder_root, Vector3(-0.16, 0.62, 0.0))
-	right_leg_pivot = _make_limb_pivot("RightLegPivot", _placeholder_root, Vector3(0.16, 0.62, 0.0))
-	var leg_mesh := BoxMesh.new()
-	leg_mesh.size = Vector3(0.18, 0.62, 0.20)
-	_add_mesh(left_leg_pivot, leg_mesh, Vector3(0.0, -0.30, 0.0), Color("263746"))
-	_add_mesh(right_leg_pivot, leg_mesh, Vector3(0.0, -0.30, 0.0), Color("263746"))
-
-	sword_arm_pivot = _make_limb_pivot("SwordArmPivot", torso_pivot, Vector3(-0.38, 0.27, 0.0))
-	off_arm_pivot = _make_limb_pivot("OffArmPivot", torso_pivot, Vector3(0.38, 0.27, 0.0))
-	var arm_mesh := BoxMesh.new()
-	arm_mesh.size = Vector3(0.16, 0.58, 0.17)
-	_add_mesh(sword_arm_pivot, arm_mesh, Vector3(0.0, -0.27, 0.0), _accent_color)
-	_add_mesh(off_arm_pivot, arm_mesh, Vector3(0.0, -0.27, 0.0), _accent_color)
-
-	sword_pivot = Node3D.new()
-	sword_pivot.name = "SwordPivot"
-	sword_pivot.position = Vector3(0.0, -0.55, 0.0)
-	sword_arm_pivot.add_child(sword_pivot)
-	var blade := BoxMesh.new()
-	blade.size = Vector3(0.09, 0.92, 0.055)
-	_add_mesh(sword_pivot, blade, Vector3(0.0, -0.44, 0.0), Color("dce9f2"), 1.0)
-	var guard := BoxMesh.new()
-	guard.size = Vector3(0.34, 0.07, 0.09)
-	_add_mesh(sword_pivot, guard, Vector3(0.0, 0.02, 0.0), Color("f0b54d"), 0.45)
-
-	var shield := CylinderMesh.new()
-	shield.top_radius = 0.27
-	shield.bottom_radius = 0.27
-	shield.height = 0.08
-	var shield_mesh := _add_mesh(off_arm_pivot, shield, Vector3(0.0, -0.33, -0.18), _accent_color, 0.35)
-	shield_mesh.rotation_degrees.x = 90.0
-
 	selection_ring = MeshInstance3D.new()
 	selection_ring.name = "SelectionRing"
 	var ring := TorusMesh.new()
@@ -336,19 +215,8 @@ func _build_model() -> void:
 	status_label.modulate = _accent_color
 	add_child(status_label)
 
-	# Role is shown by the creature shape and aura instead of floating text.
+	# Role is shown by the plinth and aura instead of floating text.
 	status_label.visible = false
-	# Mystical creature figurines replace the humanoid models; the procedural
-	# placeholder rig stays (hidden) so the existing animation hooks still work.
-	using_licensed_model = false
-	_placeholder_root.visible = false
-	var creature: CreatureFigure = CreatureFigureScript.new()
-	creature.name = "Creature"
-	creature.configure(team_id, is_master)
-	visual_root.add_child(creature)
-	for material: StandardMaterial3D in creature.body_materials:
-		_materials.append(material)
-		_base_colors.append(material.albedo_color)
 	_build_team_aura()
 
 
@@ -403,86 +271,6 @@ func _build_team_aura() -> void:
 
 
 
-func _load_licensed_model() -> bool:
-	var model_path: String = MODEL_PATHS.get(team_id, "")
-	if model_path.is_empty() or not ResourceLoader.exists(model_path):
-		return false
-	var packed := load(model_path) as PackedScene
-	if packed == null:
-		return false
-	imported_model = packed.instantiate() as Node3D
-	if imported_model == null:
-		return false
-	imported_model.name = "LicensedCharacter"
-	visual_root.add_child(imported_model)
-	animation_player = _find_animation_player(imported_model)
-	return true
-
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node as AnimationPlayer
-	for child: Node in node.get_children():
-		var found := _find_animation_player(child)
-		if found != null:
-			return found
-	return null
-
-
-func _play_imported_animation(state: StringName) -> void:
-	if animation_player == null or not ANIMATION_MAP.has(state):
-		return
-	var candidates: Array = ANIMATION_MAP[state]
-	for candidate_value: Variant in candidates:
-		var candidate := StringName(candidate_value)
-		if animation_player.has_animation(candidate):
-			animation_player.play(candidate)
-			return
-
-
-func _make_limb_pivot(node_name: String, parent: Node3D, at: Vector3) -> Node3D:
-	var pivot := Node3D.new()
-	pivot.name = node_name
-	pivot.position = at
-	parent.add_child(pivot)
-	return pivot
-
-
-func _add_mesh(
-	parent: Node3D,
-	mesh: PrimitiveMesh,
-	at: Vector3,
-	color: Color,
-	metallic: float = 0.08
-) -> MeshInstance3D:
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.position = at
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.62
-	material.metallic = metallic
-	instance.material_override = material
-	parent.add_child(instance)
-	_materials.append(material)
-	_base_colors.append(color)
-	return instance
-
-
-func _flash(color: Color) -> void:
-	for material: StandardMaterial3D in _materials:
-		material.albedo_color = color
-		material.emission_enabled = true
-		material.emission = color
-		material.emission_energy_multiplier = 0.75
-
-
-func _restore_materials() -> void:
-	for index: int in range(_materials.size()):
-		_materials[index].albedo_color = _base_colors[index]
-		_materials[index].emission_enabled = false
-
-
 func _update_status_label() -> void:
 	if status_label != null:
 		status_label.text = _role_name()
@@ -514,15 +302,6 @@ func _sync_wrap_projections() -> void:
 		projection_label.text = status_label.text
 		projection_label.modulate = status_label.modulate
 		projection_label.modulate.a = 0.52
-		var projected_animation := projection["animation_player"] as AnimationPlayer
-		if projected_animation != null and projection["animation_state"] != animation_state:
-			for candidate_value: Variant in ANIMATION_MAP.get(animation_state, []):
-				var candidate := StringName(candidate_value)
-				if projected_animation.has_animation(candidate):
-					projected_animation.play(candidate)
-					break
-			projection["animation_state"] = animation_state
-			_wrap_projections[index] = projection
 
 
 ## The edge projections copy the visual; refresh them after it changed. The
@@ -543,7 +322,6 @@ func refresh_projections() -> void:
 		projection_root.add_child(fresh)
 		_set_projection_transparency(fresh, 0.48)
 		projection["visual"] = fresh
-		projection["animation_player"] = _find_animation_player(fresh)
 		_wrap_projections[index] = projection
 		if rig != null:
 			var mirror := rig.make_mirror()
@@ -553,7 +331,7 @@ func refresh_projections() -> void:
 		standee.add_child(rig)
 
 
-## Shatters the voxel figure into flying cubes (captured pieces).
+## Breaks the fighter apart into flying pieces (captured pieces).
 func shatter(from_position: Vector3, color: Color) -> void:
 	if is_dead:
 		return

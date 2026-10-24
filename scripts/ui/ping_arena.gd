@@ -43,13 +43,20 @@ func show_distances() -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if not accepting or not event is InputEventMouseButton:
+	if not accepting:
 		return
-	var click := event as InputEventMouseButton
-	if click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
-		accepting = false
-		var spot := click.position / size
-		spot_tapped.emit(Vector2(clampf(spot.x, 0.0, 1.0), clampf(spot.y, 0.0, 1.0)))
+	# Touch arrives as screen touches (the project does not emulate the mouse from touch).
+	var position := Vector2(-1.0, -1.0)
+	if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		position = (event as InputEventScreenTouch).position
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		position = (event as InputEventMouseButton).position
+	if position.x < 0.0:
+		return
+	accepting = false
+	accept_event()
+	var spot := position / size
+	spot_tapped.emit(Vector2(clampf(spot.x, 0.0, 1.0), clampf(spot.y, 0.0, 1.0)))
 
 
 func _draw() -> void:

@@ -44,9 +44,6 @@ const CHARACTERS: Array[Dictionary] = [
 	{"id": "monk", "style": "mage", "name": "BRUDER ODO", "line": "Meditiert, bis die Felder stillstehen.",
 		"body": "male", "skin": "dark", "glow_eyes": true, "glow_color": Color("ffc23a"), "gear": ["implants"],
 		"outfit": {"top": Color("d2691e"), "bottom": Color("8e3b12"), "sleeves": "short", "plain": true}},
-	{"id": "evlis", "style": "bazooka", "name": "EVLIS", "line": "Weißer Malteser, eigener Herr. Lacht über alles, raucht Selbstgedrehte. Alle sagen Dawg.",
-		"body": "male", "skin": "light", "tint": Color(3.6, 3.5, 3.4), "gear": ["dog", "bazooka", "cigarette"], "glow_color": Color("ff8a3c"), "scale": 0.9, "head_scale": 1.25,
-		"outfit": {"top": Color("4c5b3a"), "bottom": Color("f4f0e8"), "shoes": Color("e8e4da"), "sleeves": "none", "plain": true}},
 	{"id": "kid", "style": "gunner", "name": "JUNO", "line": "Zu jung für die Arena. Trotzdem hier.",
 		"body": "female", "skin": "dark", "hair": "buzzed_f", "hair_color": Color("1e1612"), "scale": 0.86, "head_scale": 1.12, "glow_color": Color("ffc23a"),
 		"outfit": {"top": Color("e8b23a"), "bottom": Color("23303e"), "shoes": Color("e8e8e8")}},
@@ -58,7 +55,6 @@ const STYLES: Dictionary = {
 	"brawler": {"name": "SCHLÄGER", "line": "Rennt hin und haut alles kaputt."},
 	"gunner": {"name": "SCHÜTZE", "line": "Schießt erst, dann geht er hin."},
 	"sorcerer": {"name": "BLITZWIRKER", "line": "Schleudert Blitze und gleitet hinterher."},
-	"bazooka": {"name": "BAZOOKA", "line": "Schießt sich selbst zum Feld und Gegner in die Luft."},
 }
 
 ## How students look. They are not people but copies the grid made.
@@ -90,7 +86,6 @@ const PRICES: Dictionary = {
 	"character:monk": 400,
 	"character:doc": 400,
 	"character:brute": 500,
-	"character:evlis": 500,
 	"character:baby": 600,
 	"echo:agents": 250,
 	"echo:cyborgs": 250,

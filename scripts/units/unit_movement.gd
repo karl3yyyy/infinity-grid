@@ -69,7 +69,6 @@ func _crosses_wrap(source: Vector2i, destination: Vector2i, grid: GridManager) -
 ##   brawler  - runs up and punches the target apart, then steps in
 ##   gunner   - aims and shoots, then walks over
 ##   sorcerer - throws lightning, then dashes over
-##   bazooka  - rockets a target away, or blasts himself to the field
 func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destination: Vector2i, grid: GridManager, style: String, accent: Color) -> void:
 	var path: Array[Vector2i] = [source, destination]
 	if unit.rig == null:
@@ -92,8 +91,6 @@ func perform_move(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destin
 			await _mage(unit, victim, aim, target_position, effects_parent, accent)
 		"brawler":
 			await _brawler(unit, victim, source, destination, aim, target_position, grid, effects_parent, accent)
-		"bazooka":
-			await _bazooka(unit, victim, source, destination, aim, target_position, grid, effects_parent, accent)
 		"gunner":
 			if victim != null:
 				await unit.rig.pose("aim", 0.2)
@@ -167,43 +164,6 @@ func _brawler(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destinatio
 		unit.play_idle()
 	else:
 		await _walk_to(unit, target_position)
-
-
-## Bazooka: a target is blown away by a rocket, then he walks over. Without
-## one he fires at the ground and the blast launches him through the air.
-func _bazooka(unit: BattleUnit, victim: BattleUnit, source: Vector2i, destination: Vector2i, aim: Vector3, target_position: Vector3, grid: GridManager, parent: Node, accent: Color) -> void:
-	await unit.rig.pose("aim", 0.2)
-	unit.rig.pose("shoot")
-	SoundBoard.play("shot")
-	var muzzle := _hand_position(unit)
-	CombatEffects.burst(parent, muzzle, Color(1.0, 0.8, 0.4), 0.5)
-	if victim != null:
-		await CombatEffects.rocket(parent, muzzle, aim + Vector3(0.0, 0.8, 0.0), accent)
-		CombatEffects.burst(parent, aim + Vector3(0.0, 0.8, 0.0), accent, 1.2)
-		await victim.shatter(unit.global_position, accent)
-		await unit.rig.release(0.15)
-		await _walk(unit, source, destination, target_position, grid)
-		return
-	CombatEffects.rocket(parent, muzzle, aim, accent)
-	await get_tree().create_timer(0.18).timeout
-	CombatEffects.burst(parent, aim, accent, 1.0)
-	await unit.rig.release(0.1)
-	unit.rig.model.play(&"Jump", 0.1)
-	var start := unit.position
-	var height := 1.6
-	var smoke := unit.create_tween().set_loops(8)
-	smoke.tween_interval(0.07)
-	smoke.tween_callback(func() -> void:
-		# The bazooka keeps firing backwards: flame at the tail end, smoke behind him.
-		var behind := unit.global_position - unit.global_transform.basis.z.normalized() * 0.6 + Vector3(0.0, 0.9, 0.0)
-		CombatEffects.burst(parent, behind, Color(1.0, 0.55, 0.15), 0.4)
-		CombatEffects.burst(parent, behind - unit.global_transform.basis.z.normalized() * 0.3, Color(0.8, 0.8, 0.8), 0.35))
-	var flight := unit.create_tween()
-	flight.tween_method(func(progress: float) -> void:
-		unit.position = start.lerp(aim, progress) + Vector3.UP * sin(PI * progress) * height, 0.0, 1.0, 0.6).set_trans(Tween.TRANS_SINE)
-	await flight.finished
-	CombatEffects.burst(parent, aim, Color(1.0, 0.8, 0.4), 0.7)
-	unit.play_idle()
 
 
 func _walk(unit: BattleUnit, source: Vector2i, destination: Vector2i, target_position: Vector3, grid: GridManager) -> void:

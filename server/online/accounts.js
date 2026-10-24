@@ -30,7 +30,6 @@ export const PRICES = {
   "character:monk": 400,
   "character:doc": 400,
   "character:brute": 500,
-  "character:evlis": 500,
   "character:baby": 600,
   "echo:agents": 250,
   "echo:cyborgs": 250,

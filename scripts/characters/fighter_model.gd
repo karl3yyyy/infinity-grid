@@ -321,13 +321,6 @@ func _add_gear(gear: String, look: Dictionary) -> void:
 			_spikes()
 		"pram":
 			_pram(glow)
-		"dog":
-			DogGear.add_head(self)
-			DogGear.add_tail(self)
-		"bazooka":
-			DogGear.add_bazooka(self)
-		"cigarette":
-			DogGear.add_cigarette(self)
 
 
 ## Head-local frame at bind pose: head bone origin, eye line about 0.09 up,

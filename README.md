@@ -1,223 +1,143 @@
 # Infinity Grid
 
-Infinity Grid is a 3D card strategy game built with Godot 4. Play locally
-against a simple bot as a Master and four Students on one 5x5 cylindrical
-board. Its left and right edge projections show the same units and tiles, not
-additional game pieces. Five movement cards are dealt between both sides and a
-shared pass space; after each move, the used card trades places with the pass
-card. Capture the opposing Master to win.
+A turn-based card strategy game on an endless board, built with Godot 4.
+Two players each command a **KERN** and four **Schüler** (students) on a 5×5
+grid whose left and right edges wrap around. Movement cards decide where a
+piece may go; capture the opposing KERN to win.
 
-[**Third-Party Asset Licenses**](THIRD_PARTY_ASSETS.md)
+The game is set inside a Matrix-like simulation: a blue retro circuit board,
+pixel-art fighters with cyber gear, and a green terminal interface.
+The interface language is German.
 
-## Play
+**Play in the browser:** https://infinity-grid.infinitygrid.workers.dev
+(mirror: https://karl3yyyy.github.io/tactical-slash/)
 
-Open `project.godot` in Godot 4.7 stable and press F6 from
-`scenes/main.tscn`, or run the exported build. Choose **Bot-Training** to start
-a local match. The profile name and avatar are saved on this device. The menu
-also shows planned online modes, but matchmaking, friends, ranked, and shop
-services need a backend and are not connected yet.
+## Features
 
-1. Choose one of your two movement cards.
-2. Select one of your five figures; highlighted fields show legal moves.
-3. Move onto an opponent's figure to capture it. Capturing the opposing Master
-  wins the game.
-4. The played card moves to the shared pass space; take the card that was there.
-5. The camera stays behind Player 1 during bot training. Edge projections map
-  to the same wrapped coordinates on the single board.
+- **Rules:** 5×5 board with horizontal wraparound (top and bottom are closed),
+  19 movement cards with five drawn per match, card exchange through a shared
+  pass card, a pass when no move is possible, and a draw on threefold repetition.
+- **Opponents:** a local bot (easy, medium, hard), two players on one device,
+  Wi-Fi play hosted by a PC, online play by room code, and a quick online match
+  against a random opponent with automatic reconnect.
+- **Characters:** 12 collectible characters with four fighting styles
+  (mage, brawler, gunner, sorcerer), each with its own capture animation and two
+  extra skins. Students appear as "echoes" of your character.
+- **Board skins:** circuit board, code rain, lava, synthwave, gold and starfield
+  patterns for your half of the board.
+- **Accounts:** play as a guest, then sign in with e-mail and password or
+  Google; credits, purchases and the profile picture follow the account.
+- **Shop:** credits are earned through daily bonuses and bot wins and spent on
+  characters, skins, echoes and board skins; credit packs can be bought with
+  Stripe (currently in test mode).
+- **Phone-first:** portrait layout, touch controls, installable web app that
+  updates itself.
 
-Desktop/Web controls:
+## How to play
 
-- **Left Click:** select cards, figures, and destination tiles.
-- **Right Click:** cancel.
-- **WASD / Arrow Keys:** pan the camera.
-- **Q / E:** rotate the camera.
-- **Mouse Wheel:** zoom.
-- **Escape:** pause or close the current menu.
-- **F11:** toggle fullscreen.
+1. Pick one of your two movement cards.
+2. Pick one of your pieces. Highlighted squares show where the card allows it to go.
+3. Move there. Landing on an opposing piece captures it.
+4. The card you played swaps with the pass card; your opponent gets the old pass card next.
+5. Capture the opposing KERN to win.
 
-Android controls:
+Cards show a 5×5 diagram: the dark square is the piece, coloured squares are
+its targets. Moves past the left or right edge come back on the other side.
 
-- **Tap:** select and confirm.
-- **Drag:** pan the camera.
-- **Pinch:** zoom.
-- **UI Buttons:** select a movement card.
-- Two-finger rotate orbits the camera and long press cancels. The UI respects
-  the platform safe area; Android Back closes the current mode/menu before
-  exiting.
+**Controls:** click or tap cards, pieces and squares; right-click or long press
+cancels; Escape opens the pause menu. On desktop, WASD/arrow keys pan, Q/E
+rotate and the mouse wheel zooms the camera.
 
-## Movement Cards
+## Run it locally
 
-The pool contains 19 cards (Crane, Wave, Comet, Shell, Vortex, Nova, Tide,
-Orbit, Rift, Halo, Ember, Drift, Zephyr, Eclipse, Prism, Pulse, Echo, Serpent,
-Viper). Every match draws five at random. Cards are shown like classic
-Onitama cards: a 5x5 diagram where the dark square is the figure and the
-coloured squares are its targets. Opponent cards are rotated towards the
-opponent so their diagrams match the board on screen. Horizontal moves wrap
-around the board; moves past the top or bottom edge are invalid.
+1. Install [Godot 4.7](https://godotengine.org/download) (standard build, not .NET).
+2. Open `project.godot` and press **F5**.
 
-The game runs in portrait format: opponent cards on top, the board in the
-middle, your own cards and the next (pass) card at the bottom.
+Validate the project (editor load, rule tests, network tests, smoke test):
 
-## Look
-
-The board is a blue retro circuit board in a cyberpunk arena; each player's
-two rows can wear a patterned skin (code rain, lava, synthwave, gold, starfield).
-Pieces are the 12 collectible characters: rigged Quaternius humans
-(`assets/characters/humans/`) dressed at runtime with outfits, coats and cyber
-gear, and drawn as pixel-art sprites (`scripts/characters/`). Students are
-"echoes" of the player's character.
-
-## Bot difficulty
-
-Quick play asks for a difficulty, saved with the local profile:
-
-- **Leicht:** captures an exposed master, otherwise often plays loosely.
-- **Mittel:** two-ply search.
-- **Schwer:** iterative alpha-beta search up to five plies (~1.4 s budget).
-
-The search lives in `scripts/battle/bot_ai.gd` and works on a compact copy
-of the match state, separate from scene nodes.
-
-## Wi-Fi play (two phones, no internet)
-
-1. On the PC, double-click `WLAN-Spiel starten.bat`. It exports the web build
-   to `build/web` when scripts or assets changed (Godot export templates must
-   be installed), then prints addresses such as `http://192.168.178.37:8060`.
-   Allow Godot through the Windows firewall when asked.
-2. Open that address in the browser on both phones (same Wi-Fi).
-3. In the game choose **Multiplayer > Im WLAN spielen**. The first two players
-   who join are paired; each phone sees the board from its own side.
-
-The PC (`tools/lan_host.gd`) serves the page on port 8060 and relays moves on
-8061 (`scripts/network/`). Both phones apply the rules themselves. The GitHub
-Pages build cannot use this mode because it is served over HTTPS.
-
-## Online play (room codes)
-
-**Multiplayer > Online** offers **Schnelles Spiel** (random opponent from a
-queue; after 30 s the bot is offered instead) or a four-digit room code for
-friends. A dropped connection reconnects by itself and replays missed turns;
-the opponent waits up to 60 s. After a page reload the main menu offers
-**Partie fortsetzen** for 10 minutes.
-
-Online tests run against a local server:
-
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/check_project.ps1 -Godot "<path to Godot console exe>"
 ```
+
+Logs go to `logs/validation/`.
+
+## Project layout
+
+| Path | Contents |
+| --- | --- |
+| `scripts/battle/` | Match flow and rules (`onitama_battle_manager.gd`), movement cards, bot AI, capture effects, network matches |
+| `scripts/grid/` | The cylindrical board, its cells and the procedurally painted board skins |
+| `scripts/units/` | Pieces (`BattleUnit`) and their move/attack animations |
+| `scripts/characters/` | Character roster, skins, profile pictures and the pixel-art fighter renderer |
+| `scripts/ui/` | Terminal main menu, in-match HUD, cards, character gallery, shop and login pages |
+| `scripts/network/` | Online, Wi-Fi and account clients |
+| `scripts/camera/`, `scripts/controllers/`, `scripts/core/` | Camera, input, cyberpunk arena and startup |
+| `server/online/` | Cloudflare Worker: rooms, quick-match lobby, accounts, logins, payments |
+| `tests/` | Headless tests for rules, Wi-Fi play and the online server |
+| `tools/` | Validation, web export, publishing and the Wi-Fi host |
+| `site/` | The exported web build served by GitHub Pages |
+| `docs/` | Architecture notes and the (German) project overview |
+
+See [docs/architecture.md](docs/architecture.md) for how the pieces fit together.
+
+## Online server
+
+The server is a Cloudflare Worker on the free plan (`server/online/`).
+Durable Objects hold one game room each, the quick-match lobby, player accounts
+and logins. Every client runs the game rules itself; the server relays moves
+and checks turn order. Credits and owned items are decided by the server only.
+
+Run it locally for the online tests:
+
+```bash
 cd server/online
 npx wrangler dev --port 8787
-# second terminal, from the project root:
-set INFINITY_GRID_ONLINE=ws://127.0.0.1:8787
+```
+
+Then, from the project root, with `INFINITY_GRID_ONLINE=ws://127.0.0.1:8787`:
+
+```bash
 godot --headless --path . --script res://tests/online_test.gd
 ```
 
-The server is a Cloudflare Worker (`server/online/`, free Workers plan): one
-Durable Object per room keeps the turn history and checks turn order, one
-lobby object pairs quick-play players. The PC host for Wi-Fi play speaks the
-basic part of the same protocol (no quick queue, no reconnect).
+Secrets are stored with `npx wrangler secret put <NAME>` and never committed:
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `GOOGLE_CLIENT_SECRET`.
+Public settings (Stripe price ids, Google client id) are in `wrangler.toml`.
 
-The game is published twice: by the Worker at
-**https://infinity-grid.infinitygrid.workers.dev** (marked `noindex`) and by
-GitHub Pages at **https://karl3yyyy.github.io/tactical-slash/** (from `site/`
-on every push to `main`).
+## Wi-Fi play without internet
 
-Publish a new version (needs Node.js and `npx wrangler login`):
+1. On a PC, run `WLAN-Spiel starten.bat`. It exports the web build when needed
+   and prints addresses such as `http://192.168.178.37:8060`.
+2. Open that address on two phones in the same network.
+3. Choose **Multiplayer → Im WLAN spielen** on both.
 
-```
-powershell -File tools/prepare_github_pages.ps1 -Godot <path to Godot console exe>
+The PC (`tools/lan_host.gd`) serves the page and relays moves.
+
+## Publishing
+
+```powershell
+powershell -File tools/prepare_github_pages.ps1 -Godot "<path to Godot console exe>"
 powershell -File tools/publish_online.ps1
+git add site; git commit -m "Rebuild the web version"; git push
 ```
 
-`publish_online.ps1` copies `site/` to `build/online_site`, splits
-`index.wasm` into two parts (Cloudflare allows 25 MiB per file; `worker.js`
-joins them) and deploys. `ONLINE_SERVER_URL` in
-`scripts/network/match_client.gd` points at the same Worker.
+The first command exports the web build to `site/` (GitHub Pages deploys it
+on push). The second deploys the build and the server to Cloudflare; it needs
+Node.js and `npx wrangler login`.
 
-## Tools, Web, and licensing
+Desktop and Android builds: `tools/build_release.ps1`
+(Android needs `tools/setup_android_environment.ps1` first).
 
-- Godot 4.7 stable with typed GDScript and the Compatibility renderer.
-- Blender 5.1.2 for the reproducible 3D asset preparation pipeline.
-- The workspace MCP server uses Node.js 24 and `@coding-solo/godot-mcp`.
-- The browser build uses the **Web Single-Threaded** preset without threads,
-  SharedArrayBuffer, extensions, or GDExtension.
-- Character assets are CC0 packs from Quaternius, scenery from KayKit and Kenney; the
-  HDR sky is a CC0 Poly Haven asset. See [THIRD_PARTY_ASSETS.md](THIRD_PARTY_ASSETS.md)
-  and [the asset audit](docs/asset-audit.md) for authors, sources, and licenses.
-- Original project code is available under the [MIT License](LICENSE). The MIT
-  License does not replace the separate licenses for third-party assets.
+## Tech
 
-## Architecture
+- Godot 4.7, typed GDScript, Compatibility renderer; web export single-threaded.
+- Characters: Quaternius Universal Base Characters and Universal Animation
+  Library (CC0), dressed at runtime and rendered into low-resolution viewports
+  with a pixel shader.
+- Board patterns, profile symbols, outfits and effects are generated in code.
 
- `scripts/effects`: hit, projectile, healing, and floating-number effects.
-- `tests`: headless integration and rule assertions.
+## Licenses
 
-`BattleUnit.grid_position` and `GridCell.occupant` are authoritative. Rendered
-`Node3D` positions never replace the `Vector2i` game state. Licensed visuals are
-loaded behind the unit API, so game rules do not depend on model node names.
-
-## Validate
-
-From PowerShell:
-
-```powershell
-Set-Location D:\GameProjects
-powershell -ExecutionPolicy Bypass -File .\tools\check_project.ps1
-```
-
-This performs editor/resource loading, core integration assertions, and a
-Main-scene smoke test. Logs are written to `logs/validation/`; Blender and export logs use
-`logs/blender/` and `logs/export/`.
-
-## Rebuild 3D assets
-
-The processed runtime assets are committed. To reproduce them from the audited
-source archives with Blender 5.1:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\run_blender_asset_pipeline.ps1
-```
-
-Original archives/extractions live under `assets/source_assets/` and are
-excluded from Git and Godot import. Runtime GLBs and the HDR are under
-`assets/characters/`, `assets/environment/`, and `assets/sky/`. See
-`THIRD_PARTY_ASSETS.md`, `docs/asset-audit.md`, and `assets/licenses/`.
-
-## Build releases
-
-Export templates must match Godot 4.7. Android additionally uses OpenJDK 17 and
-Android SDK Platform/Build Tools 35 or newer. Verify the local Android setup:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\setup_android_environment.ps1
-```
-
-Create all artifacts and checksums:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build_release.ps1
-```
-
-Outputs:
-
-- `build/windows/InfinityGrid.exe`
-- `build/web/index.html`
-- `build/android/InfinityGrid-debug.apk`
-- `build/packages/InfinityGrid-Windows-x86_64.zip`
-- `build/packages/InfinityGrid-Web.zip`
-- `build/build_manifest.json`
-- `build/SHA256SUMS.txt`
-
-Serve the Web build over HTTP (not `file://`):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\serve_web.ps1
-```
-
-Prepare the tracked GitHub Pages directory from a fresh Single-Threaded export:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\prepare_github_pages.ps1
-```
-
-The Android package is `com.karl3yyyy.infinitygrid`, version `0.2.0`
-(version code 2), arm64. The generated debug keystore, SDK, JDK, build outputs,
-and logs are intentionally excluded from Git.
+Project code is under the [MIT License](LICENSE). Third-party assets keep
+their own licenses (CC0 characters, SIL OFL font); see
+[THIRD_PARTY_ASSETS.md](THIRD_PARTY_ASSETS.md).

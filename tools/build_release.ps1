@@ -66,7 +66,6 @@ $Manifest = [ordered]@{
     game = "Infinity Grid"
     version = "0.2.0"
     godot = (& $Godot --version).Trim()
-    blender = (& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" --version | Select-Object -First 1).Trim()
     build_date = (Get-Date).ToUniversalTime().ToString("o")
     git_commit = $GitCommit
     tests = "Editor import, core integration suite, and main-scene smoke check passed"

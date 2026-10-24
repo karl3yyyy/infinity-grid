@@ -564,7 +564,7 @@ func _show_card_collection() -> void:
 	for card: MovementCard in deck:
 		var view: CardView = CardViewScript.new()
 		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
-		view.show_card(card, false, UITheme.TEAM_COLORS[0], false)
+		view.show_card(card, false, OnitamaUI.TEAM_COLORS[0], false)
 		grid.add_child(view)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 	_focus_first_entry()

@@ -203,3 +203,30 @@ static func _vertical_fade() -> GradientTexture2D:
 	texture.fill_from = Vector2(0.5, 1.0)
 	texture.fill_to = Vector2(0.5, 0.0)
 	return texture
+
+
+## Fat rocket from `from` to `to` with a puff of smoke every step; awaits its arrival.
+static func rocket(parent: Node, from: Vector3, to: Vector3, color: Color) -> void:
+	var shot := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.16, 0.16, 0.5)
+	shot.mesh = box
+	shot.material_override = _glow_material(color.lightened(0.35), 1.0, null)
+	shot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(shot)
+	shot.global_position = from
+	if from.distance_squared_to(to) > 0.0001:
+		shot.look_at(to, Vector3.UP)
+	var light := OmniLight3D.new()
+	light.light_color = color
+	light.light_energy = 2.5
+	light.omni_range = 2.0
+	shot.add_child(light)
+	var duration := clampf(from.distance_to(to) / 12.0, 0.15, 0.5)
+	var travel := shot.create_tween()
+	travel.tween_property(shot, "global_position", to, duration)
+	var smoke := shot.create_tween().set_loops(6)
+	smoke.tween_interval(duration / 6.0)
+	smoke.tween_callback(func() -> void: burst(parent, shot.global_position, Color(0.8, 0.8, 0.8), 0.28))
+	await travel.finished
+	shot.queue_free()

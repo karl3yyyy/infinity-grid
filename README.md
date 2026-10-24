@@ -10,7 +10,7 @@ pixel-art fighters with cyber gear, and a green terminal interface.
 The interface language is German.
 
 **Play in the browser:** https://infinity-grid.infinitygrid.workers.dev
-(mirror: https://karl3yyyy.github.io/tactical-slash/)
+(mirror: https://karl3yyyy.github.io/infinity-grid/)
 
 ## Features
 

@@ -61,8 +61,8 @@ OPA HEINZ, RIK, DOC VOSS, BRUDER ODO, JUNO.
 | Was | Wo |
 |---|---|
 | Spiel (Haupt-Link) | https://infinity-grid.infinitygrid.workers.dev |
-| GitHub-Pages-Kopie | https://karl3yyyy.github.io/tactical-slash/ |
-| Code (öffentlich) | https://github.com/karl3yyyy/tactical-slash |
+| GitHub-Pages-Kopie | https://karl3yyyy.github.io/infinity-grid/ |
+| Code (öffentlich) | https://github.com/karl3yyyy/infinity-grid |
 | Server | Cloudflare Worker „infinity-grid“ (Account-Subdomain „infinitygrid“) |
 | Stripe (Testmodus) | Sandbox-Konto `acct_1UT6ixChrUtwv0Dv`, Webhook „infinity-grid-credits“ |
 
@@ -106,7 +106,6 @@ Testkauf: im Spiel Shop → Paket → im neuen Fenster mit Testkarte
    Live-Schlüssel eintragen.
 4. **„Passwort vergessen“** und E-Mail-Bestätigung: brauchen einen Mail-Dienst
    (eigene Domain, ca. 10 €/Jahr).
-5. GitHub-Repo heißt noch `tactical-slash` (alter Name).
 
 ## 8. Projektregeln (Kurzfassung, Details in `AGENTS.md`)
 

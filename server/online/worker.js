@@ -12,7 +12,7 @@
 //   mode=resume&code=..&token=..     -> {"type":"resume","team","cards","code","token","moves":[...]}
 // Client messages: {"type":"move"|"pass", "seq": n, ...}, {"type":"look", ...}, {"type":"leave"}, raw "ping".
 // Node Ping before every match ("start" carries ping:true): both send
-// {"type":"node_ping", cell:[x,y]}; the server rolls the signal and answers
+// {"type":"node_ping", spot:[x,y]}; the server rolls the signal and answers
 // {"type":"ping_result", picks, signal, winner} (winner -1 = collision, ping
 // again); the winner sends {"type":"choose", starter} and both get
 // {"type":"starter", team}. Moves are accepted only after that.
@@ -255,9 +255,9 @@ export class Room {
   // Node Ping: both picks in, roll the signal; equal distance means another round.
   async nodePing(room, seat, message) {
     if (room.starter !== undefined) return;
-    const cell = message.cell || [];
-    const x = Number(cell[0]), y = Number(cell[1]);
-    if (!(x >= 0 && x < 5 && y >= 0 && y < 5)) return;
+    const spot = message.spot || [];
+    const x = Number(spot[0]), y = Number(spot[1]);
+    if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
     room.ping = room.ping || { picks: [null, null], winner: -1 };
     if (room.ping.winner >= 0) return;
     room.ping.picks[seat] = [x, y];
@@ -265,7 +265,7 @@ export class Room {
       await this.save(room);
       return;
     }
-    const signal = [Math.floor(Math.random() * 5), Math.floor(Math.random() * 5)];
+    const signal = [Math.random(), Math.random()];
     const [a, b] = room.ping.picks.map((pick) => pingDistance(pick, signal));
     const winner = a === b ? -1 : (a < b ? 0 : 1);
     const result = { type: "ping_result", picks: room.ping.picks, signal, winner };

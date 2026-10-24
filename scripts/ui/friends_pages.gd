@@ -6,11 +6,16 @@ extends RefCounted
 ## as an invitation) and accept invitations. Refreshes itself while open.
 
 const REFRESH_SECONDS: float = 10.0
+const WATCH_SECONDS: float = 45.0
 
 var menu: MainMenu
 var account: AccountService
 ## Last answer of the server: {username, friends, incoming, outgoing, invites}.
 var overview: Dictionary = {}
+## People in the game right now (anyone with the game open), see start_watch().
+var online_count: int = 0
+var _known_online: Dictionary = {}
+var _watched: bool = false
 
 
 func _init(owner_menu: MainMenu, owner_account: AccountService) -> void:
@@ -18,10 +23,75 @@ func _init(owner_menu: MainMenu, owner_account: AccountService) -> void:
 	account = owner_account
 
 
+## Runs for the whole session: tells the server we are here, counts who is in
+## the game, applies an invite link and says when a friend comes online.
+func start_watch() -> void:
+	await menu.get_tree().create_timer(6.0).timeout
+	while menu.is_inside_tree():
+		await _watch_once()
+		await menu.get_tree().create_timer(WATCH_SECONDS).timeout
+
+
+func _watch_once() -> void:
+	if account.busy or not account.has_account() or account.account.is_empty():
+		return
+	var count := await account.presence()
+	if count >= 0:
+		online_count = count
+	if account.username().is_empty() or account.busy:
+		return
+	await _apply_pending_invite()
+	if account.busy:
+		return
+	var answer := await account.friends()
+	if answer.is_empty():
+		return
+	overview = answer
+	var now_online: Dictionary = {}
+	for person: Dictionary in answer.get("friends", []):
+		if person.get("online", false):
+			var who := str(person["username"])
+			now_online[who] = true
+			if _watched and not _known_online.has(who):
+				menu.toast_requested.emit("%s ist jetzt online." % who)
+	_known_online = now_online
+	_watched = true
+
+
+## The invite link of someone else brought us here: become friends, both get credits.
+func _apply_pending_invite() -> void:
+	var config := ConfigFile.new()
+	config.load(MainMenu.PROFILE_PATH)
+	var inviter := str(config.get_value("profile", "pending_invite", ""))
+	if inviter.is_empty():
+		return
+	var answer := await account.friends("invited", {"username": inviter})
+	if account._last_error == "offline":
+		return
+	config.set_value("profile", "pending_invite", "")
+	config.save(MainMenu.PROFILE_PATH)
+	if not answer.is_empty() and int(answer.get("bonus", 0)) > 0:
+		overview = answer
+		menu.toast_requested.emit("Einladung von %s: +%d Credits. Ihr seid jetzt Freunde." % [inviter, int(answer["bonus"])])
+
+
+## Link that brings a friend into the game; they land on your friends list.
+func _invite_link() -> String:
+	return "%s/?invite=%s" % [AccountService.api_url().replace("/api/account", ""), account.username()]
+
+
+func _share_invite(status: Label) -> void:
+	var link := _invite_link()
+	DisplayServer.clipboard_set(link)
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("if (navigator.share) { navigator.share({title: 'Infinity Grid', text: 'Spiel mit mir Infinity Grid!', url: %s}).catch(function () {}); }" % JSON.stringify(link))
+	status.text = "Link kopiert. Wer darüber kommt und sich anmeldet, wird dein Freund – ihr bekommt beide Credits."
+
+
 ## Short summary for the home entry, e.g. "2 online · 1 Anfrage".
 func summary() -> String:
 	if overview.is_empty():
-		return "Freunde hinzufügen, herausfordern, Einladungen"
+		return "Menschen, die du freiwillig kennst"
 	var online := (overview.get("friends", []) as Array).filter(func(person: Dictionary) -> bool: return person.get("online", false)).size()
 	var waiting := (overview.get("incoming", []) as Array).size() + (overview.get("invites", []) as Array).size()
 	return "%d online%s" % [online, ("  ·  %d neu" % waiting) if waiting > 0 else ""]
@@ -43,6 +113,7 @@ func show_friends() -> void:
 	field.placeholder_text = "Benutzername"
 	field.max_length = 16
 	field.custom_minimum_size = Vector2(320.0, 52.0)
+	WebTextInput.attach(field, "Benutzername")
 	field.add_theme_font_size_override("font_size", 30)
 	add_row.add_child(field)
 	var status := menu._make_text("", 22, TerminalTheme.GREEN_BRIGHT)
@@ -54,6 +125,7 @@ func show_friends() -> void:
 	field.text_submitted.connect(func(_text: String) -> void: add.call())
 	menu._add_menu_button(add_row, "+ HINZU", "Freundschaftsanfrage schicken", add)
 	menu._content.add_child(status)
+	menu._add_menu_button(menu._content, "FREUND EINLADEN", "Link kopieren und teilen – beide bekommen Credits", _share_invite.bind(status))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 470.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -109,7 +181,7 @@ func _fill(list: VBoxContainer, status: Label) -> void:
 	if not outgoing.is_empty():
 		_heading(list, "GESENDET")
 	for person: Dictionary in outgoing:
-		list.add_child(menu._make_text("  %s – wartet" % str(person["username"]), 22, TerminalTheme.GREEN_DIM))
+		list.add_child(menu._make_text("  %s – wartet auf Annahme" % str(person["username"]), 22, TerminalTheme.GREEN_DIM))
 
 
 func _show_friend(person: Dictionary) -> void:
@@ -134,7 +206,11 @@ func _act(action: String, body: Dictionary, status: Label, list: VBoxContainer =
 		status.text = _error_text(account._last_error)
 		return
 	overview = answer
-	status.text = "Anfrage geschickt." if action == "add" else ""
+	status.text = ""
+	if action == "add":
+		var who := str(body.get("username", ""))
+		var already := (overview.get("friends", []) as Array).any(func(person: Dictionary) -> bool: return str(person["username"]).to_lower() == who.to_lower())
+		status.text = "Ihr seid jetzt befreundet." if already else "Anfrage an %s geschickt. Die Person muss sie annehmen." % who
 	var target := list if list != null else menu._content.find_child("FriendList", true, false) as VBoxContainer
 	if target != null and target.is_inside_tree():
 		_fill(target, status)

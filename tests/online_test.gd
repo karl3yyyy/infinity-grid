@@ -139,8 +139,8 @@ func _log(name: String, kind: String, values: Array) -> void:
 func _settle_ping(team0: MatchClient, team1: MatchClient, name0: String, name1: String) -> bool:
 	for attempt: int in range(12):
 		var before := _count(name0, "ping_result")
-		team0.send_node_ping(Vector2i(randi_range(0, 4), randi_range(0, 4)))
-		team1.send_node_ping(Vector2i(randi_range(0, 4), randi_range(0, 4)))
+		team0.send_node_ping(Vector2(randf(), randf()))
+		team1.send_node_ping(Vector2(randf(), randf()))
 		await _wait_until(func() -> bool: return _count(name0, "ping_result") > before and _count(name1, "ping_result") > before)
 		var winner := int((_last(name0, "ping_result")[0] as Dictionary).get("winner", -1))
 		if winner < 0:

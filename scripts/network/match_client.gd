@@ -180,8 +180,8 @@ func send_pass(seq: int, slot: int) -> void:
 
 
 ## Tells the opponent which character, echoes and board skin to show.
-func send_node_ping(cell: Vector2i) -> void:
-	_send_now({"type": "node_ping", "cell": [cell.x, cell.y]})
+func send_node_ping(spot: Vector2) -> void:
+	_send_now({"type": "node_ping", "spot": [spot.x, spot.y]})
 
 
 func send_emote(emote_id: String) -> void:

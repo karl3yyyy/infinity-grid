@@ -47,9 +47,10 @@ static func auth_url() -> String:
 	return api_url().replace("/api/account", "/api/auth")
 
 
-## True for free items and those the account owns (as last reported).
+## True for free items, those the account owns (as last reported) and those
+## the player's Access Level has unlocked.
 static func owns(item: String) -> bool:
-	if not CharacterRoster.PRICES.has(item):
+	if not CharacterRoster.PRICES.has(item) or AccessLevel.is_unlocked(item):
 		return true
 	var config := ConfigFile.new()
 	config.load(PROFILE_PATH)
@@ -232,3 +233,25 @@ func ranked_ticket() -> String:
 func leaderboard() -> Array:
 	await _call("leaderboard", HTTPClient.METHOD_GET, "/leaderboard", {}, ranked_url())
 	return _last_response.get("players", []) if _last_error.is_empty() else []
+
+
+## A finished normal online match: the server adds the Access Level XP.
+func report_online_result(won: bool) -> void:
+	if has_account():
+		await _call("online", HTTPClient.METHOD_POST, "/online", {"won": won})
+
+
+## XP stored on the signed-in account, or -1 without one (see AccessLevel).
+static func cached_xp() -> int:
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	if str(config.get_value(SECTION, "code", "")).is_empty():
+		return -1
+	var cache: Dictionary = config.get_value(SECTION, "cache", {})
+	return int(cache.get("xp", 0)) if not cache.is_empty() else -1
+
+
+## Tells the server we are in the game; returns how many are, or -1 offline.
+func presence() -> int:
+	await _call("presence", HTTPClient.METHOD_POST, "/presence", {}, ranked_url())
+	return int(_last_response.get("online", 0)) if _last_error.is_empty() else -1

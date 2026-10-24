@@ -16,6 +16,56 @@ func _init(owner_menu: MainMenu, owner_account: AccountService) -> void:
 	account = owner_account
 
 
+## The profile's bottom part: one KONTO panel (credits, sign-in state) and a
+## row of small buttons, instead of loose lines and big menu bars.
+func add_account_panel(parent: Control, avatar_action: Callable) -> void:
+	var online := account.has_account() and not account.account.is_empty()
+	var panel := ProfileStatsView.make_panel()
+	parent.add_child(panel)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+	box.add_child(ProfileStatsView.make_text("KONTO", 20, TerminalTheme.GREEN_DIM))
+	if online:
+		var credits := ProfileStatsView.make_text("%d CR" % account.credits(), 26, TerminalTheme.GREEN_BRIGHT)
+		box.add_child(_info_row("Credits", credits))
+		var update := func() -> void: credits.text = "%d CR" % account.credits()
+		account.changed.connect(update)
+		credits.tree_exiting.connect(func() -> void: account.changed.disconnect(update))
+		account.refresh_if_stale()
+	var state := "Gast – Konto anlegen für Credits auf jedem Gerät"
+	if not online:
+		state = "Offline – Anmelden geht, sobald du online bist"
+	elif not account.email().is_empty():
+		state = account.email()
+	var state_label := ProfileStatsView.make_text(state, 22, TerminalTheme.GREEN_BRIGHT if online and not account.email().is_empty() else TerminalTheme.GREEN_DIM)
+	state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_info_row("Angemeldet", state_label))
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	parent.add_child(actions)
+	menu._add_menu_button(actions, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", avatar_action)
+	if online:
+		if account.email().is_empty():
+			menu._add_menu_button(actions, "ANMELDEN", "Mit Google oder E-Mail", show_login)
+		else:
+			if account.username().is_empty():
+				menu._add_menu_button(actions, "NAME WÄHLEN", "Brauchst du für Freunde und Ranked", show_choose_username)
+			menu._add_menu_button(actions, "ABMELDEN", "Dieses Gerät vom Konto trennen", _confirm_logout)
+	for child: Node in actions.get_children():
+		(child as Button).add_theme_font_size_override("font_size", 30)
+
+
+func _info_row(title: String, value: Control) -> Control:
+	var row := HBoxContainer.new()
+	var name_label := ProfileStatsView.make_text(title, 22, TerminalTheme.GREEN)
+	name_label.custom_minimum_size.x = 170.0
+	row.add_child(name_label)
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(value)
+	return row
+
+
 ## Status and login buttons for the profile page.
 func add_section(parent: Control) -> void:
 	if not account.has_account() or account.account.is_empty():
@@ -151,6 +201,7 @@ func _field(placeholder: String, secret: bool) -> LineEdit:
 	field.custom_minimum_size.y = 52.0
 	field.add_theme_font_size_override("font_size", 30)
 	field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD if secret else LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
+	WebTextInput.attach(field, placeholder)
 	menu._content.add_child(field)
 	return field
 

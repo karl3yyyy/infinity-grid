@@ -14,6 +14,8 @@ signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal quit_requested
+## A short message for the player, shown over whatever is on screen.
+signal toast_requested(text: String)
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const CardViewScript := preload("res://scripts/ui/card_view.gd")
@@ -65,6 +67,8 @@ func _ready() -> void:
 	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
 	if MatchClient.is_online_available() and not is_test_run:
 		_connect_account.call_deferred()
+		_capture_invite()
+		_friends.start_watch.call_deferred()
 		# Friends see us as online while the game keeps checking in.
 		var heartbeat := Timer.new()
 		heartbeat.wait_time = 90.0
@@ -73,6 +77,20 @@ func _ready() -> void:
 		add_child(heartbeat)
 	_build_shell()
 	_show_home()
+
+
+## A friend's invite link (?invite=NAME) is remembered until this player has an
+## account with a username; FriendsPages then applies it.
+func _capture_invite() -> void:
+	if not OS.has_feature("web"):
+		return
+	var inviter := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('invite') || ''"))
+	if not RegEx.create_from_string("^[A-Za-z0-9_]{3,16}$").search(inviter):
+		return
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	config.set_value("profile", "pending_invite", inviter)
+	config.save(PROFILE_PATH)
 
 
 func open_menu(can_resume: bool) -> void:
@@ -187,20 +205,6 @@ func _build_shell() -> void:
 	_description = _make_text("", TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
 	_description.custom_minimum_size.y = 34.0
 	info_box.add_child(_description)
-	for help: Array in _help_rows():
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		for part: String in help:
-			if part.begins_with("@"):
-				var arrow := TextureRect.new()
-				arrow.texture = TerminalTheme.arrow_texture(part.substr(1))
-				arrow.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-				row.add_child(arrow)
-			else:
-				var text := _make_text(part, 28)
-				text.autowrap_mode = TextServer.AUTOWRAP_OFF
-				row.add_child(text)
-		info_box.add_child(row)
 
 	var push_down := Control.new()
 	push_down.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -227,7 +231,7 @@ func _build_footer() -> Control:
 	var globe := TerminalDecor.Globe.new()
 	globe.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	left.add_child(globe)
-	left.add_child(_make_text("KEIN ENDE IN SICHT.", 18))
+	left.add_child(_make_text(GridLore.menu_tagline(), 18))
 	footer.add_child(left)
 
 	var center := VBoxContainer.new()
@@ -261,6 +265,9 @@ func _build_footer() -> Control:
 func _show_home() -> void:
 	_set_page("MENU", Callable())
 	_update_profile_button()
+	_content.add_child(_make_text(PurgeCycle.banner(), 22, TerminalTheme.GREEN_DIM))
+	if _friends.online_count > 0:
+		_content.add_child(_make_text("%d IM GRID" % _friends.online_count, 22, TerminalTheme.GREEN_BRIGHT))
 	var session := MatchClient.saved_session()
 	if not session.is_empty():
 		_add_menu_button(_content, "PARTIE FORTSETZEN", "Deine Online-Partie läuft noch", func() -> void:
@@ -268,13 +275,23 @@ func _show_home() -> void:
 			online_resume_requested.emit(session))
 	if _resume_available:
 		_add_menu_button(_content, "ZUR PARTIE", "Zurück ins laufende Spiel", close_menu)
-	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, mit Code, lokal", _play.show_play)
+	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, zu zweit", _play.show_play)
 	if MatchClient.is_online_available():
 		_add_menu_button(_content, "FREUNDE", _friends.summary(), _friends.show_friends)
 	_add_menu_button(_content, "SAMMLUNG", "Charaktere, Skins, Spielfeld, Profilbild, Emotes, Karten", _show_collection)
-	_add_menu_button(_content, "SHOP", "Charaktere, Echos und Spielfelder für Credits", _shop.show_shop)
+	_add_menu_button(_content, "SHOP", "Credits gegen Style tauschen. Das Grid nimmt jede Währung.", _shop.show_shop)
+	_add_menu_button(_content, "EINSTELLUNGEN", "Lautstärke des Grids. Es flüstert nicht.", _show_settings)
 	if not OS.has_feature("web"):
 		_add_menu_button(_content, "BEENDEN", "Spiel schließen", func() -> void: quit_requested.emit())
+	_focus_first_entry()
+
+
+func _show_settings() -> void:
+	_set_page("EINSTELLUNGEN", _show_home)
+	_add_menu_button(_content, "TON: %s" % ("AN" if SoundBoard.is_enabled() else "AUS"), "Musik, Effekte und Sprachansagen", func() -> void:
+		SoundBoard.set_enabled(not SoundBoard.is_enabled())
+		_show_settings())
+	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
 
 
@@ -298,12 +315,8 @@ func _show_profile() -> void:
 	naming.add_child(_make_text(shown, 40, TerminalTheme.GREEN_BRIGHT))
 	if not account.account.is_empty():
 		naming.add_child(_make_text("%s  ·  %d PUNKTE" % [str(account.account.get("rank", "")), int(account.account.get("rating", 1000))], 22, TerminalTheme.GREEN_DIM))
-	_add_menu_button(_content, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", _show_avatar_picker.bind(_show_profile))
-	_add_menu_button(_content, "TON: %s" % ("AN" if SoundBoard.is_enabled() else "AUS"), "Musik, Effekte und Sprachansagen", func() -> void:
-		SoundBoard.set_enabled(not SoundBoard.is_enabled())
-		_show_profile())
-	_shop.add_account_section(_content)
-	_login.add_section(_content)
+	ProfileStatsView.build(_content)
+	_login.add_account_panel(_content, _show_avatar_picker.bind(_show_profile))
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
 
@@ -460,7 +473,7 @@ func _add_picker_grid(kind: String, entries: Array[Dictionary], selected_id: Str
 		if not AccountService.owns(item):
 			button.text = "%s  %d CR" % [entry["name"], CharacterRoster.PRICES[item]]
 			button.self_modulate = Color(1.0, 1.0, 1.0, 0.55)
-			line = "GESPERRT – %s – für %d Credits im Shop" % [entry["name"], CharacterRoster.PRICES[item]]
+			line = "GESPERRT – %s – für %d Credits im Shop%s" % [entry["name"], CharacterRoster.PRICES[item], ShopPages._level_hint(item)]
 			button.pressed.connect(_shop.confirm_buy.bind(item, page))
 		else:
 			button.pressed.connect(on_pick.bind(entry))
@@ -475,6 +488,7 @@ func _show_card_collection() -> void:
 	_set_page("KARTEN", _show_collection)
 	var deck := MovementCardScript.create_deck()
 	_content.add_child(_make_text("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), TEXT_FONT_SIZE))
+	_content.add_child(_make_text("VECTOR: gerade Sprünge  ·  WAVE: Flanken  ·  FIELD: Umzingeln  ·  OVERCLOCK: riskante Finisher", 20, TerminalTheme.GREEN_DIM))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 470.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -579,13 +593,6 @@ func _radial_overlay(inner: Color, outer: Color, center: Vector2) -> TextureRect
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return overlay
-
-
-## Key hints below the list; "@up", "@down" and "@right" are drawn arrows.
-func _help_rows() -> Array[Array]:
-	if DisplayServer.is_touchscreen_available():
-		return [["AUSWAHL :", "ANTIPPEN"], ["ZURÜCK  :", "< ZURÜCK"]]
-	return [["AUSWAHL :", "@up", "@down", "TASTE"], ["START   :", "@right", "TASTE"], ["ZURÜCK  :", "ESC"]]
 
 
 func _clear_content() -> void:

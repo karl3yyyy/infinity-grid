@@ -203,9 +203,9 @@ func _place(state: Dictionary, coordinate: Vector2i, team: int, master: bool) ->
 
 
 func _test_node_ping() -> void:
-	_expect(PingPhase.distance(Vector2i(0, 2), Vector2i(4, 2)) == 1, "Node Ping distance wraps around the board edge")
-	_expect(PingPhase.winner_of([Vector2i(1, 1), Vector2i(3, 3)], Vector2i(2, 2)) == -1, "Equal distance is a Signal Collision")
-	_expect(PingPhase.winner_of([Vector2i(2, 2), Vector2i(0, 0)], Vector2i(2, 3)) == 0, "The closer pick wins the Node Ping")
+	_expect(PingPhase.winner_of([Vector2(0.5, 0.5), Vector2(0.2, 0.2)], Vector2(0.5, 0.5)) == 0, "The closer pick wins the Node Ping")
+	_expect(PingPhase.winner_of([Vector2(0.75, 0.5), Vector2(0.25, 0.5)], Vector2(0.5, 0.5)) == -1, "Exactly equal distance is a Signal Collision")
+	_expect(PingPhase.winner_of([Vector2(0.6, 0.5), Vector2(0.4, 0.5001)], Vector2(0.5, 0.5)) == 0, "A tiny difference still decides the Node Ping")
 
 
 func _test_bot_levels() -> void:

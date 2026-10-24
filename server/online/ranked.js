@@ -8,13 +8,16 @@
 // that referees every move with rules.js and reports the result here.
 //
 //   GET /api/ranked/leaderboard  -> {players: [{name, avatar, rating, rank, games}]}
+//   POST /api/ranked/presence    "I am in the game" (Bearer code) -> {online}; GET only counts
 
 import { accountCall, accountKey, json, CORS, normaliseCode } from "./accounts.js";
+import { currentCycle } from "./seasons.js";
 
 export const START_RATING = 1000;
 export const PLACEMENT_GAMES = 5;
 const TICKET_SECONDS = 60;
 const LEADERBOARD_SIZE = 50;
+const PRESENCE_SECONDS = 120;
 // Rating gap allowed when two players meet, and how fast it widens per second waited.
 const MATCH_GAP = 100;
 const MATCH_GAP_PER_SECOND = 20;
@@ -56,6 +59,16 @@ export async function handleRankedApi(request, env, url) {
     const answer = await lobby.fetch("https://ranked/leaderboard", { method: "POST" });
     return json(await answer.json());
   }
+  if (action === "presence") {
+    let key = "";
+    if (request.method === "POST") {
+      const code = normaliseCode((request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, ""));
+      const account = code ? await accountCall(env, code, "public") : null;
+      if (account && account.status === 200) key = await accountKey(code);
+    }
+    const answer = await lobby.fetch("https://ranked/presence", { method: "POST", body: JSON.stringify({ key }) });
+    return json(await answer.json());
+  }
   if (action === "ticket" && request.method === "POST") {
     const code = normaliseCode((request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, ""));
     if (!code) return json({ error: "no_account" }, 401);
@@ -78,6 +91,18 @@ export class RankedLobby {
     this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
+  // The leaderboard of the running Purge Cycle; a new cycle starts it empty
+  // (the "System Wipe").
+  async currentBoard() {
+    const cycle = currentCycle().number;
+    if ((await this.state.storage.get("leaderboardCycle")) !== cycle) {
+      await this.state.storage.put("leaderboardCycle", cycle);
+      await this.state.storage.put("leaderboard", []);
+      return [];
+    }
+    return (await this.state.storage.get("leaderboard")) || [];
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     if (request.headers.get("Upgrade") === "websocket") {
@@ -90,13 +115,23 @@ export class RankedLobby {
       await this.state.storage.put("ticket:" + ticket, { player: body, expires: Date.now() + TICKET_SECONDS * 1000 });
       return json({ ticket });
     }
+    if (op === "presence") {
+      // Players who checked in during the last two minutes (kept in memory only).
+      this.present = this.present || new Map();
+      const now = Date.now();
+      if (body.key) this.present.set(body.key, now);
+      for (const [key, seen] of this.present) {
+        if (now - seen > PRESENCE_SECONDS * 1000) this.present.delete(key);
+      }
+      return json({ online: this.present.size });
+    }
     if (op === "leaderboard") {
-      const board = (await this.state.storage.get("leaderboard")) || [];
-      return json({ players: board.map(({ name, avatar, rating, games }) => ({ name, avatar, rating, games, rank: rankOf(rating, games) })) });
+      const board = await this.currentBoard();
+      return json({ cycle: currentCycle(), players: board.map(({ name, avatar, rating, games }) => ({ name, avatar, rating, games, rank: rankOf(rating, games) })) });
     }
     if (op === "result") {
       // Players after a ranked game: keep the best LEADERBOARD_SIZE placed players.
-      let board = (await this.state.storage.get("leaderboard")) || [];
+      let board = await this.currentBoard();
       for (const player of body.players || []) {
         board = board.filter((entry) => entry.key !== player.key);
         if (player.games >= PLACEMENT_GAMES) {

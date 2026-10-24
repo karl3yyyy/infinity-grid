@@ -34,7 +34,7 @@ func show_card(new_card: MovementCard, is_rotated: bool, color: Color, selected:
 	accent_color = color
 	is_selected = selected
 	caption = card_caption
-	tooltip_text = card.card_name if card != null else ""
+	tooltip_text = "%s  ·  %s" % [card.card_name, card.category()] if card != null else ""
 	queue_redraw()
 
 
@@ -75,6 +75,11 @@ func _draw() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, title_size, color.lightened(0.35))
 	var rule_y := inner.position.y + title_height + 3.0
 	draw_line(Vector2(inner.position.x, rule_y), Vector2(inner.end.x, rule_y), Color(color, 0.6), 1.0)
+	var tag_size := int(float(title_size) * 0.55)
+	var tag_height := float(tag_size) + 2.0
+	draw_string(font, Vector2(inner.position.x, rule_y + float(tag_size) + 1.0), card.category(),
+		HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, tag_size, card.category_color())
+	rule_y += tag_height
 	var caption_height := 0.0
 	if next_card:
 		caption_height = float(title_size) * 0.75 + 2.0

@@ -39,6 +39,9 @@ var opponent_label: String = "BOT"
 var viewer_team: int = 0
 var result_overlay: ColorRect
 var result_label: Label
+var result_detail: Label
+## Added under the headline, e.g. the XP of this match.
+var result_extra: String = ""
 var menu_overlay: ColorRect
 var hud_root: Control
 var hud_column: Control
@@ -169,7 +172,16 @@ func show_result(text_value: String) -> void:
 	main_menu.close_menu()
 	get_tree().paused = false
 	result_overlay.visible = true
-	result_label.text = text_value
+	# First line is the big headline; the rest is smaller and wraps.
+	var parts := text_value.split("\n", true, 1)
+	result_label.text = parts[0]
+	var detail: Array[String] = []
+	if parts.size() > 1:
+		detail.append(parts[1])
+	if not result_extra.is_empty():
+		detail.append(result_extra)
+	result_detail.text = "\n".join(detail)
+	result_detail.visible = not detail.is_empty()
 
 
 func toggle_menu(force_visible: Variant = null) -> void:
@@ -299,8 +311,8 @@ func _build_ui() -> void:
 	hud_root.add_child(result_overlay)
 	var result_box := VBoxContainer.new()
 	result_box.set_anchors_preset(Control.PRESET_CENTER)
-	result_box.position = Vector2(-190.0, -85.0)
-	result_box.size = Vector2(380.0, 170.0)
+	result_box.position = Vector2(-280.0, -170.0)
+	result_box.size = Vector2(560.0, 260.0)
 	result_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	result_box.add_theme_constant_override("separation", 16)
 	result_overlay.add_child(result_box)
@@ -310,6 +322,13 @@ func _build_ui() -> void:
 	result_label.modulate = TerminalTheme.GREEN_BRIGHT
 	_outline(result_label, 12)
 	result_box.add_child(result_label)
+	result_detail = Label.new()
+	result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	result_detail.add_theme_font_size_override("font_size", 28)
+	result_detail.modulate = TerminalTheme.GREEN
+	_outline(result_detail, 8)
+	result_box.add_child(result_detail)
 	var restart_button := _make_button("NOCHMAL SPIELEN", result_box)
 	var quit_button := _make_button("HAUPTMENÜ", result_box)
 	restart_button.pressed.connect(func() -> void: new_match_pressed.emit())
@@ -393,6 +412,36 @@ func _build_main_menu() -> void:
 	main_menu.online_quick_requested.connect(func() -> void: online_quick_requested.emit())
 	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
+	main_menu.toast_requested.connect(show_toast)
+
+
+## A short message that slides in at the top, stays a few seconds and fades.
+func show_toast(text_value: String) -> void:
+	var panel := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.02, 0.06, 0.03, 0.92)
+	box.border_color = TerminalTheme.GREEN
+	box.set_border_width_all(2)
+	box.set_content_margin_all(14.0)
+	panel.add_theme_stylebox_override("panel", box)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var label := Label.new()
+	label.text = text_value
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", TerminalTheme.GREEN_BRIGHT)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size.x = 420.0
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(label)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 70)
+	panel.modulate.a = 0.0
+	hud_root.add_child(panel)
+	SoundBoard.play("emote")
+	var tween := panel.create_tween()
+	tween.tween_property(panel, "modulate:a", 1.0, 0.25)
+	tween.tween_interval(4.0)
+	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(panel.queue_free)
 
 
 ## Transparent tray: the meadow and board stay visible behind the cards.

@@ -10,6 +10,7 @@
 //   POST /api/friends/remove  {username}    unfriend, decline or withdraw
 //   POST /api/friends/invite  {username, code}  invite a friend to a room
 //   POST /api/friends/dismiss {username}    drop an invitation
+//   POST /api/friends/invited {username}    came through username's invite link: friends + credits
 // A person = {username, name, avatar, rating, rank, online}; invite = person + {code}.
 
 import { accountCall, accountKey, json, CORS, normaliseCode } from "./accounts.js";
@@ -51,6 +52,15 @@ export async function handleFriendsApi(request, env, url) {
   } else if (action === "accept") {
     if (!mine.incoming.includes(other)) return json({ error: "no_request" }, 404);
     await befriend(env, me, other);
+  } else if (action === "invited") {
+    // The caller came through other's invite link: friends right away (the link
+    // was the invitation) and a one-time credit bonus for both.
+    const reward = await accountOp(env, me, "invite", { role: "invitee", from: other });
+    if (reward && reward.rewarded) {
+      await accountOp(env, other, "invite", { role: "inviter" });
+      if (!mine.friends.includes(other)) await befriend(env, me, other);
+      return json({ ...(await overview(env, me, mine.username)), bonus: reward.credits });
+    }
   } else if (action === "remove") {
     await social(env, me, { action: "forget", key: other });
     await social(env, other, { action: "forget", key: me });
@@ -163,4 +173,10 @@ async function lookupUsername(env, username) {
   const claim = env.LOGINS.get(env.LOGINS.idFromName("user:" + username.trim().toLowerCase()));
   const answer = await claim.fetch("https://login/lookup", { method: "POST", body: "{}" });
   return answer.ok ? (await answer.json()).key : null;
+}
+
+async function accountOp(env, key, op, body) {
+  const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(key));
+  const answer = await account.fetch("https://account/" + op, { method: "POST", body: JSON.stringify(body) });
+  return answer.ok ? await answer.json() : null;
 }

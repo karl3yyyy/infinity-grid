@@ -17,7 +17,8 @@
 
 import { createCheckout, offeredPacks } from "./payments.js";
 import { claimUsername, publicView, socialOp, validUsername } from "./friends.js";
-import { START_RATING } from "./ranked.js";
+import { PLACEMENT_GAMES, rankOf, START_RATING, TIERS } from "./ranked.js";
+import { currentCycle, PURGE_CREDITS } from "./seasons.js";
 
 // Must match CharacterRoster.PRICES (checked by tests/lan_test.gd).
 // Items not listed are free for everyone.
@@ -68,6 +69,15 @@ const DAILY_BONUS = 25;
 const BOT_WIN_CREDITS = [10, 20, 40];
 // Bot results come from the player's own device, so they are capped.
 const BOT_WINS_PER_DAY = 15;
+// Access Level XP: ranked results are rated here; normal online results come
+// from the player's device, so those are capped per day (win, loss).
+const XP_RANKED = { win: 60, loss: 25 };
+const XP_ONLINE = { win: 50, loss: 20 };
+const ONLINE_XP_GAMES_PER_DAY = 20;
+// Invite link: both sides get credits once; an inviter is paid for this many people.
+const INVITEE_CREDITS = 50;
+const INVITER_CREDITS = 100;
+const MAX_PAID_INVITES = 10;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -95,7 +105,7 @@ export async function handleAccountApi(request, env, url) {
     }
   }
   const op = action === "" ? (request.method === "POST" ? "create" : "get") : action;
-  if (!["create", "get", "profile", "buy", "reward", "checkout", "username"].includes(op)) {
+  if (!["create", "get", "profile", "buy", "reward", "online", "checkout", "username"].includes(op)) {
     return json({ error: "not_found" }, 404);
   }
   // Accounts are stored under a hash of the code, so the payment provider only
@@ -153,6 +163,9 @@ export class Account {
     if (!data) {
       return json({ error: "no_account" }, 404);
     }
+    if (syncCycle(data)) {
+      await storage.put("account", data);
+    }
     if (op === "link") {
       // A login (e-mail or Google) now leads to this account; shown as "signed in as".
       data.email = String(body.email || "").slice(0, 254);
@@ -171,6 +184,21 @@ export class Account {
     if (op === "public") {
       return json(publicView(data));
     }
+    if (op === "invite") {
+      // Invite link (friends.js): paid once per invitee, capped per inviter.
+      if (body.role === "invitee") {
+        if (data.invitedBy || (data.games || 0) > 0) return json({ rewarded: false });
+        data.invitedBy = String(body.from || "");
+        data.credits += INVITEE_CREDITS;
+        await storage.put("account", data);
+        return json({ rewarded: true, credits: INVITEE_CREDITS });
+      }
+      if ((data.invitedPeople || 0) >= MAX_PAID_INVITES) return json({ rewarded: false });
+      data.invitedPeople = (data.invitedPeople || 0) + 1;
+      data.credits += INVITER_CREDITS;
+      await storage.put("account", data);
+      return json({ rewarded: true, credits: INVITER_CREDITS });
+    }
     if (op === "social") {
       const lists = socialOp(data, body);
       await storage.put("account", data);
@@ -184,6 +212,7 @@ export class Account {
       if (score === 1) data.wins = (data.wins || 0) + 1;
       else if (score === 0) data.losses = (data.losses || 0) + 1;
       else data.draws = (data.draws || 0) + 1;
+      data.xp = (data.xp || 0) + (score === 1 ? XP_RANKED.win : XP_RANKED.loss);
       await storage.put("account", data);
       return json({ ranked: { rating: data.rating, games: data.games } });
     }
@@ -227,6 +256,17 @@ export class Account {
         data.credits -= price;
         data.owned.push(item);
       }
+    } else if (op === "online") {
+      if (data.xpDay !== today()) {
+        data.xpDay = today();
+        data.xpGames = 0;
+      }
+      if ((data.xpGames || 0) < ONLINE_XP_GAMES_PER_DAY) {
+        data.xpGames = (data.xpGames || 0) + 1;
+        data.xp = (data.xp || 0) + (body.won === true ? XP_ONLINE.win : XP_ONLINE.loss);
+      } else {
+        error = "daily_limit";
+      }
     } else if (op === "reward") {
       if (data.botDay !== today()) {
         data.botDay = today();
@@ -255,7 +295,7 @@ export class Account {
 function view(data) {
   const ranked = publicView(data);
   return {
-    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES,
+    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES, xp: data.xp || 0, cycle: cycleView(data),
     username: ranked.username, rating: ranked.rating, games: ranked.games, rank: ranked.rank, wins: ranked.wins, losses: ranked.losses,
   };
 }
@@ -309,4 +349,39 @@ function needsCharacter(item, owned) {
   }
   const character = "character:" + item.slice(5).split("_")[0];
   return PRICES[character] !== undefined && !owned.includes(character);
+}
+
+// "System Wipe": the first time an account is touched in a new Purge Cycle its
+// rating is pulled halfway back to the start, the cycle's counters restart and
+// the best rank of the old cycle pays a few credits. Returns true if it changed.
+function syncCycle(data) {
+  const cycle = currentCycle().number;
+  if (data.cycle === cycle) return false;
+  if (data.cycle === undefined) {
+    data.cycle = cycle;
+    return true;
+  }
+  const rating = data.rating || START_RATING;
+  const placed = (data.games || 0) >= PLACEMENT_GAMES;
+  let tier = 0;
+  TIERS.forEach(([, floor], index) => {
+    if (rating >= floor) tier = index;
+  });
+  const reward = placed ? PURGE_CREDITS[tier] : 0;
+  data.history = [...(data.history || []), { cycle: data.cycle, rating, rank: rankOf(rating, data.games || 0), reward }].slice(-10);
+  data.credits += reward;
+  data.rating = START_RATING + Math.round((rating - START_RATING) / 2);
+  data.games = 0;
+  data.wins = 0;
+  data.losses = 0;
+  data.draws = 0;
+  data.cycle = cycle;
+  return true;
+}
+
+// The running Purge Cycle and what the last one paid out, for the ranked page.
+function cycleView(data) {
+  const cycle = currentCycle();
+  const last = (data.history || []).slice(-1)[0] || null;
+  return { number: cycle.number, name: cycle.name, days_left: cycle.daysLeft, last };
 }

@@ -6,9 +6,9 @@ extends RefCounted
 ## play (one device or Wi-Fi). Drawn into the MainMenu like the other pages.
 
 const DIFFICULTY_OPTIONS: Array[Dictionary] = [
-	{"title": "LEICHT", "subtitle": "Zum Reinkommen – macht auch mal Fehler"},
-	{"title": "MITTEL", "subtitle": "Denkt einen Zug voraus"},
-	{"title": "SCHWER", "subtitle": "Rechnet mehrere Züge tief"},
+	{"title": "LEICHT", "subtitle": "Zum Aufwärmen – macht Fehler und entschuldigt sich nicht"},
+	{"title": "MITTEL", "subtitle": "Denkt einen Zug voraus. Mehr schafft der Akku nicht."},
+	{"title": "SCHWER", "subtitle": "Rechnet tief. Hat keine Hobbys."},
 ]
 
 var menu: MainMenu
@@ -26,13 +26,11 @@ func show_play() -> void:
 	if online:
 		var rank := "%s · %d" % [str(account.account.get("rank", "")), int(account.account.get("rating", 1000))] if not account.username().is_empty() else "Nur mit Benutzername"
 		menu._add_menu_button(menu._content, "RANKED", "Overclocked Protocols  ·  " + rank, show_ranked)
-		menu._add_menu_button(menu._content, "SCHNELLES SPIEL", "Node Link Search: zufälliger Gegner, zählt nicht", func() -> void:
+		menu._add_menu_button(menu._content, "SCHNELLES SPIEL", "Node Link Search: zufälliger Gegner, zählt nicht für den Rang", func() -> void:
 			menu.close_menu()
 			menu.online_quick_requested.emit())
 	menu._add_menu_button(menu._content, "GEGEN DEN BOT", "Training, drei Stufen", show_bot)
-	if online:
-		menu._add_menu_button(menu._content, "MIT CODE", "Raum erstellen oder mit Code beitreten", show_room_code)
-	menu._add_menu_button(menu._content, "LOKAL", "Ein Gerät oder WLAN ohne Internet", show_local)
+	menu._add_menu_button(menu._content, "ZU ZWEIT", "Abwechselnd an einem Gerät", menu._start_local_multiplayer)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
 	menu._focus_first_entry()
 
@@ -48,6 +46,14 @@ func show_ranked() -> void:
 	var data := account.account
 	menu._content.add_child(menu._make_text(str(data.get("rank", "")), 54, TerminalTheme.GREEN_BRIGHT))
 	menu._content.add_child(menu._make_text("%d PUNKTE  ·  %d SIEGE  ·  %d NIEDERLAGEN" % [int(data.get("rating", 1000)), int(data.get("wins", 0)), int(data.get("losses", 0))], MainMenu.TEXT_FONT_SIZE))
+	var cycle: Dictionary = data.get("cycle", {})
+	if not cycle.is_empty():
+		menu._content.add_child(menu._make_text("PURGE CYCLE %02d: %s" % [int(cycle.get("number", 1)), str(cycle.get("name", "")).to_upper()], MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN))
+		menu._content.add_child(menu._make_text("Noch %d Tage bis zum System Wipe. Dann vergisst das Grid die Hälfte deiner Punkte." % int(cycle.get("days_left", 0)), 22, TerminalTheme.GREEN_DIM))
+		var last: Variant = cycle.get("last")
+		if last is Dictionary:
+			var paid := int((last as Dictionary).get("reward", 0))
+			menu._content.add_child(menu._make_text("Letzter Zyklus: %s  ·  %d Punkte%s" % [str((last as Dictionary).get("rank", "")), int((last as Dictionary).get("rating", 0)), ("  ·  +%d Credits" % paid) if paid > 0 else ""], 22, TerminalTheme.GREEN_DIM))
 	if int(data.get("games", 0)) < 5:
 		menu._content.add_child(menu._make_text("Kalibrierung: noch %d Partien bis zu deinem ersten Rang." % (5 - int(data.get("games", 0))), 22, TerminalTheme.GREEN_DIM))
 	var status := menu._make_text("", MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT)
@@ -102,52 +108,3 @@ func show_bot() -> void:
 			menu._start_bot_training())
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry(menu.bot_difficulty)
-
-
-func show_room_code() -> void:
-	menu._set_page("MIT CODE", show_play)
-	menu._add_menu_button(menu._content, "RAUM ERSTELLEN", "Du bekommst einen Code für deinen Gegner", func() -> void:
-		menu.close_menu()
-		menu.online_create_requested.emit(""))
-	var code_input := LineEdit.new()
-	code_input.placeholder_text = "RAUM-CODE  ____"
-	code_input.max_length = 4
-	code_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-	code_input.custom_minimum_size = Vector2(300.0, 56.0)
-	code_input.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	code_input.add_theme_font_size_override("font_size", 36)
-	menu._content.add_child(code_input)
-	var join := func() -> void:
-		var code := code_input.text.strip_edges()
-		if code.length() != 4 or not code.is_valid_int():
-			code_input.placeholder_text = "4 ZIFFERN!"
-			code_input.text = ""
-			return
-		menu.close_menu()
-		menu.online_join_requested.emit(code)
-	code_input.text_submitted.connect(func(_text: String) -> void: join.call())
-	menu._add_menu_button(menu._content, "BEITRETEN", "Mit dem Code deines Gegners", join)
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
-	menu._focus_first_entry()
-
-
-func show_local() -> void:
-	menu._set_page("LOKAL", show_play)
-	menu._add_menu_button(menu._content, "AUF DIESEM GERÄT", "Abwechselnd mit einer zweiten Person", menu._start_local_multiplayer)
-	menu._add_menu_button(menu._content, "IM WLAN", "Zwei Handys, der PC ist Gastgeber", func() -> void:
-		if MatchClient.is_lan_available():
-			menu.close_menu()
-			menu.lan_match_requested.emit()
-		else:
-			_show_lan_help())
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
-	menu._focus_first_entry()
-
-
-func _show_lan_help() -> void:
-	menu._set_page("WLAN", show_local)
-	menu._content.add_child(menu._make_text(
-		"Starte am PC „WLAN-Spiel starten“ und öffne auf beiden Handys die Adresse, die dort angezeigt wird. Diese Version kommt aus dem Internet und kann sich nicht mit deinem PC verbinden.",
-		MainMenu.TEXT_FONT_SIZE))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu LOKAL", show_local)
-	menu._focus_first_entry()

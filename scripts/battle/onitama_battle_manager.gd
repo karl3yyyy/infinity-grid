@@ -293,7 +293,7 @@ func _ping_phase() -> PingPhase:
 	var phase := PingPhase.new()
 	phase.name = "PingPhase"
 	add_child(phase)
-	phase.setup(self, battle_ui, grid_manager, player_controller)
+	phase.setup(self, player_controller)
 	return phase
 
 
@@ -475,12 +475,23 @@ func _perform_move(destination: Vector2i) -> void:
 	)
 	moving_unit.grid_position = destination
 	grid_manager.move_occupant(moving_unit, source, destination)
+	if _is_local_move():
+		var played: MovementCard = hands[current_player][selected_card_slot]
+		MatchStats.add_card("card_plays", played.card_name)
+		if captured_unit != null:
+			MatchStats.add("nodes_claimed")
+			MatchStats.add_card("card_captures", played.card_name)
 	_exchange_card(selected_card_slot)
 	_deselect_unit()
 	if captured_master or reached_temple:
 		_finish_battle(current_player)
 		return
 	_advance_turn()
+
+
+## The player's own move in an online match (bot and hot-seat games do not count).
+func _is_local_move() -> bool:
+	return network_team >= 0 and current_player == network_team
 
 
 ## Where a team's KERN starts; any enemy piece stepping onto it wins.
@@ -672,6 +683,13 @@ func _on_unit_died(unit: BattleUnit) -> void:
 func _finish_battle(winner: int) -> void:
 	battle_over = true
 	var local_won := winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
+	# Only ranked and normal online matches count (not bot or hot-seat games).
+	if winner >= 0 and network_team >= 0:
+		var mode := "ranked" if network_match != null and network_match.ranked else "online"
+		MatchStats.record_match(mode, local_won, turns_played)
+		battle_ui.result_extra = AccessLevel.award(mode, local_won)
+		if mode == "online":
+			battle_ui.main_menu.account.report_online_result(local_won)
 	SoundBoard.play("victory" if local_won else "defeat")
 	SoundBoard.say("victory" if local_won else "defeat")
 	input_locked = true
@@ -681,9 +699,9 @@ func _finish_battle(winner: int) -> void:
 	if winner < 0:
 		battle_ui.show_result("UNENTSCHIEDEN")
 	elif network_team >= 0:
-		battle_ui.show_result("SIEG!" if winner == network_team else "NIEDERLAGE")
+		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if winner == network_team else "NIEDERLAGE\n" + GridLore.loss_line())
 	elif bot_opponent_enabled:
-		battle_ui.show_result("SIEG!" if winner == 0 else "NIEDERLAGE")
+		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if winner == 0 else "NIEDERLAGE\n" + GridLore.loss_line())
 		if winner == 0:
 			_collect_bot_reward()
 	else:

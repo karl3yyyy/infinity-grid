@@ -77,7 +77,7 @@ func start(url: String, connecting_text: String, connected_text: String) -> void
 
 
 func resume(session: Dictionary) -> void:
-	ui.set_instruction("Verbinde mit deiner Partie ...")
+	ui.set_instruction("Verbinde mit deiner Partie ... Kabel werden gestreichelt.")
 	if client.resume_session(session) != OK:
 		battle.end_with_message("KEINE VERBINDUNG")
 
@@ -105,7 +105,7 @@ func _process(delta: float) -> void:
 		return
 	_quick_wait -= delta
 	if _quick_wait < 0.0:
-		ui.set_instruction("Noch kein Gegner da. Du kannst weiter warten oder solange gegen den Bot spielen.")
+		ui.set_instruction("Noch kein Gegner da. Das Grid sucht, so schnell es kann. Du kannst warten oder gegen den Bot spielen.")
 		ui.show_side_action("GEGEN DEN BOT SPIELEN", battle.switch_to_bot)
 
 

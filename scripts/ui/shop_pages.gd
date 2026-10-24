@@ -49,11 +49,17 @@ func show_shop() -> void:
 		# Skins list only their own name; the character is named below the list.
 		var short_name := str(CharacterSkins.skin(item.get_slice(":", 1)).get("name", "")) if kind == "skin" else item_name(item)
 		menu._add_menu_button(list, "%s  %d CR" % [short_name, CharacterRoster.PRICES[item]],
-			"%s – %s" % [item_name(item) if kind == "skin" else KIND_NAMES[kind], _entry(item)["line"]], confirm_buy.bind(item, show_shop))
+			"%s – %s%s" % [item_name(item) if kind == "skin" else KIND_NAMES[kind], _entry(item)["line"], _level_hint(item)], confirm_buy.bind(item, show_shop))
 	if offered == 0:
-		list.add_child(menu._make_text("Du hast schon alles. Respekt.", MainMenu.TEXT_FONT_SIZE))
+		list.add_child(menu._make_text("Du hast schon alles. Respekt. Das Grid ist beeindruckt und pleite.", MainMenu.TEXT_FONT_SIZE))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
 	menu._focus_first_entry()
+
+
+## " · oder ab Level 25" for items the Access Level unlocks for free.
+static func _level_hint(item: String) -> String:
+	var needed := AccessLevel.unlock_level(item)
+	return "  ·  oder ab Level %d" % needed if needed > 0 else ""
 
 
 ## Asks before spending credits; back_action is where "back" and a finished purchase go.
@@ -159,7 +165,7 @@ func _entry(item: String) -> Dictionary:
 
 
 func _offline_notice(retry: Callable) -> void:
-	menu._content.add_child(menu._make_text("Keine Verbindung zum Server. Für Credits und Käufe musst du online sein.", MainMenu.TEXT_FONT_SIZE))
+	menu._content.add_child(menu._make_text("Keine Verbindung zum Server. Das Grid ist gerade im Funkloch. Für Credits und Käufe musst du online sein.", MainMenu.TEXT_FONT_SIZE))
 	menu._add_menu_button(menu._content, "NOCHMAL VERSUCHEN", "Mit dem Server verbinden", func() -> void:
 		await account.connect_account()
 		retry.call())

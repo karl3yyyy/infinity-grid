@@ -85,3 +85,26 @@ static func draw_match_cards(count: int = 5) -> Array[MovementCard]:
 	for index: int in range(mini(count, deck.size())):
 		drawn.append(deck[index])
 	return drawn
+
+
+## Technology class of every card; display only, the moves are unchanged.
+const CATEGORIES: Dictionary = {
+	"Crane": "VECTOR", "Comet": "VECTOR", "Shell": "VECTOR", "Ember": "VECTOR", "Pulse": "VECTOR",
+	"Wave": "WAVE", "Tide": "WAVE", "Drift": "WAVE", "Zephyr": "WAVE", "Serpent": "WAVE", "Viper": "WAVE",
+	"Orbit": "FIELD", "Halo": "FIELD", "Eclipse": "FIELD", "Prism": "FIELD", "Echo": "FIELD",
+	"Vortex": "OVERCLOCK", "Nova": "OVERCLOCK", "Rift": "OVERCLOCK",
+}
+const CATEGORY_COLORS: Dictionary = {
+	"VECTOR": Color("7fe3ff"),
+	"WAVE": Color("b6ff6e"),
+	"FIELD": Color("e0a0ff"),
+	"OVERCLOCK": Color("ff7a5c"),
+}
+
+
+func category() -> String:
+	return str(CATEGORIES.get(card_name, "VECTOR"))
+
+
+func category_color() -> Color:
+	return CATEGORY_COLORS[category()]

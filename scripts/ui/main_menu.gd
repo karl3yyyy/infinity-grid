@@ -7,7 +7,9 @@ extends Control
 signal bot_training_requested
 signal local_multiplayer_requested
 signal lan_match_requested
-signal online_create_requested
+## invite_username: "" for a plain room code, else a friend to invite.
+signal online_create_requested(invite_username: String)
+signal online_ranked_requested(ticket: String)
 signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
@@ -299,7 +301,7 @@ func _show_online_play() -> void:
 		online_quick_requested.emit())
 	_add_menu_button(_content, "SPIEL ERSTELLEN", "Du bekommst einen Raum-Code", func() -> void:
 		close_menu()
-		online_create_requested.emit())
+		online_create_requested.emit(""))
 	var code_input := LineEdit.new()
 	code_input.placeholder_text = "RAUM-CODE  ____"
 	code_input.max_length = 4

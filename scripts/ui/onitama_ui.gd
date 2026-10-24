@@ -5,7 +5,8 @@ signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
 signal lan_match_requested
-signal online_create_requested
+signal online_create_requested(invite_username: String)
+signal online_ranked_requested(ticket: String)
 signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
@@ -355,7 +356,8 @@ func _build_main_menu() -> void:
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
-	main_menu.online_create_requested.connect(func() -> void: online_create_requested.emit())
+	main_menu.online_create_requested.connect(func(invite_username: String) -> void: online_create_requested.emit(invite_username))
+	main_menu.online_ranked_requested.connect(func(ticket: String) -> void: online_ranked_requested.emit(ticket))
 	main_menu.online_join_requested.connect(func(code: String) -> void: online_join_requested.emit(code))
 	main_menu.online_quick_requested.connect(func() -> void: online_quick_requested.emit())
 	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))

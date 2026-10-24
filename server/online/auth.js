@@ -5,7 +5,7 @@
 // registering ties the guest account to the e-mail or Google identity, and
 // signing in on another device hands that device the account's code.
 //
-// One "Login" Durable Object per key:
+// One "Login" Durable Object per key (friends.js also keeps "user:<username>" here):
 //   "email:<address>"  {code, salt, hash, fails, lockedUntil}
 //   "google:<sub>"     {code, email}
 //   "pending:<nonce>"  a Google sign-in in progress: {code, created, result}
@@ -204,6 +204,17 @@ export class Login {
       const code = await usableCode(this.env, body.code);
       await storage.put("login", { code, email: body.email });
       return json({ code });
+    }
+    if (op === "claim") {
+      // Usernames (friends.js): "user:<username>" -> account key, first come first served.
+      if (data) {
+        return json({ error: "taken" }, 409);
+      }
+      await storage.put("login", { key: body.key });
+      return json({ ok: true });
+    }
+    if (op === "lookup") {
+      return data && data.key ? json({ key: data.key }) : json({ error: "not_found" }, 404);
     }
     if (op === "collect") {
       if (!data || now - data.created > PENDING_SECONDS) {

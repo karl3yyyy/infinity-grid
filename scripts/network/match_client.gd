@@ -18,6 +18,10 @@ signal opponent_back
 ## The opponent's chosen look: {"character", "echo", "board"}.
 signal opponent_look(look: Dictionary)
 signal opponent_left
+## A lobby paired us; opponent is {name, avatar, rating, rank} in ranked play.
+signal matched(opponent: Dictionary)
+## Rating change after a ranked game: {score, before, after, delta, rank}.
+signal ranked_result(result: Dictionary)
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
 signal reconnecting
@@ -47,6 +51,8 @@ var _reconnect_wait: float = 0.0
 var _ping_wait: float = PING_INTERVAL_SECONDS
 var _pong_wait: float = -1.0
 var _quick_base: String = ""
+## "quick" or "ranked" while waiting in a lobby, else "".
+var _lobby_mode: String = ""
 
 
 ## Address of the PC host. In the browser it is the PC that served this page;
@@ -95,6 +101,11 @@ static func online_quick_url() -> String:
 	return online_server_url() + "/play?mode=quick"
 
 
+## The ticket (AccountService.ranked_ticket) stands in for the account code.
+static func online_ranked_url(ticket: String) -> String:
+	return online_server_url() + "/play?mode=ranked&ticket=" + ticket.uri_encode()
+
+
 ## The last online match if it may still be running, else {}.
 static func saved_session() -> Dictionary:
 	var config := ConfigFile.new()
@@ -121,7 +132,8 @@ static func _resume_url(session: Dictionary) -> String:
 
 
 func connect_to_host(url: String) -> Error:
-	_quick_base = url.get_slice("/play", 0) if url.contains("mode=quick") else ""
+	_lobby_mode = "quick" if url.contains("mode=quick") else ("ranked" if url.contains("mode=ranked") else "")
+	_quick_base = url.get_slice("/play", 0) if not _lobby_mode.is_empty() else ""
 	return _open(url)
 
 
@@ -256,6 +268,7 @@ func _handle_message(text: String) -> void:
 			queued.emit()
 		"matched":
 			# The lobby found an opponent; the match itself runs in its own room.
+			matched.emit(message.get("opponent", {}) as Dictionary)
 			_open("%s/play?mode=match&code=%s&team=%d" % [_quick_base, str(message["code"]), int(message["team"])])
 		"room":
 			room_created.emit(str(message.get("code", "")))
@@ -271,6 +284,8 @@ func _handle_message(text: String) -> void:
 			_flush_outbox()
 		"move", "pass":
 			opponent_moved.emit(message)
+		"ranked_result":
+			ranked_result.emit(message)
 		"opponent_away":
 			opponent_away.emit(int(message.get("seconds", 60)))
 		"opponent_back":
@@ -283,7 +298,7 @@ func _handle_message(text: String) -> void:
 			opponent_left.emit()
 		"error":
 			var reason := str(message.get("reason", ""))
-			if reason == "match_failed" and not _quick_base.is_empty():
+			if reason == "match_failed" and _lobby_mode == "quick":
 				# The paired player never showed up; queue again.
 				_open(_quick_base + "/play?mode=quick")
 				return

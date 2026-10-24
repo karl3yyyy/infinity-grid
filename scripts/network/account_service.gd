@@ -194,3 +194,41 @@ func refresh_if_stale() -> void:
 	if busy or not has_account() or Time.get_ticks_msec() - _refreshed_at < 5000:
 		return
 	await connect_account()
+
+
+## The permanent username ("" for guests and until chosen).
+func username() -> String:
+	return str(account.get("username", ""))
+
+
+## Chooses the username once; it can never change afterwards.
+func choose_username(new_name: String) -> void:
+	await _call("username", HTTPClient.METHOD_POST, "/username", {"username": new_name})
+
+
+static func friends_url() -> String:
+	return api_url().replace("/api/account", "/api/friends")
+
+
+static func ranked_url() -> String:
+	return api_url().replace("/api/account", "/api/ranked")
+
+
+## Friends overview {username, friends, incoming, outgoing, invites} or {}.
+## action: "" (just ask), "add", "accept", "remove", "invite", "dismiss".
+func friends(action: String = "", body: Dictionary = {}) -> Dictionary:
+	var method := HTTPClient.METHOD_GET if action.is_empty() else HTTPClient.METHOD_POST
+	await _call("friends", method, "" if action.is_empty() else "/" + action, body, friends_url())
+	return _last_response if _last_error.is_empty() else {}
+
+
+## A one-minute ticket for the ranked queue, or "" (see _last_error).
+func ranked_ticket() -> String:
+	await _call("ticket", HTTPClient.METHOD_POST, "/ticket", {}, ranked_url())
+	return str(_last_response.get("ticket", "")) if _last_error.is_empty() else ""
+
+
+## Top players: [{name, avatar, rating, rank, games}].
+func leaderboard() -> Array:
+	await _call("leaderboard", HTTPClient.METHOD_GET, "/leaderboard", {}, ranked_url())
+	return _last_response.get("players", []) if _last_error.is_empty() else []

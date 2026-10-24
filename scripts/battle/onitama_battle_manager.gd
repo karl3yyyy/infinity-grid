@@ -75,6 +75,7 @@ func setup(
 	battle_ui.online_create_requested.connect(_start_online_create)
 	battle_ui.online_join_requested.connect(_start_online_join)
 	battle_ui.online_quick_requested.connect(_start_online_quick)
+	battle_ui.online_ranked_requested.connect(_start_online_ranked)
 	battle_ui.online_resume_requested.connect(_start_online_resume)
 	battle_ui.restart_pressed.connect(_restart_battle)
 	battle_ui.new_match_pressed.connect(_new_match)
@@ -175,8 +176,11 @@ func _start_lan_match() -> void:
 	_start_network_match().start(MatchClient.lan_url(), "Verbinde mit dem PC ...", "Verbunden. Warte auf eine zweite Person ...")
 
 
-func _start_online_create() -> void:
-	_start_network_match().start(MatchClient.online_create_url(), "Erstelle ein Spiel ...", "Verbunden. Gleich gibt es einen Raum-Code ...")
+## invite_username: a friend who gets the room code as an invitation.
+func _start_online_create(invite_username: String = "") -> void:
+	var network := _start_network_match()
+	network.invite_username = invite_username
+	network.start(MatchClient.online_create_url(), "Erstelle ein Spiel ...", "Verbunden. Gleich gibt es einen Raum-Code ...")
 
 
 func _start_online_join(code: String) -> void:
@@ -185,6 +189,25 @@ func _start_online_join(code: String) -> void:
 
 func _start_online_quick() -> void:
 	_start_network_match().start(MatchClient.online_quick_url(), "Verbinde ...", "Suche einen Gegner ...")
+
+
+func _start_online_ranked(ticket: String) -> void:
+	var network := _start_network_match()
+	network.ranked = true
+	network.start(MatchClient.online_ranked_url(ticket), "Verbinde ...", "Suche einen Ranked-Gegner ...")
+
+
+## Shows the rating change once the server has rated a ranked game.
+func show_ranked_result(result: Dictionary) -> void:
+	battle_over = true
+	input_locked = true
+	player_controller.enabled = false
+	battle_ui.hide_side_action()
+	var score := float(result.get("score", 0.0))
+	var title := "SIEG!" if score > 0.75 else ("UNENTSCHIEDEN" if score > 0.25 else "NIEDERLAGE")
+	battle_ui.show_result("%s
+%+d PUNKTE  ·  %d  %s" % [title, int(result.get("delta", 0)), int(result.get("after", 0)), str(result.get("rank", ""))])
+	battle_ui.main_menu.account.connect_account()
 
 
 func _start_online_resume(session: Dictionary) -> void:

@@ -43,6 +43,15 @@ class_name = "Login"
 tag = "v4"
 new_sqlite_classes = ["Login"]
 
+# Ranked queue, ratings and leaderboard (see ranked.js).
+[[durable_objects.bindings]]
+name = "RANKED"
+class_name = "RankedLobby"
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["RankedLobby"]
+
 # Credit packs paid through Stripe Checkout (see payments.js). Empty price ids
 # switch the packs off. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are secrets
 # and are set with `npx wrangler secret put <NAME>`, never written here.

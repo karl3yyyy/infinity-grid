@@ -15,12 +15,19 @@
 // Every client runs the rules itself; the server only checks turn order.
 // Player accounts for the cosmetics shop live in accounts.js (/api/account);
 // credit packs paid through Stripe Checkout in payments.js (/api/stripe/webhook);
-// signing in with e-mail or Google in auth.js (/api/auth, /auth/google).
+// signing in with e-mail or Google in auth.js (/api/auth, /auth/google);
+// friends in friends.js (/api/friends); ranked queue, rating and leaderboard in
+// ranked.js (/api/ranked, /play?mode=ranked). Ranked rooms referee every move
+// with rules.js and settle the result themselves.
 
 import { handleAccountApi } from "./accounts.js";
 import { donePage, handleWebhook } from "./payments.js";
 import { handleAuthApi, handleGooglePages } from "./auth.js";
+import { handleFriendsApi } from "./friends.js";
+import { handleRankedApi, settle } from "./ranked.js";
+import { newGame, play } from "./rules.js";
 export { Login } from "./auth.js";
+export { RankedLobby } from "./ranked.js";
 export { Account } from "./accounts.js";
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
@@ -60,6 +67,12 @@ export default {
     if (url.pathname.startsWith("/api/account")) {
       return handleAccountApi(request, env, url);
     }
+    if (url.pathname.startsWith("/api/friends")) {
+      return handleFriendsApi(request, env, url);
+    }
+    if (url.pathname.startsWith("/api/ranked")) {
+      return handleRankedApi(request, env, url);
+    }
     if (url.pathname !== "/play") {
       return new Response("Not found", { status: 404 });
     }
@@ -70,6 +83,9 @@ export default {
     let code = url.searchParams.get("code") || "";
     if (mode === "quick") {
       return env.LOBBY.get(env.LOBBY.idFromName("lobby")).fetch(request);
+    }
+    if (mode === "ranked") {
+      return env.RANKED.get(env.RANKED.idFromName("ranked")).fetch(request);
     }
     if (mode === "create") {
       code = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
@@ -90,8 +106,9 @@ export default {
 };
 
 export class Room {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env;
     // Answered by the runtime without waking the object.
     this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -112,6 +129,14 @@ export class Room {
 
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/setup") {
+      // A ranked pairing from ranked.js: both seats are known, the server referees.
+      const body = await request.json();
+      const cards = drawCards(5);
+      await this.save({ code: "", phase: "matching", cards, tokens: [null, null], moves: [], ranked: { players: body.players, game: newGame(cards) } });
+      await this.state.storage.setAlarm(Date.now() + MATCH_JOIN_SECONDS * 1000);
+      return new Response("ok");
+    }
     const mode = url.searchParams.get("mode");
     const code = url.searchParams.get("code");
     let room = await this.load();
@@ -151,6 +176,7 @@ export class Room {
         room = { code, phase: "matching", cards: drawCards(5), tokens: [null, null], moves: [] };
         await this.state.storage.setAlarm(Date.now() + MATCH_JOIN_SECONDS * 1000);
       }
+      room.code = code;
       if (room.phase !== "matching" || room.tokens[team]) {
         return rejectSocket("full");
       }
@@ -253,11 +279,41 @@ export class Room {
     if (seq !== room.moves.length || seq % 2 !== seat) {
       return;
     }
+    let outcome = null;
+    if (room.ranked) {
+      outcome = play(room.ranked.game, seat, message);
+      if (!outcome.ok) {
+        send(socket, { type: "error", reason: "invalid_move" });
+        return;
+      }
+    }
     room.moves.push(message);
     await this.save(room);
     const other = this.socketFor(1 - seat);
     if (other) {
       send(other, message);
+    }
+    if (outcome && outcome.winner !== undefined) {
+      await this.finishRanked(room, outcome.winner === 0 ? [1, 0] : [0, 1]);
+    } else if (outcome && outcome.draw) {
+      await this.finishRanked(room, [0.5, 0.5]);
+    }
+  }
+
+  // Rates a ranked game once and tells both players their new rating.
+  async finishRanked(room, scores) {
+    if (!room.ranked || room.ranked.settled) {
+      return;
+    }
+    room.ranked.settled = true;
+    room.phase = "ended";
+    await this.save(room);
+    const results = await settle(this.env, room.ranked.players, scores);
+    for (const seat of [0, 1]) {
+      const socket = this.socketFor(seat);
+      if (socket) {
+        send(socket, { type: "ranked_result", score: scores[seat], ...results[seat] });
+      }
     }
   }
 
@@ -316,8 +372,14 @@ export class Room {
 
   // The player in seat `leaver` is gone for good; the other one is told so.
   async end(room, leaver) {
-    room.phase = "ended";
-    await this.save(room);
+    if (room.ranked && !room.ranked.settled) {
+      // Leaving a ranked game (or not coming back in time) loses it. The
+      // result goes out first: the game hangs up when the opponent has left.
+      await this.finishRanked(room, leaver === 0 ? [0, 1] : [1, 0]);
+    } else {
+      room.phase = "ended";
+      await this.save(room);
+    }
     const other = this.socketFor(1 - leaver);
     if (other) {
       send(other, { type: "opponent_left" });

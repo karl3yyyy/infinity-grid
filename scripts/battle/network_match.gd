@@ -19,6 +19,10 @@ var _pending_turns: Array[Dictionary] = []
 var _applying: bool = false
 var _started: bool = false
 var _quick_wait: float = -1.0
+## Ranked games: no bot offer while waiting, the server rates the result.
+var ranked: bool = false
+## A friend to invite once the room code is known (challenge from the friends list).
+var invite_username: String = ""
 
 
 func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
@@ -31,7 +35,15 @@ func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
 	add_child(client)
 	client.queued.connect(_on_queued)
 	client.room_created.connect(func(code: String) -> void:
-		ui.set_instruction("Raum-Code: %s  –  schick ihn deinem Gegner und warte." % code))
+		if invite_username.is_empty():
+			ui.set_instruction("Raum-Code: %s  –  schick ihn deinem Gegner und warte." % code)
+		else:
+			ui.set_instruction("%s ist eingeladen. Warte, bis die Einladung angenommen wird ..." % invite_username)
+			ui.main_menu.account.friends("invite", {"username": invite_username, "code": code}))
+	client.matched.connect(func(opponent: Dictionary) -> void:
+		if ranked and opponent.has("name"):
+			ui.set_instruction("Gegner gefunden: %s  ·  %s %d" % [opponent["name"], opponent.get("rank", ""), int(opponent.get("rating", 0))]))
+	client.ranked_result.connect(battle.show_ranked_result)
 	client.match_started.connect(_on_match_started)
 	client.resumed.connect(_on_resumed)
 	client.opponent_moved.connect(_on_opponent_moved)
@@ -95,8 +107,8 @@ func _process(delta: float) -> void:
 
 
 func _on_queued() -> void:
-	ui.set_instruction("Suche einen Gegner ...")
-	if _quick_wait < 0.0:
+	ui.set_instruction("Suche einen Ranked-Gegner ..." if ranked else "Suche einen Gegner ...")
+	if _quick_wait < 0.0 and not ranked:
 		_quick_wait = QUICK_BOT_OFFER_SECONDS
 
 

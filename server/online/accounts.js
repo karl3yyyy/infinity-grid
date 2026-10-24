@@ -8,13 +8,16 @@
 // HTTP API (JSON, CORS open because the token is not a cookie):
 //   POST /api/account                  -> {code, account}   new account
 //   GET  /api/account                  -> {account}         (+ daily bonus)
-//   POST /api/account/profile {name, avatar}
+//   POST /api/account/profile {avatar}       (the name is the username, set once)
+//   POST /api/account/username {username}  signed-in accounts choose it once, for good
 //   POST /api/account/buy {item}       -> 402 not_enough_credits, 409 owned
 //   POST /api/account/reward {difficulty} after a won bot match
 //   POST /api/account/checkout {pack}  -> Stripe Checkout for a credit pack (payments.js)
 // account = {name, avatar, credits, owned: [...], prices: {...}, packs: [...], bonus?: n}
 
 import { createCheckout, offeredPacks } from "./payments.js";
+import { claimUsername, publicView, socialOp, validUsername } from "./friends.js";
+import { START_RATING } from "./ranked.js";
 
 // Must match CharacterRoster.PRICES (checked by tests/lan_test.gd).
 // Items not listed are free for everyone.
@@ -92,13 +95,27 @@ export async function handleAccountApi(request, env, url) {
     }
   }
   const op = action === "" ? (request.method === "POST" ? "create" : "get") : action;
-  if (!["create", "get", "profile", "buy", "reward", "checkout"].includes(op)) {
+  if (!["create", "get", "profile", "buy", "reward", "checkout", "username"].includes(op)) {
     return json({ error: "not_found" }, 404);
   }
   // Accounts are stored under a hash of the code, so the payment provider only
   // ever sees the hash (as the checkout reference), never the code itself.
   const key = await accountKey(code);
   const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(key));
+  if (op === "username") {
+    const username = String(body.username || "").trim();
+    if (!validUsername(username)) return json({ error: "bad_username" }, 400);
+    const current = await account.fetch("https://account/public", { method: "POST", body: "{}" });
+    if (!current.ok) return json({ error: "no_account" }, 404);
+    const state = await current.json();
+    if (!state.email) return json({ error: "sign_in_first" }, 403);
+    if (state.username) return json({ error: "username_set" }, 409);
+    if (!(await claimUsername(env, username, key))) return json({ error: "username_taken" }, 409);
+    const set = await account.fetch("https://account/set_username", { method: "POST", body: JSON.stringify({ username }) });
+    const result = await set.json();
+    if (result.account) result.account.packs = offeredPacks(env);
+    return json(result, set.status);
+  }
   // Checkout also needs an existing account, so it first asks like "get".
   const answer = await account.fetch("https://account/" + (op === "checkout" ? "get" : op), { method: "POST", body: JSON.stringify(body) });
   const result = await answer.json();
@@ -129,7 +146,7 @@ export class Account {
       if (data) {
         return json({ error: "exists" }, 409);
       }
-      data = { name: "Spieler", avatar: "symbol:code", credits: START_CREDITS, owned: [], bonusDay: today(), botDay: today(), botWins: 0 };
+      data = { name: "Gast", avatar: "symbol:code", credits: START_CREDITS, owned: [], bonusDay: today(), botDay: today(), botWins: 0 };
       await storage.put("account", data);
       return json({ account: view(data) });
     }
@@ -142,6 +159,34 @@ export class Account {
       await storage.put("account", data);
       return json({ account: view(data) });
     }
+    if (op === "set_username") {
+      if (data.username) {
+        return json({ error: "username_set" }, 409);
+      }
+      data.username = String(body.username);
+      data.name = data.username;
+      await storage.put("account", data);
+      return json({ account: view(data) });
+    }
+    if (op === "public") {
+      return json(publicView(data));
+    }
+    if (op === "social") {
+      const lists = socialOp(data, body);
+      await storage.put("account", data);
+      return json(lists);
+    }
+    if (op === "ranked") {
+      // A settled ranked game (ranked.js); score 1, 0.5 or 0.
+      data.rating = (data.rating || START_RATING) + Math.round(Number(body.delta) || 0);
+      data.games = (data.games || 0) + 1;
+      const score = Number(body.score);
+      if (score === 1) data.wins = (data.wins || 0) + 1;
+      else if (score === 0) data.losses = (data.losses || 0) + 1;
+      else data.draws = (data.draws || 0) + 1;
+      await storage.put("account", data);
+      return json({ ranked: { rating: data.rating, games: data.games } });
+    }
     if (op === "grant") {
       // Paid credit pack (from the verified Stripe webhook); once per checkout session.
       data.payments = data.payments || [];
@@ -152,6 +197,8 @@ export class Account {
       }
       return json({ ok: true });
     }
+    // Friends see a player as online while the game keeps asking.
+    data.lastSeen = Date.now();
     let bonus = 0;
     if (data.bonusDay !== today()) {
       data.bonusDay = today();
@@ -161,8 +208,7 @@ export class Account {
     let status = 200;
     let error = "";
     if (op === "profile") {
-      const name = String(body.name || "").trim().slice(0, 20);
-      data.name = name || "Spieler";
+      // Names are not editable: a guest is "Gast", a signed-in player their username.
       // Profile picture id from the game's avatar gallery ("symbol:code", "character:nova").
       const avatar = String(body.avatar || "");
       data.avatar = /^[a-z]+:[a-z_]{1,24}$/.test(avatar) ? avatar : "symbol:code";
@@ -207,8 +253,11 @@ export class Account {
 }
 
 function view(data) {
-  const avatar = typeof data.avatar === "string" ? data.avatar : "symbol:code";
-  return { name: data.name, avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES };
+  const ranked = publicView(data);
+  return {
+    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES,
+    username: ranked.username, rating: ranked.rating, games: ranked.games, rank: ranked.rank, wins: ranked.wins, losses: ranked.losses,
+  };
 }
 
 // For the login routes (auth.js): ask an account Durable Object by code.

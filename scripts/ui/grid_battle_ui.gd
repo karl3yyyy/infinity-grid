@@ -4,7 +4,7 @@ extends CanvasLayer
 signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
-signal chaos_requested(shifting_tiles: bool)
+signal chaos_requested(options: Dictionary)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
@@ -12,6 +12,7 @@ signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal restart_pressed
+signal effect_requested
 ## Same mode again from the start (pause menu, result screen).
 signal new_match_pressed
 signal quit_pressed
@@ -64,6 +65,7 @@ var side_action_button: Button
 var _side_action: Callable
 ## Second button for two-way choices (who starts after the Node Ping).
 var side_choice_button: Button
+var effect_button: Button
 var _side_choice: Callable
 var _pause_box: VBoxContainer
 var _rules_box: VBoxContainer
@@ -201,6 +203,12 @@ func ensure_cards_visible() -> void:
 
 func update_selection(unit: BattleUnit) -> void:
 	selection_label.text = "" if unit == null else unit.role_label()
+
+
+## Chaos card effects: the button next to the cards (hidden while off).
+func set_effect_button(visible_value: bool, label_text: String = "") -> void:
+	effect_button.visible = visible_value
+	effect_button.text = label_text
 
 
 func set_instruction(text_value: String) -> void:
@@ -385,6 +393,10 @@ func _build_ui() -> void:
 		hide_side_action()
 		if _side_choice.is_valid():
 			_side_choice.call())
+	effect_button = _make_button("", bottom_box)
+	effect_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	effect_button.visible = false
+	effect_button.pressed.connect(func() -> void: effect_requested.emit())
 	_add_hand_title(bottom_box, 0)
 	_add_hand_row(bottom_box, 0)
 	# Titles were appended bottom-last; keep index = position.
@@ -491,7 +503,7 @@ func _build_main_menu() -> void:
 	main_menu.name = "MainMenu"
 	add_child(main_menu)
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
-	main_menu.chaos_requested.connect(func(shifting_tiles: bool) -> void: chaos_requested.emit(shifting_tiles))
+	main_menu.chaos_requested.connect(func(options: Dictionary) -> void: chaos_requested.emit(options))
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
 	main_menu.online_create_requested.connect(func(invite_username: String) -> void: online_create_requested.emit(invite_username))

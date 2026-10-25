@@ -10,6 +10,8 @@ var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
 ## Replaces KERN / SCHÜLER on the label (chaos mode hides the real role).
 var role_override: String = ""
+## Chaos shield: cannot be captured until the owner moves again.
+var shielded: bool = false
 var is_dead: bool = false
 ## Yaw the figure returns to after moving (faces the opposing side).
 var rest_yaw: float = 0.0
@@ -249,9 +251,8 @@ func refresh_role_label() -> void:
 
 
 func role_label() -> String:
-	if role_override != "":
-		return role_override
-	return "KERN" if is_master else "SCHÜLER"
+	var role := role_override if role_override != "" else ("KERN" if is_master else "SCHÜLER")
+	return role + " [SCHILD]" if shielded else role
 
 
 func _sync_wrap_projections() -> void:

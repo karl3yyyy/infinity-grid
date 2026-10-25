@@ -25,15 +25,32 @@ func choose_move(
 	enemy_hand: Array,
 	blocked: Dictionary,
 	warned: Dictionary,
-	width: int
+	width: int,
+	effects: Array = [],
+	protected: Dictionary = {}
 ) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score := -INF
+	for slot: int in range(effects.size()):
+		for origin: Vector2i in own:
+			var kind := int(effects[slot])
+			if kind != CardEffect.Kind.STRIKE and not (kind == CardEffect.Kind.SHIELD and origin == king_cell):
+				continue
+			var aimed := CardEffect.targets(kind, origin, team, Vector2i(width, width), own, enemy, blocked, protected)
+			if aimed.is_empty():
+				continue
+			var worth := CAPTURE_SCORE * 0.9
+			if kind == CardEffect.Kind.SHIELD:
+				worth = KING_DANGER if _is_attacked(origin, 1 - team, enemy, enemy_hand, width) else -INF
+			worth += rng.randf() * 6.0
+			if worth > best_score:
+				best_score = worth
+				best = {"effect": true, "from": origin, "slot": slot, "to": aimed[0]}
 	for slot: int in range(hand.size()):
 		var card: MovementCard = hand[slot]
 		for origin: Vector2i in own:
 			for target: Vector2i in card.destinations(origin, team, width):
-				if blocked.has(target) or target in own:
+				if blocked.has(target) or target in own or (target in enemy and protected.has(target)):
 					continue
 				var score := _score(team, origin, target, own, enemy, king_cell, enemy_hand, warned, width)
 				if score > best_score:

@@ -10,6 +10,10 @@ const MAX_COLLAPSED: int = 6
 const COLLAPSE_ROUNDS: int = 3
 
 var shifting_tiles: bool = false
+var hidden_king: bool = false
+var card_effects: bool = false
+## cell -> team whose piece there cannot be captured until that team moves again.
+var protected: Dictionary = {}
 ## Cell of each team's king, -1 / -1 until chosen.
 var king_cells: Array[Vector2i] = [Vector2i(-1, -1), Vector2i(-1, -1)]
 ## coordinate -> rounds until it collapses.
@@ -30,6 +34,31 @@ func is_king_at(team: int, cell: Vector2i) -> bool:
 func piece_moved(team: int, from: Vector2i, to: Vector2i) -> void:
 	if king_cells[team] == from:
 		king_cells[team] = to
+	if protected.has(from):
+		protected[to] = protected[from]
+		protected.erase(from)
+
+
+func pieces_swapped(team: int, a: Vector2i, b: Vector2i) -> void:
+	if king_cells[team] == a:
+		king_cells[team] = b
+	elif king_cells[team] == b:
+		king_cells[team] = a
+	var shield_a: Variant = protected.get(a)
+	var shield_b: Variant = protected.get(b)
+	protected.erase(a)
+	protected.erase(b)
+	if shield_a != null:
+		protected[b] = shield_a
+	if shield_b != null:
+		protected[a] = shield_b
+
+
+## A shield lasts until its owner's next turn begins.
+func expire_protection(team: int) -> void:
+	for cell: Vector2i in protected.keys():
+		if int(protected[cell]) == team:
+			protected.erase(cell)
 
 
 func is_blocked(cell: Vector2i) -> bool:
@@ -79,5 +108,7 @@ func state_key() -> String:
 		parts.append("w%d,%d" % [cell.x, cell.y])
 	for cell: Vector2i in collapsed.keys():
 		parts.append("c%d,%d" % [cell.x, cell.y])
+	for cell: Vector2i in protected.keys():
+		parts.append("p%d,%d" % [cell.x, cell.y])
 	parts.sort()
 	return ",".join(parts)

@@ -32,12 +32,14 @@ also keeps the installed app up to date.
 - `UnitMovement` plays a move in the character's fighting style;
   `CombatEffects` provides the spell circles, lightning, shots and debris.
 
-## Chaos mode
+## Chaos lab
 
-`scripts/chaos/`: `ChaosRules` (secret king cells, warned/collapsed tiles) and
+Spielen > CHAOS is a lab of combinable variants (hidden king, shifting tiles,
+card effects). `scripts/chaos/`: `ChaosRules` (options, king cells, tiles,
+shields), `CardEffect` (strike/push/shield/swap by card category) and
 `ChaosBot` are node-free. `GridBattleManager.chaos` is set only in chaos
-matches; it swaps the KERN/temple win for "capture the secret king" and runs
-the tile shifts at each round change. Local vs bot only, not online.
+matches. Add a variant by adding a flag to `ChaosRules`, an entry in
+`PlayPages.CHAOS_VARIANTS` and its hooks in the manager. Local vs bot only.
 
 ## Interface
 

@@ -46,11 +46,14 @@ var turns_played: int = 0
 ## Set in chaos mode (hidden king, optionally shifting tiles); null otherwise.
 var chaos: ChaosRules
 var _choosing_king: bool = false
+## Chaos card effects: true while the player aims the card's effect instead of its step.
+var _effect_mode: bool = false
 signal chaos_king_chosen
 ## Mode of the running match ("bot", "local", "network"); see _new_match.
 var match_mode: String = ""
 ## Survives the scene reload so "Neue Partie" starts the same mode again.
 static var _replay_mode: String = ""
+static var _replay_chaos_options: Dictionary = {}
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
 ## Look per team: {"character", "echo", "board"} (see CharacterRoster).
@@ -92,6 +95,7 @@ func setup(
 	battle_ui.bot_training_requested.connect(_start_bot_training)
 	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
 	battle_ui.chaos_requested.connect(_start_chaos)
+	battle_ui.effect_requested.connect(_on_effect_requested)
 	battle_ui.lan_match_requested.connect(_start_lan_match)
 	battle_ui.online_create_requested.connect(_start_online_create)
 	battle_ui.online_join_requested.connect(_start_online_join)
@@ -149,8 +153,8 @@ func _show_title_menu() -> void:
 		_replay_mode = ""
 		if mode == "bot":
 			_start_bot_training()
-		elif mode.begins_with("chaos"):
-			_start_chaos(mode == "chaos_shift")
+		elif mode == "chaos":
+			_start_chaos(_replay_chaos_options)
 		else:
 			_start_local_multiplayer()
 		return
@@ -178,26 +182,32 @@ func _start_bot_training() -> void:
 	set_starter(await _ping_phase().run_local(true))
 
 
-func _start_chaos(shifting_tiles: bool) -> void:
+func _start_chaos(options: Dictionary) -> void:
 	if battle_over:
 		return
-	# Nobody wears the KERN look: all ten pieces must look alike.
-	for team: Array[BattleUnit] in [players, enemies]:
-		for unit: BattleUnit in team:
-			unit.is_master = false
-			unit.scale = Vector3.ONE
-			unit.role_override = "FIGUR"
-			unit.refresh_role_label()
+	chaos = ChaosRules.new()
+	chaos.hidden_king = bool(options.get("hidden_king", false))
+	chaos.shifting_tiles = bool(options.get("shifting_tiles", false))
+	chaos.card_effects = bool(options.get("card_effects", false))
+	_replay_chaos_options = options.duplicate()
+	chaos.set_king(0, temple_of(0))
+	chaos.set_king(1, temple_of(1))
+	if chaos.hidden_king:
+		# Nobody wears the KERN look: all ten pieces must look alike.
+		for team: Array[BattleUnit] in [players, enemies]:
+			for unit: BattleUnit in team:
+				unit.is_master = false
+				unit.scale = Vector3.ONE
+				unit.role_override = "FIGUR"
+				unit.refresh_role_label()
+		chaos.set_king(1, enemies.pick_random().grid_position)
 	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
-	match_mode = "chaos_shift" if shifting_tiles else "chaos"
+	match_mode = "chaos"
 	bot_opponent_enabled = true
 	bot_difficulty = BotAI.Difficulty.MEDIUM
 	battle_ui.set_opponent_bot(true, "CHAOS")
-	chaos = ChaosRules.new()
-	chaos.shifting_tiles = shifting_tiles
-	chaos.set_king(1, enemies.pick_random().grid_position)
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	set_starter(await _ping_phase().run_local(true))
@@ -225,6 +235,132 @@ func _pick_king(coordinate: Vector2i) -> void:
 	_choosing_king = false
 	SoundBoard.play("click")
 	chaos_king_chosen.emit()
+
+
+func _is_protected(coordinate: Vector2i, occupant: BattleUnit) -> bool:
+	return chaos != null and occupant != null and chaos.protected.has(coordinate)
+
+
+func _effects_on() -> bool:
+	return chaos != null and chaos.card_effects
+
+
+## The effect kind of each card in a hand, for the bot.
+func _hand_effects(team: int) -> Array:
+	if not _effects_on():
+		return []
+	var kinds: Array = []
+	for card: MovementCard in hands[team]:
+		kinds.append(CardEffect.kind_of(card))
+	return kinds
+
+
+func _effect_targets(card: MovementCard) -> Array[Vector2i]:
+	var own: Array[Vector2i] = []
+	var enemy: Array[Vector2i] = []
+	for unit: BattleUnit in (players if current_player == 0 else enemies):
+		if not unit.is_dead:
+			own.append(unit.grid_position)
+	for unit: BattleUnit in (enemies if current_player == 0 else players):
+		if not unit.is_dead:
+			enemy.append(unit.grid_position)
+	return CardEffect.targets(
+		CardEffect.kind_of(card), selected_unit.grid_position, current_player,
+		grid_manager.grid_size, own, enemy, chaos.collapsed, chaos.protected
+	)
+
+
+## The EFFEKT button: switch between the card's step and its effect.
+func _on_effect_requested() -> void:
+	if input_locked or battle_over or not _effects_on() or selected_card_slot < 0:
+		return
+	SoundBoard.play("click")
+	_effect_mode = not _effect_mode
+	_refresh_targets()
+	_refresh_effect_button()
+	var card: MovementCard = hands[current_player][selected_card_slot]
+	if not _effect_mode:
+		battle_ui.set_instruction("Schritt gewählt. Tippe auf ein leuchtendes Feld.")
+	elif selected_unit == null:
+		battle_ui.set_instruction("Wähle zuerst die Figur, die den Effekt auslöst.")
+	elif movement_targets.is_empty():
+		battle_ui.set_instruction("Kein Ziel für diesen Effekt. Schritt oder andere Figur wählen.")
+	else:
+		battle_ui.set_instruction(str(CardEffect.HINTS[CardEffect.kind_of(card)]))
+
+
+func _refresh_effect_button() -> void:
+	var can_show := _effects_on() and not battle_over and not input_locked and not must_pass and selected_card_slot >= 0 and current_player == _viewer_team()
+	if not can_show:
+		battle_ui.set_effect_button(false)
+		return
+	var card: MovementCard = hands[current_player][selected_card_slot]
+	battle_ui.set_effect_button(true, "SCHRITT" if _effect_mode else CardEffect.button_text(CardEffect.kind_of(card)))
+
+
+## Uses the selected card's effect on `target` instead of stepping.
+func _perform_effect(target: Vector2i) -> void:
+	input_locked = true
+	player_controller.enabled = false
+	var caster := selected_unit
+	var origin := caster.grid_position
+	var card: MovementCard = hands[current_player][selected_card_slot]
+	var kind := CardEffect.kind_of(card)
+	var color: Color = GridBattleUI.TEAM_COLORS[current_player]
+	var other := grid_manager.get_unit_at(target) as BattleUnit
+	var king_hit := false
+	grid_manager.clear_highlights()
+	battle_ui.set_effect_button(false)
+	match kind:
+		CardEffect.Kind.STRIKE:
+			king_hit = chaos.is_king_at(other.team_id, target)
+			CombatEffects.pillar(units_parent, other.global_position, color)
+			await other.shatter(caster.global_position, color)
+		CardEffect.Kind.PUSH:
+			var occupied: Array[Vector2i] = []
+			for unit: BattleUnit in players + enemies:
+				if not unit.is_dead:
+					occupied.append(unit.grid_position)
+			var landing := CardEffect.push_landing(origin, target, grid_manager.grid_size, occupied, chaos.collapsed)
+			await _slide_unit(other, landing)
+		CardEffect.Kind.SHIELD:
+			chaos.protected[origin] = current_player
+			caster.shielded = true
+			caster.refresh_role_label()
+			CombatEffects.pillar(units_parent, caster.global_position, color)
+			await get_tree().create_timer(0.3).timeout
+		CardEffect.Kind.SWAP:
+			chaos.pieces_swapped(current_player, origin, target)
+			grid_manager.set_occupant(origin, other)
+			grid_manager.set_occupant(target, caster)
+			await _swap_units(caster, other)
+	_effect_mode = false
+	_exchange_card(selected_card_slot)
+	_deselect_unit()
+	if king_hit:
+		_finish_battle(current_player)
+		return
+	_advance_turn()
+
+
+func _slide_unit(unit: BattleUnit, landing: Vector2i) -> void:
+	var from_cell := unit.grid_position
+	var tween := unit.create_tween()
+	tween.tween_property(unit, "position", grid_manager.grid_to_world(landing), 0.3)
+	await tween.finished
+	unit.grid_position = landing
+	grid_manager.move_occupant(unit, from_cell, landing)
+	chaos.piece_moved(unit.team_id, from_cell, landing)
+
+
+func _swap_units(first: BattleUnit, second: BattleUnit) -> void:
+	var first_cell := first.grid_position
+	first.grid_position = second.grid_position
+	second.grid_position = first_cell
+	var tween := first.create_tween().set_parallel(true)
+	tween.tween_property(first, "position", grid_manager.grid_to_world(first.grid_position), 0.3)
+	tween.tween_property(second, "position", grid_manager.grid_to_world(second.grid_position), 0.3)
+	await tween.finished
 
 
 func _is_blocked(coordinate: Vector2i) -> bool:
@@ -376,7 +512,7 @@ func set_starter(team: int) -> void:
 		camera_controller.set_player_view(team)
 	_refresh_ui()
 	await battle_ui.play_card_deal()
-	if chaos != null:
+	if chaos != null and chaos.hidden_king:
 		await _choose_secret_king()
 	_begin_turn(1)
 
@@ -513,6 +649,7 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 		_pass_turn(slot)
 		return
 	selected_card_slot = slot
+	_effect_mode = false
 	_refresh_targets()
 	_refresh_ui()
 	if selected_unit == null:
@@ -533,10 +670,13 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		battle_ui.set_instruction(_pass_instruction())
 		return
 	var clicked_unit := grid_manager.get_unit_at(coordinate) as BattleUnit
-	if clicked_unit != null and clicked_unit.team_id == current_player:
+	var aims_effect := _effect_mode and selected_unit != null and coordinate in movement_targets
+	if clicked_unit != null and clicked_unit.team_id == current_player and not aims_effect:
 		_select_unit(clicked_unit)
 		return
-	if selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
+	if aims_effect:
+		await _perform_effect(coordinate)
+	elif selected_unit != null and selected_card_slot >= 0 and coordinate in movement_targets:
 		if network_match != null:
 			_timeouts_in_a_row = 0
 			network_match.send_local_turn({"type": "move", "seq": turns_played, "from": selected_unit.grid_position, "slot": selected_card_slot, "to": coordinate})
@@ -568,9 +708,13 @@ func _refresh_targets() -> void:
 		grid_manager.clear_highlights()
 		return
 	var card: MovementCard = hands[current_player][selected_card_slot]
+	if _effect_mode:
+		movement_targets = _effect_targets(card)
+		grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player)
+		return
 	for coordinate: Vector2i in card.destinations(selected_unit.grid_position, current_player, grid_manager.grid_size.x):
 		var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
-		if (occupant == null or occupant.team_id != current_player) and not _is_blocked(coordinate):
+		if (occupant == null or occupant.team_id != current_player) and not _is_blocked(coordinate) and not _is_protected(coordinate, occupant):
 			movement_targets.append(coordinate)
 	grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player)
 
@@ -585,7 +729,7 @@ func _perform_move(destination: Vector2i) -> void:
 	if chaos != null:
 		captured_master = captured_unit != null and chaos.is_king_at(captured_unit.team_id, destination)
 	# Any piece reaching the enemy KERN's starting square wins too.
-	var reached_temple := chaos == null and destination == temple_of(1 - current_player)
+	var reached_temple := (chaos == null or not chaos.hidden_king) and destination == temple_of(1 - current_player)
 	grid_manager.clear_highlights()
 	# Each side moves in its master character's fighting style.
 	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))
@@ -642,6 +786,13 @@ func _advance_turn() -> void:
 	current_player = 1 - current_player
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(current_player)
+	_effect_mode = false
+	if chaos != null:
+		chaos.expire_protection(current_player)
+		for unit: BattleUnit in (players if current_player == 0 else enemies):
+			if unit.shielded:
+				unit.shielded = false
+				unit.refresh_role_label()
 	var tile_notice := ""
 	if current_player == starting_player:
 		round_number += 1
@@ -737,7 +888,7 @@ func _has_legal_move(team_id: int) -> bool:
 		for card: MovementCard in hands[team_id]:
 			for coordinate: Vector2i in card.destinations(unit.grid_position, team_id, grid_manager.grid_size.x):
 				var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
-				if (occupant == null or occupant.team_id != team_id) and not _is_blocked(coordinate):
+				if (occupant == null or occupant.team_id != team_id) and not _is_blocked(coordinate) and not _is_protected(coordinate, occupant):
 					return true
 	return false
 
@@ -781,10 +932,14 @@ func _run_bot_turn() -> void:
 			battle_ui.set_instruction("Der Bot konnte nicht ziehen und hat eine Karte abgegeben.")
 		return
 	selected_card_slot = int(choice["slot"])
+	_effect_mode = choice.has("effect")
 	_select_unit(choice["unit"] as BattleUnit)
 	await get_tree().create_timer(0.18).timeout
 	if not battle_over and current_player == 1:
-		await _perform_move(choice["destination"])
+		if _effect_mode:
+			await _perform_effect(choice["destination"])
+		else:
+			await _perform_move(choice["destination"])
 
 
 func _choose_chaos_move() -> Dictionary:
@@ -797,10 +952,16 @@ func _choose_chaos_move() -> Dictionary:
 		if not unit.is_dead:
 			enemy.append(unit.grid_position)
 	var result := ChaosBotScript.new().choose_move(
-		1, own, enemy, chaos.king_cells[1], hands[1], hands[0], chaos.collapsed, chaos.warned, grid_manager.grid_size.x
+		1, own, enemy, chaos.king_cells[1], hands[1], hands[0], chaos.collapsed, chaos.warned, grid_manager.grid_size.x,
+		_hand_effects(1), chaos.protected
 	)
 	if result.has("pass"):
 		return {"slot": int(result["slot"]), "pass": true}
+	if result.has("effect"):
+		var caster := grid_manager.get_unit_at(result["from"]) as BattleUnit
+		if caster == null:
+			return {}
+		return {"unit": caster, "slot": int(result["slot"]), "destination": result["to"], "effect": true}
 	var unit := grid_manager.get_unit_at(result["from"]) as BattleUnit
 	if unit == null:
 		return {}
@@ -882,7 +1043,7 @@ func _finish_battle(winner: int) -> void:
 		battle_ui.result_extra = AccessLevel.award(mode, local_won)
 		if mode == "online":
 			battle_ui.main_menu.account.report_online_result(local_won)
-	if chaos != null:
+	if chaos != null and chaos.hidden_king:
 		_reveal_kings()
 	SoundBoard.play("victory" if local_won else "defeat")
 	SoundBoard.say("victory" if local_won else "defeat")
@@ -930,6 +1091,7 @@ func _refresh_ui() -> void:
 	battle_ui.update_header(current_player, round_number)
 	battle_ui.update_hands(hands, pass_card, current_player, selected_card_slot, _viewer_team())
 	battle_ui.update_selection(selected_unit)
+	_refresh_effect_button()
 
 
 func _viewer_team() -> int:
@@ -951,7 +1113,7 @@ func _on_cancel_requested() -> void:
 
 ## Starts the same mode again; online there is no rematch, so it goes to the menu.
 func _new_match() -> void:
-	if match_mode in ["bot", "local", "chaos", "chaos_shift"]:
+	if match_mode in ["bot", "local", "chaos"]:
 		_replay_mode = match_mode
 	_restart_battle()
 

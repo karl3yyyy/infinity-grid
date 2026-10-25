@@ -6,7 +6,7 @@ extends Control
 
 signal bot_training_requested
 signal local_multiplayer_requested
-signal chaos_requested(shifting_tiles: bool)
+signal chaos_requested(options: Dictionary)
 signal lan_match_requested
 ## invite_username: "" for a plain room code, else a friend to invite.
 signal online_create_requested(invite_username: String)
@@ -29,6 +29,8 @@ var profile_name: String = "Spieler"
 var avatar_id: String = AvatarGallery.DEFAULT_ID
 ## BotAI.Difficulty value chosen for quick play; saved with the profile.
 var bot_difficulty: int = 1
+## Chaos Lab: the variants switched on for the next chaos match.
+var chaos_options: Dictionary = {"hidden_king": true, "shifting_tiles": false, "card_effects": false}
 ## The block holding the current page's entries and texts.
 var _panel: PanelContainer
 var _content: VBoxContainer
@@ -513,9 +515,9 @@ func _start_bot_training() -> void:
 	bot_training_requested.emit()
 
 
-func _start_chaos(shifting_tiles: bool) -> void:
+func _start_chaos() -> void:
 	close_menu()
-	chaos_requested.emit(shifting_tiles)
+	chaos_requested.emit(chaos_options.duplicate())
 
 
 func _start_local_multiplayer() -> void:

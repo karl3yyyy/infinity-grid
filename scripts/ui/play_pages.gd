@@ -30,7 +30,7 @@ func show_play() -> void:
 			menu.close_menu()
 			menu.online_quick_requested.emit())
 	menu._add_menu_button(menu._content, "GEGEN DEN BOT", "Training, drei Stufen", show_bot)
-	menu._add_menu_button(menu._content, "CHAOS", "Versteckter Kern, wandernde Felder", show_chaos)
+	menu._add_menu_button(menu._content, "CHAOS", "Labor für neue Spielvarianten", show_chaos)
 	menu._add_menu_button(menu._content, "ZU ZWEIT", "Abwechselnd an einem Gerät", menu._start_local_multiplayer)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
 	menu._focus_first_entry()
@@ -98,10 +98,29 @@ func show_leaderboard() -> void:
 		list.add_child(line)
 
 
+const CHAOS_VARIANTS: Array[Dictionary] = [
+	{"key": "hidden_king", "title": "VERSTECKTER KERN", "text": "Du wählst geheim deinen Kern; den des Gegners kennst du nicht."},
+	{"key": "shifting_tiles", "title": "WANDERNDE FELDER", "text": "Felder brechen weg und kehren zurück."},
+	{"key": "card_effects", "title": "KARTENFÄHIGKEITEN", "text": "Jede Karte hat einen Effekt: Schritt ODER Effekt."},
+]
+
+
+## The chaos lab: switch variants on or off, combine them freely, then start.
 func show_chaos() -> void:
-	menu._set_page("CHAOS", show_play)
-	menu._add_menu_button(menu._content, "VERSTECKTER KERN", "Du wählst geheim deinen Kern. Den des Bots kennst du nicht.", func() -> void: menu._start_chaos(false))
-	menu._add_menu_button(menu._content, "WANDERNDE FELDER", "Versteckter Kern, dazu brechen Felder weg und kehren zurück.", func() -> void: menu._start_chaos(true))
+	menu._set_page("CHAOS LABOR", show_play)
+	for variant: Dictionary in CHAOS_VARIANTS:
+		var key := str(variant["key"])
+		var marker := "[X] " if bool(menu.chaos_options.get(key, false)) else "[  ] "
+		menu._add_menu_button(menu._content, marker + str(variant["title"]), str(variant["text"]), func() -> void:
+			menu.chaos_options[key] = not bool(menu.chaos_options.get(key, false))
+			show_chaos())
+	var any_on := false
+	for variant: Dictionary in CHAOS_VARIANTS:
+		any_on = any_on or bool(menu.chaos_options.get(str(variant["key"]), false))
+	if any_on:
+		menu._add_menu_button(menu._content, "START", "Gegen den Bot, mit den gewählten Varianten", menu._start_chaos)
+	else:
+		menu._content.add_child(menu._make_text("Wähle mindestens eine Variante.", MainMenu.TEXT_FONT_SIZE))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry()
 

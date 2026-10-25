@@ -13,6 +13,7 @@ func _run_tests() -> void:
 	seed(20261025)
 	_test_rules()
 	_test_bot()
+	_test_effects()
 	await _test_match_flow()
 	if failures.is_empty():
 		print("CHAOS TESTS PASSED")
@@ -58,6 +59,32 @@ func _test_bot() -> void:
 	_expect(result.has("pass"), "Bot passes when the only target is collapsed")
 
 
+func _test_effects() -> void:
+	var board := Vector2i(5, 5)
+	var own: Array[Vector2i] = [Vector2i(2, 2), Vector2i(0, 4)]
+	var enemy: Array[Vector2i] = [Vector2i(3, 2), Vector2i(2, 1)]
+	var strike := CardEffect.targets(CardEffect.Kind.STRIKE, Vector2i(2, 2), 0, board, own, enemy, {}, {})
+	_expect(strike.size() == 2 and Vector2i(3, 2) in strike, "Strike aims at adjacent enemies")
+	_expect(CardEffect.targets(CardEffect.Kind.STRIKE, Vector2i(2, 2), 0, board, own, enemy, {}, {Vector2i(3, 2): 1}).size() == 1, "A shielded piece cannot be struck")
+	var push := CardEffect.targets(CardEffect.Kind.PUSH, Vector2i(2, 2), 0, board, own, enemy, {Vector2i(4, 2): 2}, {})
+	_expect(push.size() == 1 and push[0] == Vector2i(2, 1), "A push needs a free, standing tile behind the enemy")
+	_expect(CardEffect.neighbour(Vector2i(0, 3), Vector2i(-1, 0), board) == Vector2i(4, 3), "Effects wrap horizontally")
+	_expect(CardEffect.neighbour(Vector2i(0, 0), Vector2i(0, -1), board).x < 0, "Effects stop at the closed top edge")
+	var swap := CardEffect.targets(CardEffect.Kind.SWAP, Vector2i(2, 2), 0, board, own, enemy, {}, {})
+	_expect(swap.size() == 1 and swap[0] == Vector2i(0, 4), "Swap aims at other own pieces")
+	var rules := ChaosRules.new()
+	rules.protected[Vector2i(1, 1)] = 0
+	rules.piece_moved(0, Vector2i(1, 1), Vector2i(1, 2))
+	_expect(rules.protected.has(Vector2i(1, 2)) and not rules.protected.has(Vector2i(1, 1)), "A shield follows its piece")
+	rules.expire_protection(0)
+	_expect(rules.protected.is_empty(), "A shield ends when its owner's turn begins")
+	var shield_bot := ChaosBot.new()
+	var kinds: Array = [CardEffect.Kind.STRIKE]
+	var card := MovementCard.new("Step", [Vector2i(0, 5)] as Array[Vector2i])
+	var result := shield_bot.choose_move(0, own, enemy, Vector2i(-1, -1), [card], [], {}, {}, 5, kinds, {})
+	_expect(result.has("effect"), "Bot uses a strike when one is available")
+
+
 func _test_match_flow() -> void:
 	var main := MainScene.instantiate()
 	root.add_child(main)
@@ -66,10 +93,10 @@ func _test_match_flow() -> void:
 	await process_frame
 	var battle := main.get_node("BattleManager") as GridBattleManager
 	var ui := main.get_node("BattleUI") as GridBattleUI
-	ui.main_menu.chaos_requested.emit(true)
+	ui.main_menu.chaos_requested.emit({"hidden_king": true, "shifting_tiles": true, "card_effects": true})
 	await process_frame
 	_expect(battle.chaos != null and battle.chaos.shifting_tiles, "Chaos match starts with shifting tiles")
-	_expect(battle.match_mode == "chaos_shift", "Match mode remembers the variant for rematches")
+	_expect(battle.match_mode == "chaos", "Match mode remembers the variant for rematches")
 	var masters := 0
 	for unit: BattleUnit in battle.players + battle.enemies:
 		masters += 1 if unit.is_master else 0

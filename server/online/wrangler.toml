@@ -52,6 +52,15 @@ class_name = "RankedLobby"
 tag = "v5"
 new_sqlite_classes = ["RankedLobby"]
 
+# Rooms for up to four players: Finite Grid (see group_room.js).
+[[durable_objects.bindings]]
+name = "GROUPS"
+class_name = "GroupRoom"
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["GroupRoom"]
+
 # Credit packs paid through Stripe Checkout (see payments.js). Empty price ids
 # switch the packs off. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are secrets
 # and are set with `npx wrangler secret put <NAME>`, never written here.

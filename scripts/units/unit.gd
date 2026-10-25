@@ -8,7 +8,7 @@ var unit_name: String = "Unit"
 var team_id: int = 0
 var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
-## Replaces KERN / DAEMON on the label (chaos mode hides the real role).
+## Replaces KERN / ECHO on the label (chaos mode hides the real role).
 var role_override: String = ""
 ## Chaos shield: cannot be captured until the owner moves again.
 var shielded: bool = false

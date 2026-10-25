@@ -62,6 +62,23 @@ static func create_deck() -> Array[MovementCard]:
 		MovementCard.new("Echo", [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1)]),
 		MovementCard.new("Serpent", [Vector2i(-1, 1), Vector2i(-1, -1), Vector2i(1, 0)]),
 		MovementCard.new("Viper", [Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 0)]),
+		MovementCard.new("Lance", [Vector2i(0, 2), Vector2i(-1, 0), Vector2i(1, 0)]),
+		MovementCard.new("Spark", [Vector2i(-1, 1), Vector2i(1, 1)]),
+		MovementCard.new("Anchor", [Vector2i(0, 1), Vector2i(0, -2)]),
+		MovementCard.new("Glide", [Vector2i(-2, 0), Vector2i(2, 0), Vector2i(0, -1)]),
+		MovementCard.new("Knight", [Vector2i(-1, 2), Vector2i(1, 2), Vector2i(0, -1)]),
+		MovementCard.new("Mirage", [Vector2i(-2, 1), Vector2i(2, -1), Vector2i(0, 1)]),
+		MovementCard.new("Bastion", [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(0, -1)]),
+		MovementCard.new("Gale", [Vector2i(2, 1), Vector2i(-2, -1), Vector2i(0, 1)]),
+		MovementCard.new("Spire", [Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, -1)]),
+		MovementCard.new("Phantom", [Vector2i(-2, -1), Vector2i(2, -1), Vector2i(-1, 1), Vector2i(1, 1)]),
+		MovementCard.new("Flare", [Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)]),
+		MovementCard.new("Chaos", [Vector2i(-2, 2), Vector2i(2, 2), Vector2i(-2, -2), Vector2i(2, -2)]),
+		MovementCard.new("Pinwheel", [Vector2i(-1, 2), Vector2i(2, 1), Vector2i(1, -2), Vector2i(-2, -1)]),
+		MovementCard.new("Quasar", [Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1), Vector2i(0, 2), Vector2i(0, -2)]),
+		MovementCard.new("Jester", [Vector2i(-2, 2), Vector2i(2, 2), Vector2i(0, -2)]),
+		MovementCard.new("Hydra", [Vector2i(-2, 1), Vector2i(2, 1), Vector2i(0, 2), Vector2i(0, -1)]),
+		MovementCard.new("Nebula", [Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1)]),
 	]
 
 
@@ -93,6 +110,11 @@ const CATEGORIES: Dictionary = {
 	"Wave": "WAVE", "Tide": "WAVE", "Drift": "WAVE", "Zephyr": "WAVE", "Serpent": "WAVE", "Viper": "WAVE",
 	"Orbit": "FIELD", "Halo": "FIELD", "Eclipse": "FIELD", "Prism": "FIELD", "Echo": "FIELD",
 	"Vortex": "OVERCLOCK", "Nova": "OVERCLOCK", "Rift": "OVERCLOCK",
+	"Lance": "OVERCLOCK", "Knight": "OVERCLOCK", "Phantom": "OVERCLOCK",
+	"Spark": "VECTOR", "Anchor": "VECTOR", "Spire": "VECTOR",
+	"Glide": "WAVE", "Mirage": "WAVE", "Gale": "WAVE",
+	"Bastion": "FIELD", "Flare": "FIELD", "Nebula": "FIELD",
+	"Chaos": "OVERCLOCK", "Pinwheel": "OVERCLOCK", "Quasar": "OVERCLOCK", "Jester": "WAVE", "Hydra": "OVERCLOCK",
 }
 const CATEGORY_COLORS: Dictionary = {
 	"VECTOR": Color("7fe3ff"),

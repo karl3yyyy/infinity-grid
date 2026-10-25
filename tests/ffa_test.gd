@@ -14,6 +14,7 @@ func _run_tests() -> void:
 	_test_geometry()
 	_test_rules()
 	_test_self_play()
+	_test_effects()
 	await _test_screen()
 	if failures.is_empty():
 		print("FFA TESTS PASSED")
@@ -97,11 +98,11 @@ func _test_screen() -> void:
 	var ui := main.get_node("BattleUI") as GridBattleUI
 	var battle := main.get_node("FfaBattle") as FfaBattle
 	battle.bot_delay = 0.0
-	ui.main_menu.ffa_requested.emit(1, true)
+	ui.main_menu.ffa_requested.emit(1, true, false)
 	await process_frame
 	_expect(battle.board_root.visible and battle._units.size() == 20, "The 3D four-player board opens with 20 figures")
 	_expect(battle.floor_grid.get_unit_at(FfaRules.start_cell(1, 2)) != null, "Figures stand on the cells of the flat floor")
-	_expect(battle._strip.visible and not battle._top_row.visible, "The other players' cards show in the top strip")
+	_expect(battle._world_hands.visible and not battle._top_row.visible, "The other players' cards lie beside the board")
 	_expect(battle.battle_ui.hand_titles[1].text.begins_with("↻ KARTE  GRID"), "The card chain starts with the Grid and names who gets the next card")
 	var camera := main.get_node("CameraController") as CameraController
 	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
@@ -130,3 +131,52 @@ func _only(cells: Array[Vector2i], expected: Vector2i) -> bool:
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+
+## A bare board: masters in the corners, one piece of seat 0 in the middle, an enemy beside it.
+func _effect_rules(card_name: String, enemy_cell: Vector2i = Vector2i(4, 3)) -> FfaRules:
+	var rules := FfaRules.new()
+	rules.setup(false, 1, [], true)
+	rules.hands[0][0] = MovementCard.cards_from_names([card_name])[0]
+	rules.pieces = {
+		Vector2i(0, 8): {"owner": 0, "master": true}, Vector2i(0, 0): {"owner": 1, "master": true},
+		Vector2i(8, 0): {"owner": 2, "master": true}, Vector2i(8, 8): {"owner": 3, "master": true},
+		Vector2i(4, 4): {"owner": 0, "master": false}, enemy_cell: {"owner": 1, "master": false},
+	}
+	return rules
+
+
+func _test_effects() -> void:
+	var strike := _effect_rules("Crane")
+	_expect(_only(FfaEffects.targets(strike, Vector2i(4, 4), 0), Vector2i(4, 3)), "Strike aims at the adjacent enemy")
+	strike.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(not strike.pieces.has(Vector2i(4, 3)) and strike.pieces.has(Vector2i(4, 4)) and strike.current == 1, "Strike destroys the enemy, the caster stays, the turn passes")
+	_expect(strike.pass_card.card_name == "Crane", "The used card goes to the middle")
+
+	var kill := _effect_rules("Crane", Vector2i(4, 3))
+	kill.pieces[Vector2i(4, 3)]["master"] = true
+	kill.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(not kill.alive[1], "Striking a Master knocks the player out")
+
+	var push := _effect_rules("Wave")
+	_expect(_only(FfaEffects.targets(push, Vector2i(4, 4), 0), Vector2i(4, 3)), "Push aims at the adjacent enemy")
+	push.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(push.pieces.has(Vector2i(4, 2)) and not push.pieces.has(Vector2i(4, 3)), "Push moves the enemy one cell away")
+	var wall := _effect_rules("Wave", Vector2i(4, 3))
+	wall.pieces[Vector2i(4, 2)] = {"owner": 2, "master": false}
+	_expect(FfaEffects.targets(wall, Vector2i(4, 4), 0).is_empty(), "A blocked push has no target")
+	var edge := _effect_rules("Wave", Vector2i(4, 0))
+	edge.pieces.erase(Vector2i(4, 4))
+	edge.pieces[Vector2i(4, 1)] = {"owner": 0, "master": false}
+	_expect(FfaEffects.targets(edge, Vector2i(4, 1), 0).is_empty(), "Nothing is pushed off the closed edge")
+
+	var shield := _effect_rules("Orbit")
+	shield.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 4))
+	_expect(shield.tiles.protected.has(Vector2i(4, 4)) and not shield.can_enter(1, Vector2i(4, 4)), "A shield protects the piece from captures")
+	for _turn: int in range(3):
+		shield.pass_turn(0)
+	_expect(shield.current == 0 and shield.tiles.protected.is_empty(), "The shield ends when its owner's next turn begins")
+
+	var swap := _effect_rules("Vortex")
+	swap.apply_effect(Vector2i(4, 4), 0, Vector2i(0, 8))
+	_expect(bool(swap.pieces[Vector2i(4, 4)]["master"]) and not bool(swap.pieces[Vector2i(0, 8)]["master"]), "Swap trades two own pieces")

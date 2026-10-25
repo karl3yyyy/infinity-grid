@@ -3,9 +3,12 @@ extends CanvasLayer
 
 signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
+signal tutorial_requested
 signal local_multiplayer_requested
 signal chaos_requested(options: Dictionary)
-signal ffa_requested(humans: int, shifting_tiles: bool)
+signal ffa_requested(humans: int, shifting_tiles: bool, card_effects: bool)
+signal group_create_requested(settings: Dictionary, max_players: int)
+signal group_join_requested(code: String)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
@@ -24,8 +27,6 @@ const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
 const PASS_CARD_COLOR := Color("c9a648")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
-## Opponent cards are drawn smaller, like a hand seen across the table.
-const OPPONENT_CARD_SCALE: float = 0.92
 
 var round_label: Label
 var instruction_label: Label
@@ -35,6 +36,9 @@ var selection_label: Label
 var hand_anchors: Array = [[], []]
 ## Pass-card place per position; the card rests where the side about to move sits.
 var next_anchors: Array[Control] = [null, null]
+## Row holding a position's two cards and its pass card.
+var hand_rows: Array[BoxContainer] = [null, null]
+var hand_dock: HandDock
 var card_stage: CardStage
 var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
@@ -409,6 +413,7 @@ func _build_ui() -> void:
 	_add_hand_row(bottom_box, 0)
 	# Titles were appended bottom-last; keep index = position.
 	hand_titles.reverse()
+	hand_dock = HandDock.new(self, top_box, bottom_box)
 
 	result_overlay = ColorRect.new()
 	result_overlay.color = Color(0.0, 0.02, 0.04, 0.86)
@@ -489,7 +494,7 @@ func _build_ui() -> void:
 	rules.add_theme_font_size_override("font_size", 27)
 	rules.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rules.text = "\n".join([
-		"> Jede Seite hat einen KERN (auf dem goldenen Sockel) und vier DAEMONEN.",
+		"> Jede Seite hat einen KERN (auf dem goldenen Sockel) und vier ECHOS.",
 		"> Wähle eine deiner zwei Karten und eine Figur. Die Karte zeigt, wohin sie ziehen darf: weißes Feld = Figur, leuchtende Felder = Ziele.",
 		"> Ziehst du auf einen Gegner, ist er geschlagen.",
 		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",
@@ -511,7 +516,8 @@ func _build_main_menu() -> void:
 	main_menu.name = "MainMenu"
 	add_child(main_menu)
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
-	main_menu.ffa_requested.connect(func(humans: int, shifting_tiles: bool) -> void: ffa_requested.emit(humans, shifting_tiles))
+	main_menu.tutorial_requested.connect(func() -> void: tutorial_requested.emit())
+	main_menu.ffa_requested.connect(func(humans: int, shifting_tiles: bool, card_effects: bool) -> void: ffa_requested.emit(humans, shifting_tiles, card_effects))
 	main_menu.chaos_requested.connect(func(options: Dictionary) -> void: chaos_requested.emit(options))
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
@@ -522,6 +528,9 @@ func _build_main_menu() -> void:
 	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 	main_menu.toast_requested.connect(show_toast)
+	main_menu.screen_layout_changed.connect(_apply_responsive_layout)
+	main_menu.group_create_requested.connect(func(settings: Dictionary, max_players: int) -> void: group_create_requested.emit(settings, max_players))
+	main_menu.group_join_requested.connect(func(code: String) -> void: group_join_requested.emit(code))
 
 
 ## A short message that slides in at the top, stays a few seconds and fades.
@@ -581,10 +590,11 @@ func _add_hand_title(parent: Control, position: int) -> void:
 
 
 func _add_hand_row(parent: Control, position: int) -> void:
-	var row := HBoxContainer.new()
+	var row := BoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
 	parent.add_child(row)
+	hand_rows[position] = row
 	var places: Array = []
 	for slot: int in range(2):
 		places.append(_make_card_place())
@@ -656,18 +666,11 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 		return
 	if viewport_size == Vector2.ZERO:
 		viewport_size = get_viewport().get_visible_rect().size
-	var column_width := minf(viewport_size.x, MAX_COLUMN_WIDTH)
+	var landscape := ScreenLayout.is_landscape()
+	var column_width := viewport_size.x if landscape else minf(viewport_size.x, MAX_COLUMN_WIDTH)
 	hud_column.offset_left = -column_width * 0.5
 	hud_column.offset_right = column_width * 0.5
-	# Two hand cards plus a slightly smaller next card share one row.
-	var usable := column_width - 24.0 - 20.0
-	var card_width := clampf(usable / 3.25, 96.0, 240.0)
-	var card_height := clampf(card_width * 1.12, 110.0, minf(290.0, viewport_size.y * 0.19))
-	for position: int in range(2):
-		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
-		for place: Control in hand_anchors[position]:
-			place.custom_minimum_size = Vector2(card_width, card_height) * factor
-		next_anchors[position].custom_minimum_size = Vector2(card_width * 0.8, card_height * 0.86) * factor
+	hand_dock.apply(landscape, viewport_size, column_width)
 	top_tray.offset_left = 0.0
 	top_tray.offset_right = 0.0
 	bottom_tray.offset_left = 0.0
@@ -676,6 +679,7 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	top_tray.offset_bottom = top_tray.get_combined_minimum_size().y
 	bottom_tray.offset_bottom = 0.0
 	bottom_tray.offset_top = -bottom_tray.get_combined_minimum_size().y
+	hand_dock.set_side_limits(top_tray.offset_bottom, bottom_tray.offset_top)
 	var insets := get_board_insets()
 	board_insets_changed.emit(insets.x, insets.y)
 

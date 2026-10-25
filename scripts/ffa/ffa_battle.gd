@@ -36,8 +36,21 @@ var _slot: int = -1
 var _targets: Array[Vector2i] = []
 var _notice: String = ""
 var _previous_grid: GridManager
-var _strip: FfaSeatStrip
+var _world_hands: FfaWorldHands
 var _top_row: Control
+## Room with friends: every client plays the rules itself and the server relays the turns.
+var client: GroupClient
+var _online: bool = false
+var _my_seat: int = 0
+var _is_host: bool = false
+var _names: Array[String] = ["", "", "", ""]
+## Turns played so far; the number of the next turn.
+var _turns_done: int = 0
+var _incoming: Array[Dictionary] = []
+var _animating_remote: bool = false
+var _effects: bool = false
+## True while the player aims the card's effect instead of its step.
+var _effect_mode: bool = false
 
 
 func setup(ui: GridBattleUI, camera_controller: CameraController, input: PlayerController, movement: UnitMovement, manager: GridBattleManager) -> void:
@@ -56,52 +69,80 @@ func setup(ui: GridBattleUI, camera_controller: CameraController, input: PlayerC
 	units_root = Node3D.new()
 	units_root.name = "FfaUnits"
 	board_root.add_child(units_root)
-	_install_strip()
+	_install_hands()
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
+	battle_ui.restart_pressed.connect(_leave_room)
+	battle_ui.effect_requested.connect(_on_effect_requested)
 
 
-## The top card row of the HUD is swapped for the hands of the other players.
-func _install_strip() -> void:
-	_top_row = battle_ui.hand_anchors[1][0].get_parent() as Control
-	_strip = FfaSeatStrip.new()
-	_strip.visible = false
-	var box := _top_row.get_parent()
-	box.add_child(_strip)
-	box.move_child(_strip, _top_row.get_index())
+## The opponent row of the HUD is not used; the other hands lie beside the board.
+func _install_hands() -> void:
+	_top_row = battle_ui.hand_rows[1]
+	_world_hands = FfaWorldHands.new()
+	_world_hands.name = "FfaHands"
+	board_root.add_child(_world_hands)
 
 
 ## humans: 0 (bots only, tests), 1, 2 (opposite seats) or 4.
-func start(humans: int, shifting_tiles: bool) -> void:
+func start(humans: int, shifting_tiles: bool, card_effects: bool = false) -> void:
+	var seats: Array = {0: [], 1: [0], 2: [0, 2], 4: [0, 1, 2, 3]}.get(humans, [0])
+	_online = false
+	_my_seat = 0
+	battle_manager.remember_ffa(humans, shifting_tiles, card_effects)
+	await _begin_game(seats, shifting_tiles, -1, [], card_effects)
+
+
+## The room started: `info` is the server's group_start message.
+func start_online(info: Dictionary) -> void:
+	_online = true
+	_my_seat = int(info["seat"])
+	_is_host = bool(info.get("host", false))
+	for seat: int in range(FfaRules.PLAYERS):
+		_names[seat] = str((info.get("names", []) as Array)[seat])
+	var settings: Dictionary = info.get("settings", {})
+	var seats: Array = []
+	for seat: Variant in info.get("humans", []):
+		seats.append(int(seat))
+	await _begin_game(seats, bool(settings.get("tiles", false)), int(info["seed"]), info["cards"] as Array, bool(settings.get("effects", false)))
+
+
+func _begin_game(seats: Array, shifting_tiles: bool, rng_seed: int, card_names: Array, card_effects: bool) -> void:
 	_game_id += 1
 	var game := _game_id
-	_humans = humans
+	_humans = seats.size()
 	_shifting_tiles = shifting_tiles
-	var seats: Array = {0: [], 1: [0], 2: [0, 2], 4: [0, 1, 2, 3]}.get(humans, [0])
+	_effects = card_effects
+	_effect_mode = false
+	_turns_done = 0
+	_incoming.clear()
+	_animating_remote = false
 	for seat: int in range(FfaRules.PLAYERS):
 		_is_human[seat] = seat in seats
-	_view_seat = 0
+	_view_seat = _my_seat
 	_active = true
 	_busy = true
 	battle_ui.main_menu.close_menu()
-	battle_manager.remember_ffa(humans, shifting_tiles)
 	if _previous_grid == null:
 		_previous_grid = player_controller.grid_manager
 	player_controller.grid_manager = floor_grid
 	rules = FfaRules.new()
-	rules.setup(shifting_tiles)
+	rules.setup(shifting_tiles, rng_seed, card_names, card_effects)
 	_bot = BotScript.new()
 	_clear_units()
 	floor_grid.setup()
 	board_root.visible = true
 	_top_row.visible = false
-	_strip.visible = true
-	camera.set_board(FfaRules.SIZE, false)
-	camera.set_seat_view(0)
+	camera.set_board(FfaRules.SIZE, false, FfaWorldHands.FRAMING_MARGIN_CELLS)
+	camera.set_seat_view(_my_seat)
 	_make_looks()
 	_spawn_units()
-	battle_ui.set_opponent_bot(true)
+	if _online:
+		battle_ui.set_opponent_remote(true)
+	else:
+		battle_ui.set_opponent_remote(false)
+		battle_ui.set_opponent_bot(true)
 	_refresh_ui()
 	battle_ui.set_instruction(GridLore.finite_start_line())
 	await battle_ui.play_card_deal()
@@ -119,9 +160,11 @@ func _clear_units() -> void:
 func _make_looks() -> void:
 	_looks.clear()
 	var own := CharacterRoster.load_look()
-	_looks.append(own)
 	var used: Array[String] = [str(own["character"])]
-	for seat: int in range(1, FfaRules.PLAYERS):
+	for seat: int in range(FfaRules.PLAYERS):
+		if seat == _my_seat:
+			_looks.append(own)
+			continue
 		var character_id := CharacterRoster.random_character_id()
 		for _attempt: int in range(8):
 			if character_id not in used:
@@ -169,38 +212,54 @@ func _dress(unit: BattleUnit, look: Dictionary, tint: Color) -> void:
 
 
 func _seat_name(seat: int) -> String:
+	if _online and _is_human[seat] and _names[seat] != "":
+		return _names[seat].to_upper() + (" (DU)" if seat == _my_seat else "")
 	return ("SPIELER %d" if _is_human[seat] else "BOT %d") % (seat + 1)
+
+
+## A human who sits at this device. Online only the own seat counts.
+func _is_local(seat: int) -> bool:
+	return _is_human[seat] and (not _online or seat == _my_seat)
+
+
+## Bots run on this device; online only the host runs them and relays their turns.
+func _runs_bot(seat: int) -> bool:
+	return not _is_human[seat] and (not _online or _is_host)
 
 
 func _begin_turn() -> void:
 	_deselect()
 	var seat := rules.current
-	_must_pass = rules.legal_moves(seat).is_empty()
-	if _is_human[seat]:
+	_must_pass = rules.legal_moves(seat).is_empty() and not (_effects and FfaEffects.has_any(rules, seat))
+	if _is_local(seat) and not _online:
 		_view_seat = seat
 		if _humans > 1:
 			camera.set_seat_view(seat)
-	_busy = not _is_human[seat]
-	player_controller.enabled = _is_human[seat]
+	_busy = not _is_local(seat)
+	player_controller.enabled = _is_local(seat)
 	_refresh_ui()
 	var prefix := _notice + " " if _notice != "" else ""
-	if _is_human[seat]:
+	if _is_local(seat):
 		battle_ui.set_instruction(prefix + ("Keine Figur kann ziehen. Tippe auf eine Karte, um sie abzugeben." if _must_pass else "%s: Wähle eine Karte und eine Figur." % _seat_name(seat)))
+	elif _is_human[seat]:
+		battle_ui.set_instruction(prefix + "%s ist am Zug ..." % _seat_name(seat))
 	else:
 		battle_ui.set_instruction(prefix + "%s denkt nach ..." % _seat_name(seat))
-		_run_bot()
+		if _runs_bot(seat):
+			_run_bot()
+	_drain_incoming.call_deferred()
 
 
 func _refresh_ui() -> void:
 	var view := _view_seat
-	var own_turn := rules.current == view and _is_human[view] and rules.winner == FfaRules.RUNNING
+	var own_turn := rules.current == view and _is_local(view) and rules.winner == FfaRules.RUNNING
 	battle_ui.update_hands([rules.hands[view], rules.hands[view]], rules.pass_card, 0, _slot if own_turn else -1, 0, not own_turn, false)
 	battle_ui.hand_titles[0].text = _seat_name(view)
 	battle_ui.hand_titles[0].modulate = FfaFloor.SEAT_COLORS[view].lightened(0.3)
 	var names: Array[String] = []
 	for seat: int in range(FfaRules.PLAYERS):
 		names.append(_seat_name(seat))
-	_strip.show_seats(rules, names, view)
+	_world_hands.show_seats(rules, view)
 	var giver := "GRID" if rules.pass_giver < 0 else names[rules.pass_giver]
 	battle_ui.hand_titles[1].text = "↻ KARTE  %s → %s → %s" % [giver, names[rules.current], names[rules.next_after(rules.current)]]
 	battle_ui.hand_titles[1].modulate = Color("ffc23a")
@@ -210,21 +269,27 @@ func _refresh_ui() -> void:
 
 
 func _on_card_selected(team_id: int, slot: int) -> void:
-	if not _active or _busy or team_id != 0 or slot < 0 or slot > 1 or rules.winner != FfaRules.RUNNING or not _is_human[rules.current]:
+	if not _active or _busy or team_id != 0 or slot < 0 or slot > 1 or rules.winner != FfaRules.RUNNING or not _is_local(rules.current):
 		return
 	SoundBoard.play("click")
 	if _must_pass:
+		_send_turn({"type": "pass", "slot": slot})
 		rules.pass_turn(slot)
 		_after_turn()
 		return
 	_slot = slot
+	_effect_mode = false
 	_refresh_targets()
 	_refresh_ui()
+	_refresh_effect_button()
 	battle_ui.set_instruction("Tippe jetzt eine deiner Figuren." if _selected == null else "Tippe auf ein leuchtendes Feld.")
 
 
 func _on_cell_clicked(cell: Vector2i) -> void:
-	if not _active or _busy or rules.winner != FfaRules.RUNNING or not _is_human[rules.current] or _must_pass:
+	if not _active or _busy or rules.winner != FfaRules.RUNNING or not _is_local(rules.current) or _must_pass:
+		return
+	if _effect_mode and _selected != null and _slot >= 0 and cell in _targets:
+		_perform_effect(_selected, _slot, cell)
 		return
 	var clicked := floor_grid.get_unit_at(cell) as BattleUnit
 	if clicked != null and clicked.team_id == rules.current:
@@ -234,6 +299,7 @@ func _on_cell_clicked(cell: Vector2i) -> void:
 		_selected.set_selected(true)
 		_refresh_targets()
 		_refresh_ui()
+		_refresh_effect_button()
 		battle_ui.set_instruction("Wähle jetzt eine Karte." if _slot < 0 else "Tippe auf ein leuchtendes Feld.")
 		return
 	if _selected != null and _slot >= 0 and cell in _targets:
@@ -259,9 +325,11 @@ func _deselect() -> void:
 		_selected.set_selected(false)
 	_selected = null
 	_slot = -1
+	_effect_mode = false
 	_targets.clear()
 	if floor_grid != null:
 		floor_grid.clear_highlights()
+	battle_ui.set_effect_button(false)
 
 
 func _refresh_targets() -> void:
@@ -269,17 +337,23 @@ func _refresh_targets() -> void:
 	if _selected == null or _slot < 0:
 		floor_grid.clear_highlights()
 		return
-	_targets = rules.targets_for(rules.current, _selected.grid_position, _slot)
+	if _effect_mode:
+		_targets = FfaEffects.targets(rules, _selected.grid_position, _slot)
+	else:
+		_targets = rules.targets_for(rules.current, _selected.grid_position, _slot)
 	floor_grid.show_movement_targets(_targets, _selected.grid_position, rules.current)
 
 
 ## Animates in the fighter's style, then lets the rules apply the move.
-func _play(unit: BattleUnit, slot: int, destination: Vector2i) -> void:
+## `announce` is false for a turn that came from the room.
+func _play(unit: BattleUnit, slot: int, destination: Vector2i, announce: bool = true) -> void:
 	_busy = true
 	player_controller.enabled = false
 	var game := _game_id
 	var seat := rules.current
 	var origin := unit.grid_position
+	if announce:
+		_send_turn({"type": "move", "from": origin, "slot": slot, "to": destination})
 	var victim := floor_grid.get_unit_at(destination) as BattleUnit
 	floor_grid.clear_highlights()
 	unit.set_selected(false)
@@ -300,6 +374,7 @@ func _run_bot() -> void:
 		return
 	var choice := _bot.choose_move(rules, rules.current)
 	if choice.has("pass"):
+		_send_turn({"type": "pass", "slot": int(choice["slot"])})
 		rules.pass_turn(int(choice["slot"]))
 		_after_turn()
 		return
@@ -314,6 +389,7 @@ func _run_bot() -> void:
 
 
 func _after_turn() -> void:
+	_turns_done += 1
 	_selected = null
 	_slot = -1
 	var parts: PackedStringArray = []
@@ -321,6 +397,7 @@ func _after_turn() -> void:
 		_make_ruins(seat)
 		parts.append("%s %s" % [_seat_name(seat), GridLore.finite_out_line()])
 	_sync_tiles()
+	_sync_shields()
 	if str(rules.last_events["tiles"]) != "":
 		parts.append(str(rules.last_events["tiles"]))
 	_notice = " ".join(parts)
@@ -361,11 +438,261 @@ func _finish() -> void:
 	_busy = true
 	player_controller.enabled = false
 	_refresh_ui()
-	var local_won := rules.winner >= 0 and _is_human[rules.winner]
+	var local_won := rules.winner >= 0 and (rules.winner == _my_seat if _online else _is_human[rules.winner])
 	SoundBoard.play("victory" if local_won else "defeat")
+	if _online and client != null:
+		client.leave()
 	if rules.winner == FfaRules.DRAW:
 		battle_ui.show_result("UNENTSCHIEDEN")
-	elif _humans == 1:
-		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if rules.winner == 0 else "NIEDERLAGE\n%s gewinnt." % _seat_name(rules.winner))
+	elif _humans == 1 or _online:
+		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if rules.winner == _my_seat else "NIEDERLAGE\n%s gewinnt." % _seat_name(rules.winner))
 	else:
 		battle_ui.show_result("%s GEWINNT" % _seat_name(rules.winner))
+
+
+# --- card effects ------------------------------------------------------------
+
+func _refresh_effect_button() -> void:
+	var can_show := _effects and _active and not _busy and not _must_pass and _slot >= 0 and _is_local(rules.current)
+	if not can_show:
+		battle_ui.set_effect_button(false)
+		return
+	battle_ui.set_effect_button(true, "SCHRITT" if _effect_mode else CardEffect.button_text(FfaEffects.kind_of_slot(rules, _slot)))
+
+
+## The EFFEKT button: switch between the card's step and its effect.
+func _on_effect_requested() -> void:
+	if not _active or _busy or not _effects or _slot < 0 or not _is_local(rules.current):
+		return
+	SoundBoard.play("click")
+	_effect_mode = not _effect_mode
+	_refresh_targets()
+	_refresh_effect_button()
+	if not _effect_mode:
+		battle_ui.set_instruction("Schritt gewählt. Tippe auf ein leuchtendes Feld.")
+	elif _selected == null:
+		battle_ui.set_instruction("Wähle zuerst die Figur, die den Effekt auslöst.")
+	elif _targets.is_empty():
+		battle_ui.set_instruction("Kein Ziel für diesen Effekt. Schritt oder andere Figur wählen.")
+	else:
+		battle_ui.set_instruction(str(CardEffect.HINTS[FfaEffects.kind_of_slot(rules, _slot)]))
+
+
+## Uses the card's effect on `target` instead of stepping. `announce` is false for turns from the room.
+func _perform_effect(unit: BattleUnit, slot: int, target: Vector2i, announce: bool = true) -> void:
+	_busy = true
+	player_controller.enabled = false
+	var game := _game_id
+	var seat := rules.current
+	var origin := unit.grid_position
+	var kind := FfaEffects.kind_of_slot(rules, slot)
+	var color: Color = FfaFloor.SEAT_COLORS[seat]
+	var other := floor_grid.get_unit_at(target) as BattleUnit
+	if announce:
+		_send_turn({"type": "effect", "from": origin, "slot": slot, "to": target})
+	floor_grid.clear_highlights()
+	unit.set_selected(false)
+	battle_ui.set_effect_button(false)
+	match kind:
+		CardEffect.Kind.STRIKE:
+			CombatEffects.pillar(units_root, other.global_position, color)
+			await other.shatter(unit.global_position, color)
+		CardEffect.Kind.PUSH:
+			await _slide_unit(other, FfaEffects.push_landing(rules, origin, target))
+		CardEffect.Kind.SHIELD:
+			CombatEffects.pillar(units_root, unit.global_position, color)
+			await get_tree().create_timer(0.3).timeout
+		CardEffect.Kind.SWAP:
+			await _swap_units(unit, other)
+	if game != _game_id:
+		return
+	rules.apply_effect(origin, slot, target)
+	_after_turn()
+
+
+func _slide_unit(unit: BattleUnit, landing: Vector2i) -> void:
+	var from_cell := unit.grid_position
+	var tween := unit.create_tween()
+	tween.tween_property(unit, "position", floor_grid.grid_to_world(landing), 0.3)
+	await tween.finished
+	unit.grid_position = landing
+	floor_grid.move_occupant(unit, from_cell, landing)
+
+
+func _swap_units(first: BattleUnit, second: BattleUnit) -> void:
+	var first_cell := first.grid_position
+	first.grid_position = second.grid_position
+	second.grid_position = first_cell
+	floor_grid.set_occupant(first.grid_position, first)
+	floor_grid.set_occupant(second.grid_position, second)
+	var tween := first.create_tween().set_parallel(true)
+	tween.tween_property(first, "position", floor_grid.grid_to_world(first.grid_position), 0.3)
+	tween.tween_property(second, "position", floor_grid.grid_to_world(second.grid_position), 0.3)
+	await tween.finished
+
+
+## Shield markers follow the rules: a shield ends when its owner's next turn begins.
+func _sync_shields() -> void:
+	for unit: BattleUnit in _units:
+		if is_instance_valid(unit) and not unit.is_dead:
+			var shielded := rules.tiles.protected.has(unit.grid_position)
+			if unit.shielded != shielded:
+				unit.shielded = shielded
+				unit.refresh_role_label()
+
+
+# --- room with friends -------------------------------------------------------
+
+## Opens a room as host; the lobby page shows who joins.
+func create_room(settings: Dictionary, max_players: int) -> void:
+	var room := _new_client()
+	var menu := battle_ui.main_menu
+	menu.show_group_lobby(room)
+	if room.create_room(max_players, settings, menu.profile_name, menu.avatar_id) != OK:
+		menu.toast_requested.emit("Keine Verbindung zum Server.")
+		menu._show_home()
+
+
+func join_room(code: String) -> void:
+	var room := _new_client()
+	var menu := battle_ui.main_menu
+	menu.show_group_lobby(room)
+	if room.join_room(code, menu.profile_name, menu.avatar_id) != OK:
+		menu.toast_requested.emit("Keine Verbindung zum Server.")
+		menu._show_home()
+
+
+func _new_client() -> GroupClient:
+	if client != null:
+		client.disconnect_from_host()
+		client.queue_free()
+	var room := GroupClient.new()
+	room.name = "GroupClient"
+	add_child(room)
+	_attach_client(room)
+	return room
+
+
+## Listens to a room; the menu shows the lobby, the match starts when the host says so.
+func _attach_client(room_client: GroupClient) -> void:
+	client = room_client
+	client.started.connect(start_online)
+	client.turn_received.connect(_on_turn_received)
+	client.seat_away.connect(_on_seat_away)
+	client.seat_back.connect(_on_seat_back)
+	client.seat_left.connect(_on_seat_left)
+	client.host_changed.connect(_on_host_changed)
+	client.connection_lost.connect(_on_connection_lost)
+	client.rejected.connect(func(_reason: String) -> void: _on_connection_lost())
+
+
+func _leave_room() -> void:
+	if client != null and _online and _active:
+		client.leave()
+
+
+## Turns of other seats come in numbered; they run one after another once the board is idle.
+func _on_turn_received(turn: Dictionary) -> void:
+	if not _online or not _active:
+		return
+	_incoming.append(turn)
+	_drain_incoming()
+
+
+func _drain_incoming() -> void:
+	if not _online or not _active or _animating_remote or _incoming.is_empty() or rules.winner != FfaRules.RUNNING:
+		return
+	# On our own turn nothing from the others can be next.
+	if _is_local(rules.current):
+		return
+	var turn: Dictionary = _incoming[0]
+	if int(turn["seq"]) < _turns_done:
+		_incoming.pop_front()
+		_drain_incoming()
+		return
+	if int(turn["seq"]) > _turns_done or int(turn["seat"]) != rules.current:
+		return
+	_incoming.pop_front()
+	_animating_remote = true
+	await _apply_remote(turn)
+	_animating_remote = false
+	_drain_incoming()
+
+
+func _apply_remote(turn: Dictionary) -> void:
+	var slot := int(turn.get("slot", 0))
+	if str(turn["type"]) == "pass":
+		rules.pass_turn(slot)
+		_after_turn()
+		return
+	var unit := floor_grid.get_unit_at(turn["from"]) as BattleUnit
+	var seat := rules.current
+	var is_effect := str(turn["type"]) == "effect"
+	if unit == null or unit.team_id != seat or slot < 0 or slot > 1 or is_effect and not _effects:
+		_out_of_sync()
+		return
+	var allowed := FfaEffects.targets(rules, unit.grid_position, slot) if is_effect else rules.targets_for(seat, unit.grid_position, slot)
+	if not (turn["to"] as Vector2i) in allowed:
+		_out_of_sync()
+		return
+	if is_effect:
+		await _perform_effect(unit, slot, turn["to"], false)
+	else:
+		await _play(unit, slot, turn["to"], false)
+
+
+func _out_of_sync() -> void:
+	_active = false
+	_busy = true
+	player_controller.enabled = false
+	if client != null:
+		client.leave()
+	battle_ui.show_result("NICHT SYNCHRON\nDie Partie ist bei jemandem anders verlaufen.")
+
+
+## Sends a turn of the seat to move; `fields` has type, slot and for moves from and to.
+func _send_turn(fields: Dictionary) -> void:
+	if not _online or client == null:
+		return
+	var turn := fields.duplicate()
+	turn["seq"] = _turns_done
+	turn["seat"] = rules.current
+	client.send_turn(turn)
+
+
+func _on_seat_away(seat: int, seconds: int) -> void:
+	if _active:
+		battle_ui.show_toast("%s ist kurz weg – bis zu %d Sekunden Geduld." % [_seat_name(seat), seconds])
+
+
+func _on_seat_back(seat: int) -> void:
+	if _active:
+		battle_ui.show_toast("%s ist wieder da." % _seat_name(seat))
+
+
+## The player is gone for good: a bot plays the figures from now on.
+func _on_seat_left(seat: int) -> void:
+	if not _active:
+		return
+	var name_before := _seat_name(seat)
+	_is_human[seat] = false
+	battle_ui.show_toast("%s hat verlassen. Ein Bot übernimmt." % name_before)
+	_refresh_ui()
+	if rules.current == seat and not _busy:
+		_begin_turn()
+
+
+func _on_host_changed(seat: int) -> void:
+	if not _active or seat != _my_seat:
+		return
+	_is_host = true
+	if _runs_bot(rules.current) and not _animating_remote:
+		_begin_turn()
+
+
+func _on_connection_lost() -> void:
+	if _online and _active:
+		_active = false
+		_busy = true
+		player_controller.enabled = false
+		battle_ui.show_result("KEINE VERBINDUNG")

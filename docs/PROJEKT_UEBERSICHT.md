@@ -8,7 +8,7 @@ Sie enthält **keine** geheimen Schlüssel oder Passwörter.
 
 - **Infinity Grid**: rundenbasiertes Karten-Strategiespiel, Godot 4.7.2, GDScript.
 - Brett 5×5, links/rechts **endlos** (Ränder gehen ineinander über), oben/unten geschlossen.
-- Pro Seite ein **KERN** (früher „Meister“) und vier **Schüler**. Wer den gegnerischen KERN schlägt, gewinnt.
+- Pro Seite ein **KERN** (früher „Meister“) und vier **ECHOS** (Nebenfiguren). Wer den gegnerischen KERN schlägt, gewinnt.
 - 19 Bewegungskarten, pro Partie 5: je 2 pro Spieler + 1 Wechselkarte. Gespielte Karte tauscht mit der Wechselkarte.
 - Regeln extra: Passen, wenn kein Zug möglich; **Remis** bei dreimal gleicher Stellung.
 - Bot mit drei Stufen (leicht, mittel, schwer).
@@ -34,7 +34,7 @@ OPA HEINZ, RIK, DOC VOSS, BRUDER ODO, JUNO.
 - Ausrüstung u. a.: langer Mantel (schwingt mit den Beinen), Sonnenbrille, runde Brille,
   Schläuche im Kopf, Implantate, Hörner, Stacheln, Hightech-Kinderwagen, leuchtendes Visier.
 - Pro Charakter **2 kaufbare Skins** (24 insgesamt), z. B. Schatten „Weißer Hase“ / „Rote Pille“.
-- **Echos** (Aussehen der Schüler): Hologramme, Agenten, Cyborgs, Rumpfe.
+- **Echos** (Aussehen der ECHOS): Hologramme, Agenten, Cyborgs, Rumpfe.
 - **Sammlung**: Charakter-Galerie zum Wischen (Intro-Animation, Skin-Leiste),
   Echos, Spielfeld, **Profilbild**, Karten.
 - **Profilbilder**: 4 Symbole (CODE, AUGE, GRID, GLITCH) + Porträt jedes Charakters, den man besitzt.

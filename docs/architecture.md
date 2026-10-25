@@ -49,9 +49,22 @@ platforms yet). `FfaRules` (pure) holds pieces, hands, turn order, eliminations
 and tiles; `FfaBot` plays the bots; `FfaFloor` is a `GridManager` without
 wraparound; `FfaBattle` shows the match and takes the input. The camera turns to
 the seat of the human to move (`CameraController.set_seat_view`), so every
-player's "forward" points up the screen. The hands of the other three players
-show in `FfaSeatStrip` and the played card passes clockwise (`FfaRules.pass_giver`).
-Opened from Spielen > FINITE GRID, a separate entry next to CHAOS.
+player's "forward" points up the screen. The two cards of every other player lie
+flat on the floor behind that player's side, turned like on a real table
+(`FfaWorldHands`), so their diagrams point the way the figures move; the played
+card passes clockwise (`FfaRules.pass_giver`). Chaos options: wandering tiles
+(`ChaosRules`) and card effects (`FfaEffects`; a turn is step OR effect, the
+EFFEKT button of the HUD). Opened from Spielen > FINITE GRID, next to CHAOS.
+
+**Online rooms.** Up to four humans share a room (five-digit code, or a friend's
+invitation, which carries the code). `GroupClient` talks to `GroupRoom` in
+`server/online/group_room.js`, a relay like the two-player room: it seats the
+players, deals the same nine cards and one random seed to everybody, numbers the
+turns and drops repeats or turns for a foreign seat. Every client plays the whole
+rules; the host's client plays the bots and sends their turns. A player who
+leaves is replaced by a bot (`seat_left`) and the next player becomes host.
+Lobby pages: `GroupRoomPages`. Not done yet: resuming after a dropped
+connection, and the hidden king of the chaos lab.
 
 ## Interface
 
@@ -68,6 +81,8 @@ All clients run the rules themselves; servers only relay and check turn order.
   (`tools/lan_host.gd` with `LanHostServer`) or the Cloudflare Worker.
 - `server/online/worker.js`: one Durable Object per room (turn history,
   reconnects) and a lobby for quick matches.
+- `server/online/group_room.js`: rooms for up to four players (Finite Grid),
+  see "Finite Grid" above.
 - `server/online/accounts.js`: accounts, credits and owned cosmetics. Only the
   server changes them; `AccountService` displays and caches them.
 - `server/online/auth.js`: e-mail/password (PBKDF2) and Google sign-in.
@@ -80,4 +95,13 @@ All clients run the rules themselves; servers only relay and check turn order.
 
 `tests/test_runner.gd` covers rules and the match flow, `tests/lan_test.gd` the
 Wi-Fi protocol and server/game agreement (cards, shop prices),
-`tests/online_test.gd` the Worker. `tools/check_project.ps1` runs them all.
+`tests/online_test.gd` the Worker, `tests/group_online_test.gd` and
+`tests/group_battle_test.gd` the four-player rooms (both need a local
+`wrangler dev`, see the test headers). `tools/check_project.ps1` runs the tests
+that need no server.
+
+## Screen layout
+
+Settings > BILDSCHIRM switches between portrait and landscape (`ScreenLayout`).
+In landscape `HandDock` moves the card rows from the top and bottom trays into
+trays left and right of the board, so the board keeps the full height.

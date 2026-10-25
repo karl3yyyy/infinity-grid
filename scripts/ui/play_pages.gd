@@ -13,11 +13,13 @@ const DIFFICULTY_OPTIONS: Array[Dictionary] = [
 
 var menu: MainMenu
 var account: AccountService
+var groups: GroupRoomPages
 
 
 func _init(owner_menu: MainMenu, owner_account: AccountService) -> void:
 	menu = owner_menu
 	account = owner_account
+	groups = GroupRoomPages.new(owner_menu, owner_account)
 
 
 func show_play() -> void:
@@ -140,7 +142,7 @@ func show_chaos() -> void:
 				menu.chaos_options[str(variant["key"])] = randf() < 0.5
 				any_on = any_on or bool(menu.chaos_options[str(variant["key"])])
 		show_chaos())
-	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online-Chaos mit mehreren Leuten", func() -> void: show_friends_status(show_chaos))
+	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online mit bis zu 4 Leuten im Raum", func() -> void: groups.show_entry(show_chaos))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry()
 
@@ -156,17 +158,11 @@ func show_finite_grid() -> void:
 	menu._add_menu_button(menu._content, "WANDERNDE FELDER  [%s]" % ("AN" if menu.finite_tiles else "AUS"), "Felder brechen weg und kehren zurück", func() -> void:
 		menu.finite_tiles = not menu.finite_tiles
 		show_finite_grid())
-	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Alle deine Freunde ins Grid einladen", func() -> void: show_friends_status(show_finite_grid))
+	menu._add_menu_button(menu._content, "KARTENEFFEKTE  [%s]" % ("AN" if menu.finite_effects else "AUS"), "Jede Karte: Schritt ODER Effekt (Schlag, Stoß, Schild, Tausch)", func() -> void:
+		menu.finite_effects = not menu.finite_effects
+		show_finite_grid())
+	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online mit bis zu 4 Leuten: Raum-Code oder Einladung", func() -> void: groups.show_entry(show_finite_grid))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
-	menu._focus_first_entry()
-
-
-## Online rooms for more than two people need their own server work; until then this says so.
-func show_friends_status(back: Callable) -> void:
-	menu._set_page("MIT FREUNDEN", back)
-	menu._content.add_child(menu._make_text("Online-Räume für mehrere Freunde sind noch in Arbeit. Das Grid sucht noch die Kabel.", MainMenu.TEXT_FONT_SIZE))
-	menu._content.add_child(menu._make_text("Bis dahin: Finite Grid mit 4 Spielern an einem Gerät, jeder an seiner Seite.", 22, TerminalTheme.GREEN_DIM))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zurück", back)
 	menu._focus_first_entry()
 
 

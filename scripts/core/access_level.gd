@@ -21,7 +21,7 @@ const TIERS: Array[Dictionary] = [
 	{"title": "SHELL JOCKEY", "emblem": "[#]", "color": Color("ffd36e")},
 	{"title": "KERNEL HACKER", "emblem": "[*]", "color": Color("ffb347")},
 	{"title": "ROOT SEEKER", "emblem": "[@]", "color": Color("ff8a5c")},
-	{"title": "DAEMON HANDLER", "emblem": "[%]", "color": Color("e0a0ff")},
+	{"title": "ECHO HANDLER", "emblem": "[%]", "color": Color("e0a0ff")},
 	{"title": "SYSOP", "emblem": "[&]", "color": Color("ff6ad5")},
 	{"title": "SUPER USER", "emblem": "[$]", "color": Color("ffe27a")},
 	{"title": "ROOT ADMIN", "emblem": "[ROOT]", "color": Color("fff4a8")},

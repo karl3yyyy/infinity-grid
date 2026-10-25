@@ -24,13 +24,19 @@ var winner: int = RUNNING
 ## Who played the card now waiting in the middle (-1: nobody yet).
 var pass_giver: int = -1
 var tiles := ChaosRules.new()
+## Chaos card effects: a turn may use a card's effect instead of its step.
+var card_effects: bool = false
 ## What the last turn changed, for the screen: eliminated players and tile messages.
 var last_events: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
 
-func setup(shifting_tiles: bool) -> void:
-	var deck := MovementCard.draw_match_cards(PLAYERS * 2 + 1)
+## Online every client gets the same `card_names` (nine cards) and `rng_seed`, so all play the same game.
+func setup(shifting_tiles: bool, rng_seed: int = -1, card_names: Array = [], effects: bool = false) -> void:
+	card_effects = effects
+	var deck := MovementCard.cards_from_names(card_names) if card_names.size() == PLAYERS * 2 + 1 else MovementCard.draw_match_cards(PLAYERS * 2 + 1)
+	if rng_seed >= 0:
+		_rng.seed = rng_seed
 	for player: int in range(PLAYERS):
 		hands.append([deck[player * 2], deck[player * 2 + 1]])
 	pass_card = deck[PLAYERS * 2]
@@ -82,7 +88,11 @@ func cells_of(player: int) -> Array[Vector2i]:
 
 
 func can_enter(player: int, cell: Vector2i) -> bool:
-	return not tiles.is_blocked(cell) and (not pieces.has(cell) or int(pieces[cell]["owner"]) != player)
+	if tiles.is_blocked(cell):
+		return false
+	if not pieces.has(cell):
+		return true
+	return int(pieces[cell]["owner"]) != player and not tiles.protected.has(cell)
 
 
 func targets_for(player: int, origin: Vector2i, slot: int) -> Array[Vector2i]:
@@ -119,9 +129,44 @@ func apply_move(origin: Vector2i, slot: int, destination: Vector2i) -> void:
 	var piece: Dictionary = pieces[origin]
 	var captured: Dictionary = pieces.get(destination, {})
 	pieces.erase(origin)
+	tiles.protected.erase(destination)
 	pieces[destination] = piece
+	_move_protection(origin, destination)
 	if not captured.is_empty() and bool(captured["master"]) and int(captured["owner"]) >= 0:
 		_eliminate(int(captured["owner"]))
+	_exchange(slot)
+	_end_turn()
+
+
+## Uses the card in `slot` for its effect on `target` (targets: see FfaEffects).
+func apply_effect(origin: Vector2i, slot: int, target: Vector2i) -> void:
+	last_events = {"eliminated": [], "tiles": "", "captured": {}}
+	match FfaEffects.kind_of_slot(self, slot):
+		CardEffect.Kind.STRIKE:
+			var victim: Dictionary = pieces[target]
+			pieces.erase(target)
+			tiles.protected.erase(target)
+			if bool(victim["master"]) and int(victim["owner"]) >= 0:
+				_eliminate(int(victim["owner"]))
+		CardEffect.Kind.PUSH:
+			var landing := FfaEffects.push_landing(self, origin, target)
+			pieces[landing] = pieces[target]
+			pieces.erase(target)
+			_move_protection(target, landing)
+		CardEffect.Kind.SHIELD:
+			tiles.protected[origin] = current
+		CardEffect.Kind.SWAP:
+			var mine: Dictionary = pieces[origin]
+			pieces[origin] = pieces[target]
+			pieces[target] = mine
+			var shield_origin: Variant = tiles.protected.get(origin)
+			var shield_target: Variant = tiles.protected.get(target)
+			tiles.protected.erase(origin)
+			tiles.protected.erase(target)
+			if shield_origin != null:
+				tiles.protected[target] = shield_origin
+			if shield_target != null:
+				tiles.protected[origin] = shield_target
 	_exchange(slot)
 	_end_turn()
 
@@ -142,6 +187,13 @@ func _exchange(slot: int) -> void:
 	var used: MovementCard = hands[current][slot]
 	hands[current][slot] = pass_card
 	pass_card = used
+
+
+## A shield stays with its piece when it moves.
+func _move_protection(from: Vector2i, to: Vector2i) -> void:
+	if tiles.protected.has(from):
+		tiles.protected[to] = tiles.protected[from]
+		tiles.protected.erase(from)
 
 
 func _eliminate(player: int) -> void:
@@ -169,6 +221,8 @@ func _end_turn() -> void:
 			return
 		if not alive[current]:
 			current = _next_alive(current)
+	# A shield lasts until its owner's next turn begins.
+	tiles.expire_protection(current)
 	if round_number > ROUND_LIMIT:
 		winner = DRAW
 
@@ -187,6 +241,7 @@ func _shift_tiles() -> void:
 		if pieces.has(cell):
 			var piece: Dictionary = pieces[cell]
 			pieces.erase(cell)
+			tiles.protected.erase(cell)
 			if bool(piece["master"]) and int(piece["owner"]) >= 0:
 				_eliminate(int(piece["owner"]))
 	if not shift["collapsed"].is_empty():

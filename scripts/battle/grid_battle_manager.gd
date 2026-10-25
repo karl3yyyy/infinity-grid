@@ -46,6 +46,7 @@ var turns_played: int = 0
 ## Set in chaos mode (hidden king, optionally shifting tiles); null otherwise.
 var chaos: ChaosRules
 var _choosing_king: bool = false
+var tutorial: TutorialDirector
 ## Chaos card effects: true while the player aims the card's effect instead of its step.
 var _effect_mode: bool = false
 signal chaos_king_chosen
@@ -94,6 +95,7 @@ func setup(
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
 	battle_ui.bot_training_requested.connect(_start_bot_training)
+	battle_ui.tutorial_requested.connect(_start_tutorial.bind(false))
 	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
 	battle_ui.chaos_requested.connect(_start_chaos)
 	battle_ui.effect_requested.connect(_on_effect_requested)
@@ -157,9 +159,13 @@ func _show_title_menu() -> void:
 		elif mode == "chaos":
 			_start_chaos(_replay_chaos_options)
 		elif mode == "ffa":
-			battle_ui.ffa_requested.emit(int(_replay_ffa[0]), bool(_replay_ffa[1]))
+			battle_ui.ffa_requested.emit(int(_replay_ffa[0]), bool(_replay_ffa[1]), bool(_replay_ffa[2]))
 		else:
 			_start_local_multiplayer()
+		return
+	# Headless test runs drive the menu themselves.
+	if not TutorialProgress.is_done() and DisplayServer.get_name() != "headless":
+		_start_tutorial(true)
 		return
 	input_locked = true
 	player_controller.enabled = false
@@ -168,6 +174,31 @@ func _show_title_menu() -> void:
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	battle_ui.set_instruction("Wähle einen Spielmodus.")
+
+
+## Practice match with fixed cards and no Node Ping; Doc Voss guides the player.
+func _start_tutorial(mandatory: bool) -> void:
+	if battle_over:
+		return
+	_apply_match_looks(0)
+	battle_ui.main_menu.close_menu()
+	grid_manager.get_parent().visible = true
+	match_mode = "bot"
+	bot_opponent_enabled = true
+	bot_difficulty = BotAI.Difficulty.EASY
+	battle_ui.set_opponent_bot(true, BotAI.label_for(bot_difficulty))
+	var dealt := TutorialDirector.cards()
+	match_cards.assign(dealt)
+	hands[0] = [dealt[0], dealt[1]]
+	hands[1] = [dealt[2], dealt[3]]
+	pass_card = dealt[4]
+	tutorial = TutorialDirector.new()
+	tutorial.name = "TutorialDirector"
+	add_child(tutorial)
+	tutorial.setup(self, mandatory)
+	camera_controller.set_player_view(0)
+	_refresh_ui()
+	set_starter(0)
 
 
 func _start_bot_training() -> void:
@@ -186,9 +217,9 @@ func _start_bot_training() -> void:
 
 
 ## The four-player mode runs in FfaBattle; this only lets "Neue Partie" repeat it.
-func remember_ffa(humans: int, shifting_tiles: bool) -> void:
+func remember_ffa(humans: int, shifting_tiles: bool, card_effects: bool) -> void:
 	match_mode = "ffa"
-	_replay_ffa = [humans, shifting_tiles]
+	_replay_ffa = [humans, shifting_tiles, card_effects]
 
 
 func _start_chaos(options: Dictionary) -> void:
@@ -522,7 +553,11 @@ func set_starter(team: int) -> void:
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(team)
 	_refresh_ui()
+	if tutorial != null:
+		await tutorial.after_intro()
 	await battle_ui.play_card_deal()
+	if tutorial != null:
+		await tutorial.after_deal()
 	if chaos != null and chaos.hidden_king:
 		await _choose_secret_king()
 	_begin_turn(1)
@@ -763,6 +798,9 @@ func _perform_move(destination: Vector2i) -> void:
 	if captured_master or reached_temple:
 		_finish_battle(current_player)
 		return
+	if tutorial != null:
+		_refresh_ui()
+		await tutorial.after_move(current_player)
 	_advance_turn()
 
 
@@ -842,6 +880,8 @@ func _begin_turn(repetitions: int) -> void:
 	player_controller.enabled = not input_locked
 	battle_ui.ensure_cards_visible()
 	_refresh_ui()
+	if tutorial != null and not bot_turn and not must_pass:
+		tutorial.on_player_turn()
 	if bot_turn:
 		battle_ui.set_instruction("Der Bot denkt nach ...")
 		call_deferred("_run_bot_turn")
@@ -980,6 +1020,8 @@ func _choose_chaos_move() -> Dictionary:
 
 
 func _choose_bot_move() -> Dictionary:
+	if tutorial != null:
+		return tutorial.choose_bot_move()
 	var ai: BotAI = BotAIScript.new(bot_difficulty)
 	var result := ai.choose_move(build_ai_state(), 1)
 	if result.is_empty():
@@ -1045,6 +1087,8 @@ func _on_unit_died(unit: BattleUnit) -> void:
 ## winner -1 means a draw by repetition.
 func _finish_battle(winner: int) -> void:
 	battle_over = true
+	if tutorial != null:
+		tutorial.on_battle_over(winner)
 	turn_timer.stop()
 	var local_won := winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
 	# Only ranked and normal online matches count (not bot or hot-seat games).

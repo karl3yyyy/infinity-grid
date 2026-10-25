@@ -235,6 +235,12 @@ func leaderboard() -> Array:
 	return _last_response.get("players", []) if _last_error.is_empty() else []
 
 
+## Remembers on the account that the tutorial was done (all devices skip it).
+func report_tutorial_done() -> void:
+	if has_account():
+		await _call("tutorial", HTTPClient.METHOD_POST, "/tutorial", {})
+
+
 ## A finished normal online match: the server adds the Access Level XP.
 func report_online_result(won: bool) -> void:
 	if has_account():

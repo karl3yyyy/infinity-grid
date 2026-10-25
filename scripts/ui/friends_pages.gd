@@ -161,7 +161,10 @@ func _fill(list: VBoxContainer, status: Label) -> void:
 		menu._add_menu_button(list, "> %s  RAUM %s" % [who, str(invite["code"])], "Annehmen und sofort spielen", func() -> void:
 			await account.friends("dismiss", {"username": who})
 			menu.close_menu()
-			menu.online_join_requested.emit(str(invite["code"])))
+			if GroupClient.is_group_code(str(invite["code"])):
+				menu.group_join_requested.emit(str(invite["code"]))
+			else:
+				menu.online_join_requested.emit(str(invite["code"])))
 	var incoming: Array = overview.get("incoming", [])
 	if not incoming.is_empty():
 		_heading(list, "ANFRAGEN")

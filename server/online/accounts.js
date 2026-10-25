@@ -107,7 +107,7 @@ export async function handleAccountApi(request, env, url) {
     }
   }
   const op = action === "" ? (request.method === "POST" ? "create" : "get") : action;
-  if (!["create", "get", "profile", "buy", "reward", "online", "checkout", "username"].includes(op)) {
+  if (!["create", "get", "profile", "buy", "reward", "online", "checkout", "username", "tutorial"].includes(op)) {
     return json({ error: "not_found" }, 404);
   }
   // Accounts are stored under a hash of the code, so the payment provider only
@@ -243,6 +243,9 @@ export class Account {
       // Profile picture id from the game's avatar gallery ("symbol:code", "character:nova").
       const avatar = String(body.avatar || "");
       data.avatar = /^[a-z]+:[a-z_]{1,24}$/.test(avatar) ? avatar : "symbol:code";
+    } else if (op === "tutorial") {
+      // Set by the game after the intro; the account then skips it on every device.
+      data.tutorialDone = true;
     } else if (op === "buy") {
       const item = String(body.item || "");
       const price = PRICES[item];
@@ -297,7 +300,7 @@ export class Account {
 function view(data) {
   const ranked = publicView(data);
   return {
-    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES, xp: data.xp || 0, cycle: cycleView(data),
+    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES, xp: data.xp || 0, tutorial_done: data.tutorialDone === true, cycle: cycleView(data),
     username: ranked.username, rating: ranked.rating, games: ranked.games, rank: ranked.rank, wins: ranked.wins, losses: ranked.losses,
   };
 }

@@ -22,7 +22,8 @@
 // credit packs paid through Stripe Checkout in payments.js (/api/stripe/webhook);
 // signing in with e-mail or Google in auth.js (/api/auth, /auth/google);
 // friends in friends.js (/api/friends); ranked queue, rating and leaderboard in
-// ranked.js (/api/ranked, /play?mode=ranked). Ranked rooms referee every move
+// ranked.js (/api/ranked, /play?mode=ranked). Rooms for up to four players
+// (Finite Grid) are in group_room.js (/play?mode=group_create|group_join|group_resume). Ranked rooms referee every move
 // with rules.js and settle the result themselves.
 
 import { handleAccountApi } from "./accounts.js";
@@ -35,11 +36,15 @@ import { chargeMove, clockDeadline, clockView, startClock } from "./clock.js";
 export { Login } from "./auth.js";
 export { RankedLobby } from "./ranked.js";
 export { Account } from "./accounts.js";
+import { GroupRoom, newGroupCode } from "./group_room.js";
+export { GroupRoom };
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
 const CARD_NAMES = [
   "Crane", "Wave", "Comet", "Shell", "Vortex", "Nova", "Tide", "Orbit", "Rift", "Halo",
   "Ember", "Drift", "Zephyr", "Eclipse", "Prism", "Pulse", "Echo", "Serpent", "Viper",
+  "Lance", "Spark", "Anchor", "Glide", "Knight", "Mirage", "Bastion", "Gale", "Spire", "Phantom", "Flare",
+  "Chaos", "Pinwheel", "Quasar", "Jester", "Hydra", "Nebula",
 ];
 
 // Static assets are limited to 25 MiB per file, so the engine's index.wasm and
@@ -110,6 +115,9 @@ export default {
     }
     if (mode === "ranked") {
       return env.RANKED.get(env.RANKED.idFromName("ranked")).fetch(request);
+    }
+    if (mode === "group_create" || mode === "group_join" || mode === "group_resume") {
+      return routeGroup(request, env, url, mode, code);
     }
     if (mode === "create") {
       code = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
@@ -570,6 +578,18 @@ export class Lobby {
   webSocketClose() {}
 }
 
+// Rooms for three or four players have five-digit codes (two-player rooms have four).
+function routeGroup(request, env, url, mode, code) {
+  if (mode === "group_create") {
+    code = newGroupCode();
+  } else if (!/^\d{5}$/.test(code)) {
+    return rejectSocket("not_found");
+  }
+  const forwarded = new URL(request.url);
+  forwarded.searchParams.set("code", code);
+  return env.GROUPS.get(env.GROUPS.idFromName(code)).fetch(new Request(forwarded, request));
+}
+
 async function serveSplitFile(request, env, file) {
   const parts = await Promise.all(
     file.parts.map((path) => env.ASSETS.fetch(new Request(new URL(path, request.url))))
@@ -592,7 +612,7 @@ async function serveSplitFile(request, env, file) {
   return new Response(readable, { headers });
 }
 
-function drawCards(count) {
+export function drawCards(count) {
   const deck = [...CARD_NAMES];
   for (let index = deck.length - 1; index > 0; index--) {
     const other = Math.floor(Math.random() * (index + 1));
@@ -602,7 +622,7 @@ function drawCards(count) {
 }
 
 // Lowercase letters and digits; also used for quick-match room codes.
-function newToken() {
+export function newToken() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
@@ -610,14 +630,14 @@ function newToken() {
 
 // The client closes the socket after reading the reason; closing right away
 // can drop the message before the handshake has settled on the client.
-function rejectSocket(reason) {
+export function rejectSocket(reason) {
   const [client, server] = Object.values(new WebSocketPair());
   server.accept();
   send(server, { type: "error", reason });
   return new Response(null, { status: 101, webSocket: client });
 }
 
-function send(socket, message) {
+export function send(socket, message) {
   try {
     socket.send(JSON.stringify(message));
   } catch {

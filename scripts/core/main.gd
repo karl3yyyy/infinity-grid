@@ -25,6 +25,7 @@ func _ready() -> void:
 		timer.autostart = true
 		timer.timeout.connect(_check_for_web_update)
 		add_child(timer)
+	ScreenLayout.apply_to_window()
 	var sound := SoundBoard.new()
 	sound.name = "SoundBoard"
 	add_child(sound)
@@ -79,6 +80,8 @@ func _ready() -> void:
 	add_child(ffa_battle)
 	ffa_battle.setup(battle_ui, camera_controller, player_controller, unit_movement, battle_manager)
 	battle_ui.ffa_requested.connect(ffa_battle.start)
+	battle_ui.group_create_requested.connect(ffa_battle.create_room)
+	battle_ui.group_join_requested.connect(ffa_battle.join_room)
 
 
 func _check_for_web_update() -> void:

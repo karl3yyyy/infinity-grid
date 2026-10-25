@@ -1,7 +1,7 @@
 # Infinity Grid
 
 A turn-based card strategy game on an endless board, built with Godot 4.
-Two players each command a **KERN** and four **Schüler** (students) on a 5×5
+Two players each command a **KERN** and four **ECHOS** (the side pieces) on a 5×5
 grid whose left and right edges wrap around. Movement cards decide where a
 piece may go; capture the opposing KERN to win.
 
@@ -18,11 +18,11 @@ The interface language is German.
   19 movement cards with five drawn per match, card exchange through a shared
   pass card, a pass when no move is possible, and a draw on threefold repetition.
 - **Opponents:** a local bot (easy, medium, hard), two players on one device,
-  Wi-Fi play hosted by a PC, online play by room code, and a quick online match
+  Wi-Fi play hosted by a PC, online play by room code (up to four friends in a Finite Grid room, also by invitation), and a quick online match
   against a random opponent with automatic reconnect.
 - **Characters:** 12 collectible characters with four fighting styles
   (mage, brawler, gunner, sorcerer), each with its own capture animation and two
-  extra skins. Students appear as "echoes" of your character.
+  extra skins. The ECHOS are copies of your character the Grid made.
 - **Board skins:** circuit board, code rain, lava, synthwave, gold and starfield
   patterns for your half of the board.
 - **Accounts:** play as a guest, then sign in with e-mail and password or

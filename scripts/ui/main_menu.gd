@@ -5,9 +5,10 @@ extends Control
 ## selection bar, driven by arrow keys, mouse or touch.
 
 signal bot_training_requested
+signal tutorial_requested
 signal local_multiplayer_requested
 signal chaos_requested(options: Dictionary)
-signal ffa_requested(humans: int, shifting_tiles: bool)
+signal ffa_requested(humans: int, shifting_tiles: bool, card_effects: bool)
 signal lan_match_requested
 ## invite_username: "" for a plain room code, else a friend to invite.
 signal online_create_requested(invite_username: String)
@@ -16,6 +17,10 @@ signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal quit_requested
+signal screen_layout_changed
+## Room for up to four players (Finite Grid online): open one or join by code.
+signal group_create_requested(settings: Dictionary, max_players: int)
+signal group_join_requested(code: String)
 ## A short message for the player, shown over whatever is on screen.
 signal toast_requested(text: String)
 
@@ -33,6 +38,9 @@ var bot_difficulty: int = 1
 ## Chaos Lab: the variants switched on for the next chaos match.
 ## Finite Grid (four players): whether tiles collapse.
 var finite_tiles: bool = false
+var finite_effects: bool = false
+## Most humans in a room opened by this player.
+var group_max: int = 4
 var chaos_options: Dictionary = {"hidden_king": true, "shifting_tiles": false, "card_effects": false}
 ## The block holding the current page's entries and texts.
 var _panel: PanelContainer
@@ -69,6 +77,7 @@ func _ready() -> void:
 	_friends = FriendsPages.new(self, account)
 	_emotes = EmoteLoadoutPages.new(self)
 	account.changed.connect(_update_profile_button)
+	account.changed.connect(func() -> void: TutorialProgress.sync_with_account(account))
 	# Headless test runs must not open accounts on the live server.
 	var is_test_run := DisplayServer.get_name() == "headless" and OS.get_environment("INFINITY_GRID_ONLINE").is_empty()
 	if MatchClient.is_online_available() and not is_test_run:
@@ -261,7 +270,7 @@ func _build_footer() -> Control:
 	var barcode := TerminalDecor.Barcode.new()
 	barcode.size_flags_horizontal = Control.SIZE_SHRINK_END
 	right.add_child(barcode)
-	var grid_label := _make_text("5×5 · ∞ · 19 KARTEN", 18)
+	var grid_label := _make_text("5×5 · ∞ · 36 KARTEN", 18)
 	grid_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	right.add_child(grid_label)
 	footer.add_child(right)
@@ -301,6 +310,14 @@ func _show_settings() -> void:
 	_add_menu_button(_content, "FIGUREN: %s" % str(FigureFacing.NAMES[facing]), "%s Wirkt ab dem nächsten Spiel." % str(FigureFacing.HINTS[facing]), func() -> void:
 		FigureFacing.next_mode()
 		_show_settings())
+	var layout := ScreenLayout.mode()
+	_add_menu_button(_content, "BILDSCHIRM: %s" % str(ScreenLayout.NAMES[layout]), "%s Zum Ausprobieren." % str(ScreenLayout.HINTS[layout]), func() -> void:
+		ScreenLayout.next_mode()
+		screen_layout_changed.emit()
+		_show_settings())
+	_add_menu_button(_content, "TUTORIAL", "Doc Voss erklärt das Grid noch einmal", func() -> void:
+		close_menu()
+		tutorial_requested.emit())
 	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
 	_focus_first_entry()
 
@@ -354,7 +371,7 @@ func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
 	var look := CharacterRoster.load_look()
 	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
-	_add_menu_button(_content, "DAEMONEN", "Deine Daemonen: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
+	_add_menu_button(_content, "ECHOS", "Deine Echos: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "KARTENSKINS", "Deine Karten: %s" % CardSkins.skin(look["cards"])["name"], _show_card_skin_picker)
 	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
@@ -389,10 +406,10 @@ func _show_character_picker(start_id: String = "") -> void:
 
 
 func _show_echo_picker() -> void:
-	_set_page("DAEMONEN", _show_collection)
+	_set_page("ECHOS", _show_collection)
 	var look := CharacterRoster.load_look()
 	var master := CharacterRoster.character(look["character"])
-	_content.add_child(_make_text("Deine vier Daemonen sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
+	_content.add_child(_make_text("Deine vier Echos sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid("echo", CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
 		func(entry: Dictionary) -> Texture2D:
 			return _fighter_preview(CharacterRoster.echo_look(entry["id"], master, GridBattleUI.TEAM_COLORS[0]), GridBattleUI.TEAM_COLORS[0], 0.75 if entry["id"] == "echo" else 0.0),
@@ -518,9 +535,14 @@ func _start_bot_training() -> void:
 	bot_training_requested.emit()
 
 
+## The lobby of a room for up to four players.
+func show_group_lobby(client: GroupClient) -> void:
+	_play.groups.show_lobby(client)
+
+
 func _start_ffa(humans: int) -> void:
 	close_menu()
-	ffa_requested.emit(humans, finite_tiles)
+	ffa_requested.emit(humans, finite_tiles, finite_effects)
 
 
 func _start_chaos() -> void:

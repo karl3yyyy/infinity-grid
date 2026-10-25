@@ -6,8 +6,8 @@ extends RefCounted
 ## anything.
 
 ## The side pieces next to the KERN: copies the Grid made, background processes.
-const SIDE_PIECE: String = "DAEMON"
-const SIDE_PIECES: String = "DAEMONEN"
+const SIDE_PIECE: String = "ECHO"
+const SIDE_PIECES: String = "ECHOS"
 
 const FINITE_LORE: String = "FEHLER 0xF1N1T3: Das Grid hat plötzlich Ränder. Vier Prozesse wachen in einem endlichen Quadrat auf, ohne Weg hinaus. Der Speicher reicht für genau einen KERN. Das System meldet: Problem gelöst, sobald nur noch einer läuft."
 
@@ -19,7 +19,7 @@ const FINITE_START_LINES: Array[String] = [
 
 const FINITE_OUT_LINES: Array[String] = [
 	"wurde aus dem endlichen Grid gelöscht. Speicher wieder frei.",
-	"ist abgestürzt. Seine Daemonen laufen als Geister weiter.",
+	"ist abgestürzt. Seine Echos laufen als Geister weiter.",
 ]
 
 const MENU_TAGLINES: Array[String] = [

@@ -85,6 +85,10 @@ between two browsers; `server/online/worker.js` (Cloudflare Worker) relays
 moves for rooms joined by code. Both speak one protocol (`scripts/network/`)
 and stay relays; every client runs the rules itself.
 
+Approved: online rooms for up to four players (Finite Grid) by five-digit
+code or friend invitation (`server/online/group_room.js`, `scripts/network/group_client.gd`).
+A relay like the two-player room; every client runs the rules itself.
+
 Approved backend milestone: player accounts and a cosmetics shop paid with
 in-game credits. `server/online/accounts.js` (one Durable Object per account,
 opened with an account code, no passwords or e-mail) alone decides credits and

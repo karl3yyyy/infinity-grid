@@ -67,7 +67,7 @@ export async function handleFriendsApi(request, env, url) {
   } else if (action === "invite") {
     if (!mine.friends.includes(other)) return json({ error: "not_friends" }, 403);
     const room = String(body.code || "");
-    if (!/^\d{4}$/.test(room)) return json({ error: "bad_code" }, 400);
+    if (!/^\d{4,5}$/.test(room)) return json({ error: "bad_code" }, 400);
     await social(env, other, { action: "invite", key: me, code: room });
   } else if (action === "dismiss") {
     await social(env, me, { action: "uninvite", key: other });

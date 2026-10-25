@@ -102,6 +102,5 @@ that need no server.
 
 ## Screen layout
 
-Settings > BILDSCHIRM switches between portrait and landscape (`ScreenLayout`).
-In landscape `HandDock` moves the card rows from the top and bottom trays into
-trays left and right of the board, so the board keeps the full height.
+On the Finite Grid pages BILDSCHIRM chooses how the phone is held (`ScreenLayout`):
+landscape only turns the screen for Finite Grid matches, the HUD stays the same.

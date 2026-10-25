@@ -7,6 +7,7 @@ enum Highlight {
 	SELECTED,
 	MOVE,
 	ATTACK,
+	WIN,
 	OCCUPIED,
 	WARNING,
 	COLLAPSED,
@@ -25,4 +26,3 @@ var material: StandardMaterial3D = null
 func _init(cell_coordinate: Vector2i, cell_world_position: Vector3) -> void:
 	coordinate = cell_coordinate
 	world_position = cell_world_position
-

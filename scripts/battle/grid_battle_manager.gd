@@ -58,6 +58,8 @@ static var _replay_chaos_options: Dictionary = {}
 static var _replay_ffa: Array = []
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
+## Read-only snapshots after each move/pass/effect, including the card exchange.
+var match_history: Array[Dictionary] = []
 ## Look per team: {"character", "echo", "board"} (see CharacterRoster).
 var team_looks: Array[Dictionary] = [{}, {}]
 ## Normal online games: seconds per move, and how many in a row may run out.
@@ -94,6 +96,7 @@ func setup(
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
+	battle_ui.history_requested.connect(_show_match_history)
 	battle_ui.bot_training_requested.connect(_start_bot_training)
 	battle_ui.tutorial_requested.connect(_start_tutorial.bind(false))
 	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
@@ -327,6 +330,8 @@ func _on_effect_requested() -> void:
 		battle_ui.set_instruction("Wähle zuerst die Figur, die den Effekt auslöst.")
 	elif movement_targets.is_empty():
 		battle_ui.set_instruction("Kein Ziel für diesen Effekt. Schritt oder andere Figur wählen.")
+	elif battle_ui.has_capture_warning():
+		battle_ui.set_instruction("KERN-ALARM: Dieser Effekt kann den gegnerischen KERN schlagen.")
 	else:
 		battle_ui.set_instruction(str(CardEffect.HINTS[CardEffect.kind_of(card)]))
 
@@ -377,7 +382,13 @@ func _perform_effect(target: Vector2i) -> void:
 			grid_manager.set_occupant(target, caster)
 			await _swap_units(caster, other)
 	_effect_mode = false
+	var received_card := pass_card.card_name
 	_exchange_card(selected_card_slot)
+	_record_match_history({
+		"type": "effect", "team": current_player, "from": origin, "to": target,
+		"played_card": card.card_name, "received_card": received_card,
+		"effect": CardEffect.button_text(kind), "master_capture": king_hit,
+	})
 	_deselect_unit()
 	if king_hit:
 		_finish_battle(current_player)
@@ -415,7 +426,13 @@ func _is_blocked(coordinate: Vector2i) -> bool:
 func _shift_tiles() -> Dictionary:
 	var board_size := grid_manager.grid_size
 	var rng := RandomNumberGenerator.new()
-	var shift := chaos.advance_round(round_number, board_size, rng)
+	var occupied: Dictionary = {}
+	for y: int in range(board_size.y):
+		for x: int in range(board_size.x):
+			var cell := Vector2i(x, y)
+			if grid_manager.get_unit_at(cell) != null:
+				occupied[cell] = true
+	var shift := chaos.advance_round(round_number, board_size, rng, occupied)
 	var lost_kings: Array[int] = []
 	for cell: Vector2i in shift["restored"]:
 		grid_manager.set_tile_state(cell, 0)
@@ -560,6 +577,8 @@ func set_starter(team: int) -> void:
 		await tutorial.after_deal()
 	if chaos != null and chaos.hidden_king:
 		await _choose_secret_king()
+	match_history.clear()
+	_record_match_history({"type": "start", "team": team})
 	_begin_turn(1)
 
 
@@ -703,7 +722,7 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 	elif movement_targets.is_empty():
 		battle_ui.set_instruction("Mit dieser Karte kann die Figur nicht ziehen.")
 	else:
-		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Die goldene Kante ist der Übergang.")
+		_set_target_instruction("Tippe auf ein leuchtendes Feld. Die goldene Kante ist der Übergang.")
 
 
 func _on_cell_clicked(coordinate: Vector2i) -> void:
@@ -745,24 +764,54 @@ func _select_unit(unit: BattleUnit) -> void:
 	elif movement_targets.is_empty():
 		battle_ui.set_instruction("Diese Figur hat mit der Karte kein Zielfeld.")
 	else:
-		battle_ui.set_instruction("Tippe auf ein leuchtendes Feld. Wer den KERN schlägt, gewinnt.")
+		_set_target_instruction("Tippe auf ein leuchtendes Feld. Wer den KERN schlägt, gewinnt.")
 
 
 func _refresh_targets() -> void:
 	movement_targets.clear()
 	if selected_unit == null or selected_card_slot < 0:
 		grid_manager.clear_highlights()
+		battle_ui.set_capture_warning(false)
 		return
 	var card: MovementCard = hands[current_player][selected_card_slot]
 	if _effect_mode:
 		movement_targets = _effect_targets(card)
-		grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player)
+		var effect_wins := _master_capture_targets(movement_targets)
+		grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player, effect_wins)
+		battle_ui.set_capture_warning(not effect_wins.is_empty())
 		return
 	for coordinate: Vector2i in card.destinations(selected_unit.grid_position, current_player, grid_manager.grid_size.x):
 		var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
 		if (occupant == null or occupant.team_id != current_player) and not _is_blocked(coordinate) and not _is_protected(coordinate, occupant):
 			movement_targets.append(coordinate)
-	grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player)
+	var winning_targets := _master_capture_targets(movement_targets)
+	grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player, winning_targets)
+	battle_ui.set_capture_warning(not winning_targets.is_empty())
+
+
+func _master_capture_targets(coordinates: Array[Vector2i]) -> Array[Vector2i]:
+	var winning: Array[Vector2i] = []
+	for coordinate: Vector2i in coordinates:
+		var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
+		var captures_master := occupant != null and occupant.team_id != current_player and (
+			occupant.is_master or (chaos != null and chaos.hidden_king and chaos.is_king_at(occupant.team_id, coordinate))
+		)
+		var reaches_temple := (chaos == null or not chaos.hidden_king) and coordinate == temple_of(1 - current_player)
+		var strikes_hidden_king := (
+			_effect_mode and _effects_on()
+			and CardEffect.kind_of(hands[current_player][selected_card_slot]) == CardEffect.Kind.STRIKE
+			and occupant != null and chaos.is_king_at(occupant.team_id, coordinate)
+		)
+		if captures_master or reaches_temple or strikes_hidden_king:
+			winning.append(coordinate)
+	return winning
+
+
+func _set_target_instruction(fallback: String) -> void:
+	if battle_ui.has_capture_warning():
+		battle_ui.set_instruction("KERN-ALARM: Ein möglicher Gewinnzug leuchtet gold.")
+	else:
+		battle_ui.set_instruction(fallback)
 
 
 func _perform_move(destination: Vector2i) -> void:
@@ -793,7 +842,15 @@ func _perform_move(destination: Vector2i) -> void:
 		if captured_unit != null:
 			MatchStats.add("nodes_claimed")
 			MatchStats.add_card("card_captures", played.card_name)
+	var received_card := pass_card.card_name
+	var played_card: MovementCard = hands[current_player][selected_card_slot]
 	_exchange_card(selected_card_slot)
+	_record_match_history({
+		"type": "move", "team": current_player, "from": source, "to": destination,
+		"played_card": played_card.card_name, "received_card": received_card,
+		"captured": ("KERN" if captured_master else "ECHO") if captured_unit != null else "",
+		"master_capture": captured_master, "temple_win": reached_temple,
+	})
 	_deselect_unit()
 	if captured_master or reached_temple:
 		_finish_battle(current_player)
@@ -827,7 +884,13 @@ func _pass_turn(slot: int) -> void:
 	input_locked = true
 	player_controller.enabled = false
 	_deselect_unit()
+	var received_card := pass_card.card_name
+	var played_card: MovementCard = hands[current_player][slot]
 	_exchange_card(slot)
+	_record_match_history({
+		"type": "pass", "team": current_player, "played_card": played_card.card_name,
+		"received_card": received_card,
+	})
 	_advance_turn()
 
 
@@ -850,9 +913,11 @@ func _advance_turn() -> void:
 			tile_notice = str(shift["message"])
 			if int(shift["winner"]) != -2:
 				selected_card_slot = -1
+				_refresh_latest_match_snapshot()
 				_refresh_ui()
 				_finish_battle(int(shift["winner"]))
 				return
+	_refresh_latest_match_snapshot()
 	selected_card_slot = -1
 	var repetitions := _record_position()
 	if repetitions >= DRAW_REPETITIONS:
@@ -870,6 +935,7 @@ func _begin_turn(repetitions: int) -> void:
 	if network_team < 0 and not bot_opponent_enabled:
 		apply_figure_facing()
 	must_pass = not _has_legal_move(current_player)
+	_refresh_core_threat_warning()
 	var bot_turn := bot_opponent_enabled and current_player == 1
 	var remote_turn := network_team >= 0 and current_player != network_team
 	if network_team >= 0 and not remote_turn and not network_match.ranked and not battle_over:
@@ -896,6 +962,35 @@ func _begin_turn(repetitions: int) -> void:
 		battle_ui.set_instruction("Wähle eine Karte und eine Figur.")
 	else:
 		battle_ui.set_instruction("Spieler %d: Wähle eine Karte und eine Figur." % (current_player + 1))
+
+
+func _refresh_core_threat_warning() -> void:
+	var standard_match := match_mode in ["bot", "local", "network"]
+	var ranked_match := match_mode == "network" and network_match != null and network_match.ranked
+	var threatened := (
+		standard_match and not ranked_match and not battle_over and not pinging
+		and _has_master_capture_next_turn(_viewer_team())
+	)
+	battle_ui.set_core_threat_warning(threatened)
+
+
+func _has_master_capture_next_turn(defending_team: int) -> bool:
+	var defending_master := _find_master(players if defending_team == 0 else enemies)
+	if defending_master == null:
+		return false
+	var attacking_team := 1 - defending_team
+	var attackers: Array[BattleUnit] = enemies if attacking_team == 1 else players
+	for unit: BattleUnit in attackers:
+		if unit.is_dead:
+			continue
+		for card: MovementCard in hands[attacking_team]:
+			for destination: Vector2i in card.destinations(unit.grid_position, attacking_team, grid_manager.grid_size.x):
+				if destination != defending_master.grid_position:
+					continue
+				var occupant := grid_manager.get_unit_at(destination) as BattleUnit
+				if occupant == defending_master and not _is_blocked(destination) and not _is_protected(destination, occupant):
+					return true
+	return false
 
 
 ## The clock ran out in a normal online game: the grid plays a loose move for
@@ -1078,6 +1173,62 @@ func _deselect_unit() -> void:
 	selected_unit = null
 	movement_targets.clear()
 	grid_manager.clear_highlights()
+	battle_ui.set_capture_warning(false)
+
+
+func _record_match_history(action: Dictionary) -> void:
+	var pieces: Array[Dictionary] = []
+	for unit: BattleUnit in players + enemies:
+		if unit.is_dead:
+			continue
+		pieces.append({"team": unit.team_id, "master": unit.is_master, "cell": unit.grid_position})
+	var hand_names: Array = []
+	for team: int in range(2):
+		var team_hand: Array[String] = []
+		for card: MovementCard in hands[team]:
+			team_hand.append(card.card_name)
+		hand_names.append(team_hand)
+	var tiles := PackedInt32Array()
+	for row: int in range(grid_manager.grid_size.y):
+		for column: int in range(grid_manager.grid_size.x):
+			var cell: GridCell = grid_manager.cells[Vector2i(column, row)]
+			tiles.append(cell.tile_state)
+	match_history.append({
+		"action": action.duplicate(true),
+		"pieces": pieces,
+		"hands": hand_names,
+		"pass_card": pass_card.card_name,
+		"tiles": tiles,
+		"round": round_number,
+		"side_to_move": current_player if str(action.get("type", "")) == "start" else 1 - current_player,
+	})
+	battle_ui.set_match_history(match_history)
+
+
+func _refresh_latest_match_snapshot() -> void:
+	if match_history.is_empty():
+		return
+	var latest: Dictionary = match_history.back()
+	var pieces: Array[Dictionary] = []
+	for unit: BattleUnit in players + enemies:
+		if unit.is_dead:
+			continue
+		pieces.append({"team": unit.team_id, "master": unit.is_master, "cell": unit.grid_position})
+	var tiles := PackedInt32Array()
+	for row: int in range(grid_manager.grid_size.y):
+		for column: int in range(grid_manager.grid_size.x):
+			var cell: GridCell = grid_manager.cells[Vector2i(column, row)]
+			tiles.append(cell.tile_state)
+	latest["pieces"] = pieces
+	latest["tiles"] = tiles
+	latest["round"] = round_number
+	latest["side_to_move"] = current_player
+	match_history[match_history.size() - 1] = latest
+	battle_ui.set_match_history(match_history)
+
+
+func _show_match_history() -> void:
+	battle_ui.show_match_history(match_history)
 
 
 func _on_unit_died(unit: BattleUnit) -> void:
@@ -1087,6 +1238,7 @@ func _on_unit_died(unit: BattleUnit) -> void:
 ## winner -1 means a draw by repetition.
 func _finish_battle(winner: int) -> void:
 	battle_over = true
+	battle_ui.set_core_threat_warning(false)
 	if tutorial != null:
 		tutorial.on_battle_over(winner)
 	turn_timer.stop()

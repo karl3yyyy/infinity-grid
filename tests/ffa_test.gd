@@ -15,6 +15,8 @@ func _run_tests() -> void:
 	_test_rules()
 	_test_self_play()
 	_test_effects()
+	_test_revive()
+	_test_core_rules()
 	await _test_screen()
 	if failures.is_empty():
 		print("FFA TESTS PASSED")
@@ -53,10 +55,14 @@ func _test_rules() -> void:
 	rules.hands[0][0] = MovementCard.new("Back", [Vector2i(-1, 0)] as Array[Vector2i])
 	var pass_before := rules.pass_card
 	rules.apply_move(master_cell + Vector2i(1, 0), 0, master_cell)
-	_expect(not rules.alive[1] and rules.alive.count(true) == 3, "Capturing a Master eliminates that player")
-	_expect(rules.pieces[FfaRules.start_cell(1, 0)]["owner"] == FfaRules.NEUTRAL, "Their students stay as neutral ruins")
+	_expect(rules.alive[1] and rules.alive.count(true) == 4 and (rules.last_events["core_lost"] as Array) == [1], "Capturing a Master does not eliminate that player")
+	_expect(rules.pieces[FfaRules.start_cell(1, 0)]["owner"] == 1 and not bool(rules.pieces[FfaRules.start_cell(1, 2)]["master"]) if rules.pieces.has(FfaRules.start_cell(1, 2)) else true, "Their echoes stay theirs")
 	_expect(rules.hands[0][0] == pass_before, "The used card is exchanged with the pass card")
-	_expect(rules.current == 2, "Eliminated players are skipped")
+	_expect(rules.current == 1, "The player without a core still plays")
+	rules.alive[1] = false
+	rules.current = 0
+	_expect(rules.next_after(0) == 2, "Eliminated players are skipped")
+	rules.current = 2
 	rules.pass_turn(0)
 	_expect(rules.pass_giver == 2, "The pass card remembers who gave it")
 	var chain := FfaRules.new()
@@ -68,8 +74,6 @@ func _test_rules() -> void:
 	last.alive = [true, false, false, false]
 	last._check_winner()
 	_expect(last.winner == 0, "The last Master standing wins")
-
-
 func _test_self_play() -> void:
 	for shifting: bool in [false, true]:
 		for game: int in range(4):
@@ -107,9 +111,9 @@ func _test_screen() -> void:
 	var camera := main.get_node("CameraController") as CameraController
 	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
 	var deadline := Time.get_ticks_msec() + 20000
-	while battle._busy and Time.get_ticks_msec() < deadline:
+	while (battle._busy or not battle._is_local(battle.rules.current)) and Time.get_ticks_msec() < deadline:
 		await process_frame
-	_expect(not battle._busy and battle.rules.current == 0, "You move first and may act once the cards are dealt")
+	_expect(not battle._busy and battle._is_local(battle.rules.current), "The Node Ping names a starter and you may act once it is your turn")
 	var origin := FfaRules.start_cell(0, 2)
 	battle._on_cell_clicked(origin)
 	battle._on_card_selected(0, 0)
@@ -156,7 +160,7 @@ func _test_effects() -> void:
 	var kill := _effect_rules("Crane", Vector2i(4, 3))
 	kill.pieces[Vector2i(4, 3)]["master"] = true
 	kill.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
-	_expect(not kill.alive[1], "Striking a Master knocks the player out")
+	_expect(kill.alive[1] and (kill.last_events["core_lost"] as Array) == [1], "Losing the core does not knock the player out")
 
 	var push := _effect_rules("Wave")
 	_expect(_only(FfaEffects.targets(push, Vector2i(4, 4), 0), Vector2i(4, 3)), "Push aims at the adjacent enemy")
@@ -180,3 +184,62 @@ func _test_effects() -> void:
 	var swap := _effect_rules("Vortex")
 	swap.apply_effect(Vector2i(4, 4), 0, Vector2i(0, 8))
 	_expect(bool(swap.pieces[Vector2i(4, 4)]["master"]) and not bool(swap.pieces[Vector2i(0, 8)]["master"]), "Swap trades two own pieces")
+
+
+func _test_revive() -> void:
+	var kill := _effect_rules("Crane")
+	kill.pieces[Vector2i(4, 3)]["master"] = true
+	kill.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(kill.cells_of(0).size() == 3 and kill.pieces.has(FfaRules.start_cell(0, 2)) and not bool(kill.pieces[FfaRules.start_cell(0, 2)]["master"]), "Taking a core gives a taker who has a core an echo back on the home line")
+	_expect((kill.last_events["revived"] as Array).size() == 1, "The revived piece is reported for the screen")
+	var echo := _effect_rules("Crane")
+	echo.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(echo.cells_of(0).size() == 2 and (echo.last_events["revived"] as Array).is_empty(), "Taking an echo gives nothing back")
+	var full := FfaRules.new()
+	full.setup(false)
+	full.pieces[Vector2i(4, 4)] = {"owner": 0, "master": false}
+	full.pieces[Vector2i(4, 3)] = {"owner": 1, "master": true}
+	full.pieces.erase(FfaRules.start_cell(0, 0))
+	full.hands[0][0] = MovementCard.cards_from_names(["Crane"])[0]
+	full.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(full.cells_of(0).size() == 5, "Nobody gets more than five pieces")
+
+
+func _test_core_rules() -> void:
+	# A player without a core gets it back by taking one.
+	var rules := _effect_rules("Crane")
+	rules.pieces.erase(Vector2i(0, 8))
+	rules.pieces[Vector2i(4, 3)]["master"] = true
+	rules.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	var home := FfaRules.start_cell(0, 2)
+	_expect(rules.pieces.has(home) and bool(rules.pieces[home]["master"]), "Taking a core returns your own core")
+	_expect((rules.last_events["revived"] as Array)[0]["master"] == true, "The screen is told it is the core")
+	# Without any piece left a player is out.
+	var last := _effect_rules("Crane")
+	last.pieces.erase(Vector2i(0, 0))
+	last.pieces[Vector2i(4, 3)]["master"] = true
+	last.apply_effect(Vector2i(4, 4), 0, Vector2i(4, 3))
+	_expect(not last.alive[1] and last.alive[0], "A player without any piece is out")
+	# The deck: no two turns reach an enemy Master from the start position.
+	var cards := FfaDeck.safe_cards()
+	_expect(cards.size() >= 18, "Enough cards remain for Finite Grid (%d)" % cards.size())
+	var reachable := false
+	for attacker: int in range(FfaRules.PLAYERS):
+		for index: int in range(FfaRules.PIECES_PER_PLAYER):
+			var from := FfaRules.start_cell(attacker, index)
+			for defender: int in range(FfaRules.PLAYERS):
+				if defender == attacker:
+					continue
+				var target := FfaRules.start_cell(defender, 2)
+				for first: MovementCard in cards:
+					for second: MovementCard in cards:
+						for a: Vector2i in first.offsets:
+							for b: Vector2i in second.offsets:
+								if from + FfaRules.step_for(a, attacker) + FfaRules.step_for(b, attacker) == target:
+									reachable = true
+							# A step plus one effect step next to the target.
+							for direction: Vector2i in FfaEffects.DIRECTIONS:
+								if from + FfaRules.step_for(a, attacker) + direction == target:
+									reachable = true
+	_expect(not reachable, "No enemy core can be taken within two turns")
+	_expect(cards.all(func(card: MovementCard) -> bool: return card.card_name != "Chaos" and card.card_name != "Rift"), "The strongest cards are not in Finite Grid")

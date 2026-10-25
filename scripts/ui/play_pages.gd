@@ -151,7 +151,7 @@ func show_chaos() -> void:
 func show_finite_grid() -> void:
 	menu._set_page("FINITE GRID", show_play)
 	menu._content.add_child(menu._make_text(GridLore.FINITE_LORE, 22, TerminalTheme.GREEN_DIM))
-	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 Karten. Die gespielte Karte wandert im Uhrzeigersinn weiter. Wer seinen KERN verliert, scheidet aus.", 22, TerminalTheme.GREEN_DIM))
+	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 Karten. Die gespielte Karte wandert im Uhrzeigersinn weiter. Verlierst du deinen KERN, kämpfst du mit den Echos weiter. Schlägst du den KERN eines anderen, bekommst du deinen KERN zurück (sonst einen verlorenen Echo). Raus ist, wer keine Figur mehr hat.", 22, TerminalTheme.GREEN_DIM))
 	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer bleibt übrig", func() -> void: menu._start_ffa(1))
 	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten", func() -> void: menu._start_ffa(2))
 	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite", func() -> void: menu._start_ffa(4))
@@ -160,6 +160,10 @@ func show_finite_grid() -> void:
 		show_finite_grid())
 	menu._add_menu_button(menu._content, "KARTENEFFEKTE  [%s]" % ("AN" if menu.finite_effects else "AUS"), "Jede Karte: Schritt ODER Effekt (Schlag, Stoß, Schild, Tausch)", func() -> void:
 		menu.finite_effects = not menu.finite_effects
+		show_finite_grid())
+	var layout := ScreenLayout.mode()
+	menu._add_menu_button(menu._content, "BILDSCHIRM: %s" % str(ScreenLayout.NAMES[layout]), "%s Gilt für Finite Grid." % str(ScreenLayout.HINTS[layout]), func() -> void:
+		ScreenLayout.next_mode()
 		show_finite_grid())
 	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online mit bis zu 4 Leuten: Raum-Code oder Einladung", func() -> void: groups.show_entry(show_finite_grid))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)

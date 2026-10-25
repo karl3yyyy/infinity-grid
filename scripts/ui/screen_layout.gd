@@ -1,16 +1,16 @@
 class_name ScreenLayout
 extends RefCounted
 
-## Portrait or landscape, a setting. In landscape the card trays move to the
-## left and right of the board (see HandDock). The choice is stored in the
-## profile file next to the other settings.
+## Which way the phone is held, a setting chosen on the Finite Grid page. The
+## screen looks the same in both; only the device turns (landscape applies to
+## Finite Grid matches only). The choice is stored in the profile file.
 
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
 const MODES: Array[String] = ["portrait", "landscape"]
 const NAMES: Dictionary = {"portrait": "HOCHFORMAT", "landscape": "QUERFORMAT"}
 const HINTS: Dictionary = {
-	"portrait": "Karten oben und unten, Handy aufrecht.",
-	"landscape": "Karten links und rechts, Handy waagerecht.",
+	"portrait": "Handy aufrecht.",
+	"landscape": "Handy waagerecht, das Spielfeld sieht aus wie im Hochformat.",
 }
 const PORTRAIT_WINDOW := Vector2i(450, 800)
 
@@ -24,8 +24,17 @@ static func mode() -> String:
 	return "portrait"
 
 
+## Landscape only applies inside a Finite Grid match; every other mode stays portrait.
+static var finite_grid_active: bool = false
+
+
 static func is_landscape() -> bool:
-	return mode() == "landscape"
+	return finite_grid_active and mode() == "landscape"
+
+
+static func set_finite_grid_active(active: bool) -> void:
+	finite_grid_active = active
+	apply_to_window()
 
 
 static func set_mode(value: String) -> void:

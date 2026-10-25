@@ -64,8 +64,19 @@ func _run_tests() -> void:
 	for pool_card: MovementCard in deck:
 		pool_names[pool_card.card_name] = true
 	_expect(pool_names.size() == deck.size(), "Every card in the pool has a unique name")
-	var drawn := MovementCardScript.draw_match_cards(5)
-	_expect(drawn.size() == 5 and drawn[0] != drawn[1], "A match draws five distinct cards from the pool")
+	for _draw_index: int in range(50):
+		var drawn := MovementCardScript.draw_match_cards(5)
+		var long_forward_count := 0
+		var drawn_names: Dictionary = {}
+		for drawn_card: MovementCard in drawn:
+			drawn_names[drawn_card.card_name] = true
+			if drawn_card.has_long_forward_move():
+				long_forward_count += 1
+		_expect(drawn.size() == 5 and drawn_names.size() == 5, "A match draws five distinct cards from the pool")
+		_expect(long_forward_count <= 1, "At most one card has a two-square forward or diagonal-forward jump")
+	_expect(MovementCard.new("Forward 2 straight", [Vector2i(0, 2)] as Array[Vector2i]).has_long_forward_move(), "A two-square straight-forward jump counts")
+	_expect(MovementCard.new("Forward 2 diagonal", [Vector2i(1, 2)] as Array[Vector2i]).has_long_forward_move(), "A two-forward/one-side jump counts as a long forward move")
+	_expect(not MovementCard.new("Side 2", [Vector2i(2, 0)] as Array[Vector2i]).has_long_forward_move(), "A two-square side jump does not count as a long forward move")
 	_expect(Vector2i(2, 1) in deck[0].destinations(Vector2i(2, 2), 0, 5), "Player 1 card moves forward")
 	_expect(Vector2i(2, 3) in deck[0].destinations(Vector2i(2, 2), 1, 5), "Player 2 card is mirrored")
 	_expect(Vector2i(3, 2) in deck[1].destinations(Vector2i(0, 2), 0, 5), "Card targets wrap horizontally")
@@ -92,7 +103,6 @@ func _run_tests() -> void:
 		for card_name: String in card_names:
 			unique_cards[card_name] = true
 		_expect(card_names.size() == 5 and unique_cards.size() == 5, "Two hands and pass area contain all five unique cards")
-
 		var move := _find_legal_move(battle, 0)
 		_expect(not move.is_empty(), "Player 1 has a legal opening move")
 		if not move.is_empty():

@@ -41,10 +41,21 @@ func _run_tests() -> void:
 	_expect(host._is_human == [true, false, true, false] and guest._is_human == [true, false, true, false], "Both know who is human")
 
 	var deadline := Time.get_ticks_msec() + 150000
+	var reconnect_tested := false
+	var reconnect_state := {"completed": false}
 	while Time.get_ticks_msec() < deadline:
 		await process_frame
 		_play_for(host)
 		_play_for(guest)
+		if not reconnect_tested and host._turns_done >= 4:
+			reconnect_tested = true
+			guest.client.resumed.connect(func(_info: Dictionary) -> void: reconnect_state["completed"] = true)
+			guest.client._socket.close()
+			guest.client._on_socket_lost()
+			await _wait_until(func() -> bool: return bool(reconnect_state["completed"]) and not guest._reconnecting, 20000)
+			await _wait_until(func() -> bool: return host._turns_done == guest._turns_done and not guest._animating_remote, 20000)
+			_expect(bool(reconnect_state["completed"]), "A dropped Finite Grid client rejoins")
+			_expect(_board(host) == _board(guest) and _hands(host) == _hands(guest), "The resumed board and cards match the authoritative turn history")
 		if host.rules.round_number >= 4 or host.rules.winner != FfaRules.RUNNING:
 			break
 	# Let the last turn arrive and settle.
@@ -55,6 +66,10 @@ func _run_tests() -> void:
 	_expect(_board(host) == _board(guest), "Both ended with the same board")
 	_expect(_hands(host) == _hands(guest), "Both ended with the same cards")
 	_expect(host.rules.current == guest.rules.current and host.rules.round_number == guest.rules.round_number, "Both agree whose turn it is")
+	_expect(reconnect_tested, "The multiplayer test exercised a reconnect")
+	host.client.leave()
+	guest.client.leave()
+	GroupClient.clear_saved_session()
 	first.queue_free()
 	second.queue_free()
 	if failures.is_empty():

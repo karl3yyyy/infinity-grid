@@ -40,6 +40,9 @@ function Invoke-GodotCheck {
 Invoke-GodotCheck -Name "editor-load" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--editor", "--quit"
 )
+Invoke-GodotCheck -Name "ui-feature-tests" -Arguments @(
+    "--headless", "--path", $ProjectRoot, "--script", "res://tests/ui_features_test.gd"
+)
 Invoke-GodotCheck -Name "core-tests" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--script", "res://tests/test_runner.gd"
 )

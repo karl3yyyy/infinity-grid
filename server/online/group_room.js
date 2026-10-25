@@ -15,12 +15,15 @@
 // A turn names the seat it is for. A player may only send for their own seat; the
 // host also sends the turns of bots and of players who left.
 
-import { drawCards, newToken, rejectSocket, send } from "./worker.js";
+import { CARD_NAMES, drawCards, newToken, rejectSocket, send } from "./worker.js";
 
 const MAX_PLAYERS = 4;
+// Cards that reach further than two squares in total; Finite Grid leaves them out
+// (see FfaDeck.MAX_REACH, checked by tests/ffa_test.gd).
+const TOO_STRONG = ["Rift"];
 // Humans take the seats opposite each other first (see FfaRules: 0 bottom, 1 left, 2 top, 3 right).
 const SEAT_ORDER = [0, 2, 1, 3];
-const AWAY_SECONDS = 60;
+const AWAY_SECONDS = 120;
 const IDLE_SECONDS = 30 * 60;
 const TURN_TYPES = ["move", "pass", "effect"];
 const EMOTE_GAP_MS = 2000;
@@ -143,7 +146,7 @@ export class GroupRoom {
       delete room.away[player.seat];
       await this.save(room);
       const response = this.accept(player.seat, {
-        ...this.startMessage(room, player), type: "group_resume", moves: room.moves,
+        ...this.startMessage(room, player), type: "group_resume", moves: room.moves, starter: room.starter === undefined ? -1 : room.starter,
       });
       if (old) old.close(1000, "replaced");
       this.broadcast(room, { type: "seat_back", seat: player.seat }, player.seat);
@@ -166,6 +169,10 @@ export class GroupRoom {
       await this.drop(room, seat, true);
     } else if (message.type === "start") {
       await this.startMatch(room, seat);
+    } else if (message.type === "node_ping") {
+      await this.nodePing(room, seat, message);
+    } else if (message.type === "choose") {
+      await this.chooseStarter(room, seat, message);
     } else if (message.type === "emote") {
       this.relayEmote(room, seat, message);
     } else if (TURN_TYPES.includes(message.type)) {
@@ -177,7 +184,9 @@ export class GroupRoom {
     if (room.phase !== "lobby" || seat !== this.hostSeat(room) || room.players.length < 2) return;
     room.phase = "playing";
     room.seed = crypto.getRandomValues(new Uint32Array(1))[0];
-    room.cards = drawCards(9);
+    room.cards = drawCards(9, CARD_NAMES.filter((name) => !TOO_STRONG.includes(name)), false);
+    room.ping = { picks: {}, winner: -1 };
+    delete room.starter;
     await this.save(room);
     await this.arm(room, IDLE_SECONDS * 1000);
     for (const player of room.players) {
@@ -186,9 +195,57 @@ export class GroupRoom {
     }
   }
 
+  // Node Ping: every human has picked a spot, bots get a random one; the closest
+  // seat wins (an exact tie in front means another round).
+  async nodePing(room, seat, message) {
+    if (room.phase !== "playing" || room.starter !== undefined || room.ping.winner >= 0) return;
+    const spot = message.spot || [];
+    const x = Number(spot[0]), y = Number(spot[1]);
+    if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
+    room.ping.picks[seat] = [x, y];
+    await this.save(room);
+    await this.rollPing(room);
+  }
+
+  humanSeats(room) {
+    return room.players.filter((player) => !player.left).map((player) => player.seat);
+  }
+
+  async rollPing(room) {
+    const humans = this.humanSeats(room);
+    if (room.starter !== undefined || room.ping.winner >= 0 || humans.length === 0) return;
+    if (humans.some((seat) => !room.ping.picks[seat])) return;
+    const picks = [0, 1, 2, 3].map((seat) => room.ping.picks[seat] || [Math.random(), Math.random()]);
+    const signal = [Math.random(), Math.random()];
+    const distances = picks.map((pick) => (pick[0] - signal[0]) ** 2 + (pick[1] - signal[1]) ** 2);
+    const best = Math.min(...distances);
+    const closest = distances.map((value, seat) => (value === best ? seat : -1)).filter((seat) => seat >= 0);
+    const winner = closest.length === 1 ? closest[0] : -1;
+    room.ping = { picks: {}, winner };
+    await this.save(room);
+    this.broadcast(room, { type: "ping_result", picks, signal, winner });
+    // A bot (or a player who left) that wins simply starts.
+    if (winner >= 0 && !humans.includes(winner)) await this.setStarter(room, winner);
+  }
+
+  async chooseStarter(room, seat, message) {
+    if (room.starter !== undefined || room.ping.winner !== seat) return;
+    const starter = Number(message.starter);
+    // Start, or move last: then the next seat starts.
+    if (starter !== seat && starter !== (seat + 1) % MAX_PLAYERS) return;
+    await this.setStarter(room, starter);
+  }
+
+  async setStarter(room, starter) {
+    room.starter = starter;
+    await this.save(room);
+    this.broadcast(room, { type: "starter", seat: starter });
+  }
+
   // Numbered like the two-player room: repeats after a reconnect are dropped.
   async relayTurn(room, seat, message) {
-    if (room.phase !== "playing") return;
+    // Nobody moves before the Node Ping has named the first player.
+    if (room.phase !== "playing" || room.starter === undefined) return;
     const target = Number(message.seat);
     if (!(target >= 0 && target < MAX_PLAYERS) || Number(message.seq) !== room.moves.length) return;
     const owner = room.players.find((player) => player.seat === target && !player.left);
@@ -239,6 +296,11 @@ export class GroupRoom {
       return;
     }
     this.broadcast(room, { type: "seat_left", seat });
+    if (room.phase === "playing" && room.starter === undefined) {
+      // The ping must not wait for somebody who is gone.
+      if (room.ping.winner === seat) await this.setStarter(room, seat);
+      else await this.rollPing(room);
+    }
     if (wasHost) this.broadcast(room, { type: "host", seat: this.hostSeat(room) });
   }
 

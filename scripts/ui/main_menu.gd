@@ -17,15 +17,15 @@ signal online_join_requested(code: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal quit_requested
-signal screen_layout_changed
 ## Room for up to four players (Finite Grid online): open one or join by code.
 signal group_create_requested(settings: Dictionary, max_players: int)
 signal group_join_requested(code: String)
+signal group_resume_requested(session: Dictionary)
 ## A short message for the player, shown over whatever is on screen.
 signal toast_requested(text: String)
 
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
-const CardViewScript := preload("res://scripts/ui/card_view.gd")
+const CardEncyclopediaScript := preload("res://scripts/ui/card_encyclopedia.gd")
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
 const ENTRY_FONT_SIZE: int = 46
 const TEXT_FONT_SIZE: int = 26
@@ -288,6 +288,11 @@ func _show_home() -> void:
 		_add_menu_button(_content, "PARTIE FORTSETZEN", "Deine Online-Partie läuft noch", func() -> void:
 			close_menu()
 			online_resume_requested.emit(session))
+	var group_session := GroupClient.saved_session()
+	if not group_session.is_empty():
+		_add_menu_button(_content, "FINITE GRID FORTSETZEN", "Die letzte Raum-Partie fortsetzen", func() -> void:
+			close_menu()
+			group_resume_requested.emit(group_session))
 	if _resume_available:
 		_add_menu_button(_content, "ZUR PARTIE", "Zurück ins laufende Spiel", close_menu)
 	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, zu zweit", _play.show_play)
@@ -309,11 +314,6 @@ func _show_settings() -> void:
 	var facing := FigureFacing.mode()
 	_add_menu_button(_content, "FIGUREN: %s" % str(FigureFacing.NAMES[facing]), "%s Wirkt ab dem nächsten Spiel." % str(FigureFacing.HINTS[facing]), func() -> void:
 		FigureFacing.next_mode()
-		_show_settings())
-	var layout := ScreenLayout.mode()
-	_add_menu_button(_content, "BILDSCHIRM: %s" % str(ScreenLayout.NAMES[layout]), "%s Zum Ausprobieren." % str(ScreenLayout.HINTS[layout]), func() -> void:
-		ScreenLayout.next_mode()
-		screen_layout_changed.emit()
 		_show_settings())
 	_add_menu_button(_content, "TUTORIAL", "Doc Voss erklärt das Grid noch einmal", func() -> void:
 		close_menu()
@@ -508,24 +508,10 @@ func _add_picker_grid(kind: String, entries: Array[Dictionary], selected_id: Str
 func _show_card_collection() -> void:
 	_set_page("KARTEN", _show_collection)
 	var deck := MovementCardScript.create_deck()
-	_content.add_child(_make_text("%d Bewegungskarten. Pro Partie werden 5 zufällig gezogen." % deck.size(), TEXT_FONT_SIZE))
+	_content.add_child(_make_text("%d Karten. Wähle eine Karte und tippe im Brett auf ein Startfeld." % deck.size(), TEXT_FONT_SIZE))
 	_content.add_child(_make_text("VECTOR: gerade Sprünge  ·  WAVE: Flanken  ·  FIELD: Umzingeln  ·  OVERCLOCK: riskante Finisher", 20, TerminalTheme.GREEN_DIM))
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 470.0
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_content.add_child(scroll)
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(grid)
-	var card_width := floorf((get_viewport().get_visible_rect().size.x - 170.0) / 3.0)
-	for card: MovementCard in deck:
-		var view: CardView = CardViewScript.new()
-		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
-		view.show_card(card, false, GridBattleUI.TEAM_COLORS[0], false)
-		grid.add_child(view)
+	var encyclopedia: CardEncyclopedia = CardEncyclopediaScript.new(deck)
+	_content.add_child(encyclopedia)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 	_focus_first_entry()
 
@@ -597,7 +583,9 @@ func _focus_first_entry(preferred_index: int = 0) -> void:
 			entries.append(child)
 	if entries.is_empty():
 		return
-	entries[clampi(preferred_index, 0, entries.size() - 1)].grab_focus.call_deferred()
+	var target := entries[clampi(preferred_index, 0, entries.size() - 1)]
+	if target.is_inside_tree():
+		target.grab_focus()
 
 
 func _make_text(text_value: String, font_size: int, color: Color = TerminalTheme.GREEN) -> Label:

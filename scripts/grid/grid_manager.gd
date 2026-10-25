@@ -32,6 +32,7 @@ var _colors: Dictionary = {
 	GridCellData.Highlight.SELECTED: Color("7ff3ff"),
 	GridCellData.Highlight.MOVE: Color("3fb8ff"),
 	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
+	GridCellData.Highlight.WIN: Color("ffc23a"),
 	GridCellData.Highlight.OCCUPIED: Color("f0e6dc"),
 	GridCellData.Highlight.WARNING: Color("ffb02e"),
 	GridCellData.Highlight.COLLAPSED: Color("5a0f14"),
@@ -104,12 +105,22 @@ func clear_highlights() -> void:
 		_refresh_cell(cell)
 
 
-func show_movement_targets(coordinates: Array[Vector2i], selected: Vector2i, moving_team: int) -> void:
+func show_movement_targets(
+	coordinates: Array[Vector2i],
+	selected: Vector2i,
+	moving_team: int,
+	winning_targets: Array[Vector2i] = []
+) -> void:
 	clear_highlights()
 	for coordinate: Vector2i in coordinates:
+		if not is_inside(coordinate):
+			continue
 		var cell: GridCell = cells[coordinate]
 		var occupant := cell.occupant as BattleUnit
-		cell.highlight = GridCellData.Highlight.ATTACK if occupant != null and occupant.team_id != moving_team else GridCellData.Highlight.MOVE
+		if coordinate in winning_targets:
+			cell.highlight = GridCellData.Highlight.WIN
+		else:
+			cell.highlight = GridCellData.Highlight.ATTACK if occupant != null and occupant.team_id != moving_team else GridCellData.Highlight.MOVE
 		_update_cell_visual(cell)
 	if is_inside(selected):
 		var selected_cell: GridCell = cells[selected]

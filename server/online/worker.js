@@ -40,12 +40,13 @@ import { GroupRoom, newGroupCode } from "./group_room.js";
 export { GroupRoom };
 
 // Must match MovementCard.create_deck() (checked by tests/lan_test.gd).
-const CARD_NAMES = [
+export const CARD_NAMES = [
   "Crane", "Wave", "Comet", "Shell", "Vortex", "Nova", "Tide", "Orbit", "Rift", "Halo",
   "Ember", "Drift", "Zephyr", "Eclipse", "Prism", "Pulse", "Echo", "Serpent", "Viper",
   "Lance", "Spark", "Anchor", "Glide", "Knight", "Mirage", "Bastion", "Gale", "Spire", "Phantom", "Flare",
   "Chaos", "Pinwheel", "Quasar", "Jester", "Hydra", "Nebula",
 ];
+const LONG_FORWARD_CARDS = new Set(["Vortex", "Nova", "Lance", "Knight", "Spire", "Pinwheel", "Quasar", "Hydra"]);
 
 // Static assets are limited to 25 MiB per file, so the engine's index.wasm and
 // the game data index.pck are uploaded in parts (tools/publish_online.ps1) and
@@ -612,13 +613,24 @@ async function serveSplitFile(request, env, file) {
   return new Response(readable, { headers });
 }
 
-export function drawCards(count) {
-  const deck = [...CARD_NAMES];
+export function drawCards(count, pool = CARD_NAMES, limitLongForwardCards = true) {
+  const deck = [...pool];
   for (let index = deck.length - 1; index > 0; index--) {
     const other = Math.floor(Math.random() * (index + 1));
     [deck[index], deck[other]] = [deck[other], deck[index]];
   }
-  return deck.slice(0, count);
+  if (!limitLongForwardCards) return deck.slice(0, count);
+  const drawn = [];
+  let hasLongForwardCard = false;
+  for (const card of deck) {
+    if (drawn.length >= count) break;
+    if (LONG_FORWARD_CARDS.has(card)) {
+      if (hasLongForwardCard) continue;
+      hasLongForwardCard = true;
+    }
+    drawn.push(card);
+  }
+  return drawn;
 }
 
 // Lowercase letters and digits; also used for quick-match room codes.

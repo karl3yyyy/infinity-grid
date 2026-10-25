@@ -17,8 +17,10 @@ The interface language is German.
 - **Rules:** 5×5 board with horizontal wraparound (top and bottom are closed),
   19 movement cards with five drawn per match, card exchange through a shared
   pass card, a pass when no move is possible, and a draw on threefold repetition.
+  Standard matches include at most one card with a two-square forward jump
+  (straight or one square diagonally); Finite Grid uses its separate card pool.
 - **Opponents:** a local bot (easy, medium, hard), two players on one device,
-  Wi-Fi play hosted by a PC, online play by room code (up to four friends in a Finite Grid room, also by invitation), and a quick online match
+  Wi-Fi play hosted by a PC, online play by room code (up to four friends in a Finite Grid room, also by invitation, with reconnect), and a quick online match
   against a random opponent with automatic reconnect.
 - **Characters:** 12 collectible characters with four fighting styles
   (mage, brawler, gunner, sorcerer), each with its own capture animation and two
@@ -36,6 +38,11 @@ The interface language is German.
   Stripe (currently in test mode).
 - **Phone-first:** portrait layout, touch controls, installable web app that
   updates itself.
+- **Match learning:** a turn-by-turn replay shows board positions and card
+  exchanges; the card encyclopedia includes plain-language moves and a
+  tappable board preview. Winning Master captures are highlighted in gold, and
+  normal matches warn when the active side's Master can be captured; Ranked
+  matches leave this warning off.
 
 ## How to play
 

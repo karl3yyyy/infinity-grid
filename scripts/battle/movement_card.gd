@@ -31,6 +31,31 @@ func move_summary(_team_id: int = 0) -> String:
 	return " ".join(labels)
 
 
+func description() -> String:
+	var moves: PackedStringArray = []
+	for offset: Vector2i in offsets:
+		var parts: PackedStringArray = []
+		if offset.x != 0:
+			parts.append("%d Feld%s nach %s" % [
+				absi(offset.x), "" if absi(offset.x) == 1 else "er",
+				"rechts" if offset.x > 0 else "links",
+			])
+		if offset.y != 0:
+			parts.append("%d Feld%s nach %s" % [
+				absi(offset.y), "" if absi(offset.y) == 1 else "er",
+				"vorne" if offset.y > 0 else "hinten",
+			])
+		moves.append(" und ".join(parts))
+	return "Von deiner Figur aus: %s. Links und rechts geht das Brett nahtlos weiter." % ", ".join(moves)
+
+
+func has_long_forward_move() -> bool:
+	for offset: Vector2i in offsets:
+		if offset.y == 2 and absi(offset.x) <= 1:
+			return true
+	return false
+
+
 ## Grid cell (column, row) on a 5x5 card diagram, seen from the side whose
 ## forward direction points up on screen. Mirrored cards are rotated by 180°.
 func diagram_cell(offset: Vector2i, rotated: bool) -> Vector2i:
@@ -99,8 +124,15 @@ static func draw_match_cards(count: int = 5) -> Array[MovementCard]:
 	var deck := create_deck()
 	deck.shuffle()
 	var drawn: Array[MovementCard] = []
-	for index: int in range(mini(count, deck.size())):
-		drawn.append(deck[index])
+	var has_long_forward_card := false
+	for card: MovementCard in deck:
+		if count <= 0 or drawn.size() >= count:
+			break
+		if card.has_long_forward_move():
+			if has_long_forward_card:
+				continue
+			has_long_forward_card = true
+		drawn.append(card)
 	return drawn
 
 

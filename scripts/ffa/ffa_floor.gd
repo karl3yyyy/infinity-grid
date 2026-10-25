@@ -5,8 +5,8 @@ extends GridManager
 ## plain slab for a floor (no arena platforms yet) and no wraparound.
 
 const SEAT_COLORS: Array[Color] = [Color("3a8fe7"), Color("6ee65a"), Color("e75a4a"), Color("ffc23a")]
-const SLAB_COLOR := Color("0b1418")
-const GRID_GLOW := Color("3f8fd8")
+const SLAB_COLOR := Color("24404c")
+const GRID_GLOW := Color("6fc4ff")
 
 var _seat_tints: Dictionary = {}
 
@@ -63,7 +63,7 @@ func _update_cell_visual(cell: GridCell) -> void:
 		super._update_cell_visual(cell)
 		return
 	var tint: Color = _seat_tints.get(cell.coordinate, GRID_GLOW)
-	var opacity := 0.5 if _seat_tints.has(cell.coordinate) else (0.2 if (cell.coordinate.x + cell.coordinate.y) % 2 == 0 else 0.09)
+	var opacity := 1.0 if _seat_tints.has(cell.coordinate) else (0.85 if (cell.coordinate.x + cell.coordinate.y) % 2 == 0 else 0.5)
 	if cell.highlight == GridCellData.Highlight.HOVER:
 		tint = _colors[GridCellData.Highlight.HOVER]
 		opacity = 0.6

@@ -145,7 +145,7 @@ func _update_framing() -> void:
 	var total_board_width := (float(board_cells) + repeated_side_cells * 2.0 + board_margin_cells * 2.0) * 1.4
 	var free_height := maxf(viewport_size.y * 0.3, viewport_size.y - board_insets.x - board_insets.y)
 	var width_fit := total_board_width / aspect_ratio
-	var height_fit := (BOARD_VISUAL_DEPTH + float(board_cells - 5 + board_margin_cells * 2.0) * 1.4) * viewport_size.y / free_height
+	var height_fit := (BOARD_VISUAL_DEPTH + float(board_cells - 5 + board_margin_cells * 1.5) * 1.4) * viewport_size.y / free_height
 	target_distance = maxf(7.4, maxf(width_fit, height_fit))
 	base_distance = target_distance
 	distance = target_distance

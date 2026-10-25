@@ -31,7 +31,7 @@ func _run_tests() -> void:
 func _client(label: String) -> GroupClient:
 	var client := GroupClient.new()
 	root.add_child(client)
-	for signal_name: String in ["joined", "lobby_changed", "started", "turn_received", "seat_left", "seat_back", "host_changed", "rejected", "seat_away"]:
+	for signal_name: String in ["joined", "lobby_changed", "started", "resumed", "reconnecting", "ping_result", "starter_chosen", "turn_received", "seat_left", "seat_back", "host_changed", "rejected", "seat_away"]:
 		client.connect(signal_name, func(first: Variant = null, _second: Variant = null) -> void:
 			var key := "%s:%s" % [label, signal_name]
 			if not events.has(key):
@@ -77,6 +77,13 @@ func _test_lobby_and_turns() -> void:
 	_expect(a["cards"] == b["cards"] and (a["cards"] as Array).size() == 9 and a["seed"] == b["seed"], "Everybody gets the same nine cards and seed")
 	_expect((a["humans"] as Array).map(func(seat: Variant) -> int: return int(seat)) == [0, 2] and int(b["seat"]) == 2, "The start names the human seats")
 
+	# Nobody may move before the Node Ping named the first player.
+	host.send_turn({"type": "pass", "seq": 0, "seat": 0, "slot": 0})
+	await get_root().get_tree().create_timer(0.4).timeout
+	_expect(_count("guest", "turn_received") == 0, "Turns before the Node Ping are dropped")
+	await _settle_ping(host, guest)
+	_expect(_count("host", "starter_chosen") == 1 and _last("host", "starter_chosen") == _last("guest", "starter_chosen"), "Everybody hears who starts")
+
 	host.send_turn({"type": "move", "seq": 0, "seat": 0, "from": Vector2i(4, 8), "slot": 0, "to": Vector2i(4, 7)})
 	await _wait_until(func() -> bool: return _count("guest", "turn_received") == 1)
 	var turn: Dictionary = _last("guest", "turn_received")
@@ -93,13 +100,51 @@ func _test_lobby_and_turns() -> void:
 	await get_root().get_tree().create_timer(0.5).timeout
 	_expect(_count("guest", "turn_received") == 2, "A repeated number is dropped")
 
+	guest._socket.close()
+	guest._on_socket_lost()
+	await _wait_until(func() -> bool: return _count("guest", "reconnecting") == 1)
+	await _wait_until(func() -> bool: return _count("guest", "resumed") == 1)
+	_expect(_count("guest", "reconnecting") == 1 and _count("guest", "resumed") == 1, "A dropped Finite Grid client reconnects automatically")
+	var resumed: Variant = _last("guest", "resumed")
+	_expect(resumed is Dictionary and (resumed.get("moves", []) as Array).size() == 2 and int(resumed.get("starter", -1)) >= 0, "The resumed room sends its starter and complete turn history")
+	await _wait_until(func() -> bool: return _count("host", "seat_back") == 1)
+	_expect(_last("host", "seat_back") == 2, "The room is told the player is back")
+	var saved := GroupClient.saved_session()
+	_expect(str(saved.get("code", "")) == guest.code and not str(saved.get("token", "")).is_empty(), "The running room can be resumed after a page reload")
+
+	guest.disconnect_from_host()
+	var reloaded := _client("reloaded")
+	reloaded.resume_session(saved)
+	await _wait_until(func() -> bool: return _count("reloaded", "resumed") == 1)
+	var reload_info: Variant = _last("reloaded", "resumed")
+	_expect(reload_info is Dictionary and (reload_info.get("moves", []) as Array).size() == 2, "A fresh client restores the saved room and full history")
+
 	# The host leaves: the guest is told, a bot takes the seat and the guest becomes host.
 	host.leave()
-	await _wait_until(func() -> bool: return _count("guest", "seat_left") == 1 and _count("guest", "host_changed") == 1)
-	_expect(_last("guest", "seat_left") == 0 and guest.is_host, "A leaver is replaced by a bot and the next player hosts")
-	guest.leave()
+	await _wait_until(func() -> bool: return _count("reloaded", "seat_left") == 1 and _count("reloaded", "host_changed") == 1)
+	_expect(_last("reloaded", "seat_left") == 0 and reloaded.is_host, "A leaver is replaced by a bot and the next player hosts")
+	reloaded.leave()
 	host.queue_free()
 	guest.queue_free()
+	reloaded.queue_free()
+
+
+## Both humans tap; ties repeat; a human winner chooses to start.
+func _settle_ping(host: GroupClient, guest: GroupClient) -> void:
+	var rounds := 0
+	while _count("host", "starter_chosen") == 0 and rounds < 6:
+		rounds += 1
+		var before := _count("host", "ping_result")
+		host.send_node_ping(Vector2(randf(), randf()))
+		guest.send_node_ping(Vector2(randf(), randf()))
+		await _wait_until(func() -> bool: return _count("host", "ping_result") > before)
+		var result: Dictionary = _last("host", "ping_result")
+		var winner := int(result["winner"])
+		if winner == 0:
+			host.send_choose(0)
+		elif winner == 2:
+			guest.send_choose(3)
+		await _wait_until(func() -> bool: return _count("host", "starter_chosen") == 1 or winner < 0, 3000)
 
 
 func _test_bad_codes() -> void:

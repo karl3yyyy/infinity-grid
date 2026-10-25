@@ -104,11 +104,18 @@ func mark(spot: Vector2, color: Color, text: String) -> void:
 	_arena.add_mark(spot, color, text)
 
 
-## Shows both picks, then the signal hitting, then who was how far away.
-func reveal(picks: Array, signal_spot: Vector2) -> void:
+## True once the panel was built (open() was called).
+func is_open() -> bool:
+	return _root != null
+
+
+## Shows the picks, then the signal hitting, then who was how far away. Two-player
+## matches use the team colours; with `colors` and `labels` any number of picks.
+func reveal(picks: Array, signal_spot: Vector2, colors: Array = [], labels: Array = []) -> void:
 	_arena.clear()
-	for team: int in range(2):
-		_arena.add_mark(picks[team], GridBattleUI.TEAM_COLORS[team], str(team + 1))
+	for index: int in range(picks.size() if not colors.is_empty() else 2):
+		var color: Color = colors[index] if not colors.is_empty() else GridBattleUI.TEAM_COLORS[index]
+		_arena.add_mark(picks[index], color, str(labels[index]) if not labels.is_empty() else str(index + 1))
 	await get_tree().create_timer(0.4).timeout
 	SoundBoard.play("signal")
 	_arena.signal_spot = signal_spot

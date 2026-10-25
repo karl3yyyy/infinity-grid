@@ -2,6 +2,7 @@ class_name GridBattleUI
 extends CanvasLayer
 
 signal card_selected(team_id: int, slot: int)
+signal history_requested
 signal bot_training_requested
 signal tutorial_requested
 signal local_multiplayer_requested
@@ -9,6 +10,7 @@ signal chaos_requested(options: Dictionary)
 signal ffa_requested(humans: int, shifting_tiles: bool, card_effects: bool)
 signal group_create_requested(settings: Dictionary, max_players: int)
 signal group_join_requested(code: String)
+signal group_resume_requested(session: Dictionary)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
@@ -24,9 +26,12 @@ signal board_insets_changed(top_pixels: float, bottom_pixels: float)
 signal emote_picked(emote_id: String)
 
 const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
+const MatchReplayScript := preload("res://scripts/ui/match_replay.gd")
 const PASS_CARD_COLOR := Color("c9a648")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
+## Opponent cards are drawn smaller, like a hand seen across the table.
+const OPPONENT_CARD_SCALE: float = 0.92
 
 var round_label: Label
 var instruction_label: Label
@@ -38,7 +43,6 @@ var hand_anchors: Array = [[], []]
 var next_anchors: Array[Control] = [null, null]
 ## Row holding a position's two cards and its pass card.
 var hand_rows: Array[BoxContainer] = [null, null]
-var hand_dock: HandDock
 var card_stage: CardStage
 var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
@@ -63,6 +67,8 @@ var hud_column: Control
 var top_tray: PanelContainer
 var bottom_tray: PanelContainer
 var menu_button: Button
+var history_button: Button
+var result_history_button: Button
 var emote_button: Button
 var emote_wheel: EmoteWheel
 ## Optional button under the instruction, e.g. "play the bot instead".
@@ -71,12 +77,15 @@ var _side_action: Callable
 ## Second button for two-way choices (who starts after the Node Ping).
 var side_choice_button: Button
 var effect_button: Button
+var capture_warning_label: Label
+var core_threat_label: Label
 var _side_choice: Callable
 var _pause_box: VBoxContainer
 var _rules_box: VBoxContainer
 var _new_match_button: Button
 var _main_menu_button: Button
 var main_menu: MainMenu
+var match_replay: MatchReplay
 
 
 func _ready() -> void:
@@ -89,7 +98,10 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
-		toggle_menu()
+		if match_replay != null and match_replay.visible:
+			match_replay.close()
+		else:
+			toggle_menu()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
 		var mode := DisplayServer.window_get_mode()
@@ -225,6 +237,34 @@ func set_effect_button(visible_value: bool, label_text: String = "") -> void:
 
 func set_instruction(text_value: String) -> void:
 	instruction_label.text = text_value
+
+
+func set_capture_warning(enabled: bool) -> void:
+	capture_warning_label.visible = enabled
+
+
+func has_capture_warning() -> bool:
+	return capture_warning_label.visible
+
+
+func set_core_threat_warning(enabled: bool) -> void:
+	core_threat_label.visible = enabled
+
+
+func has_core_threat_warning() -> bool:
+	return core_threat_label.visible
+
+
+func set_match_history(history: Array[Dictionary]) -> void:
+	var available := history.size() > 1
+	history_button.visible = available
+	result_history_button.visible = available
+
+
+func show_match_history(history: Array[Dictionary]) -> void:
+	set_match_history(history)
+	if not history.is_empty():
+		match_replay.open(history)
 
 
 func set_opponent_bot(enabled: bool, difficulty_label: String = "") -> void:
@@ -363,6 +403,12 @@ func _build_ui() -> void:
 	emote_button.custom_minimum_size = Vector2(52.0, 44.0)
 	emote_button.add_theme_font_size_override("font_size", 28)
 	emote_button.pressed.connect(func() -> void: emote_wheel.open())
+	history_button = _make_button("ZUG", header)
+	history_button.custom_minimum_size = Vector2(46.0, 44.0)
+	history_button.add_theme_font_size_override("font_size", 18)
+	history_button.tooltip_text = "Zugverlauf und Kartenwechsel"
+	history_button.visible = false
+	history_button.pressed.connect(func() -> void: history_requested.emit())
 	menu_button = _make_button("MENÜ", header)
 	menu_button.custom_minimum_size = Vector2(52.0, 44.0)
 	menu_button.add_theme_font_size_override("font_size", 28)
@@ -391,6 +437,24 @@ func _build_ui() -> void:
 	instruction_label.modulate = TerminalTheme.GREEN_BRIGHT
 	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
+	capture_warning_label = Label.new()
+	capture_warning_label.text = "KERN-ALARM  ·  GEWINNZUG LEUCHTET GOLD"
+	capture_warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	capture_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	capture_warning_label.add_theme_font_size_override("font_size", 22)
+	capture_warning_label.modulate = Color("ffc23a")
+	_outline(capture_warning_label, 6)
+	capture_warning_label.visible = false
+	bottom_box.add_child(capture_warning_label)
+	core_threat_label = Label.new()
+	core_threat_label.text = "KERN IN GEFAHR  ·  GEGNER KANN IHN SCHLAGEN"
+	core_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	core_threat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	core_threat_label.add_theme_font_size_override("font_size", 22)
+	core_threat_label.modulate = Color("ff5b56")
+	_outline(core_threat_label, 6)
+	core_threat_label.visible = false
+	bottom_box.add_child(core_threat_label)
 	side_action_button = _make_button("", bottom_box)
 	side_action_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	side_action_button.visible = false
@@ -413,7 +477,6 @@ func _build_ui() -> void:
 	_add_hand_row(bottom_box, 0)
 	# Titles were appended bottom-last; keep index = position.
 	hand_titles.reverse()
-	hand_dock = HandDock.new(self, top_box, bottom_box)
 
 	result_overlay = ColorRect.new()
 	result_overlay.color = Color(0.0, 0.02, 0.04, 0.86)
@@ -423,8 +486,8 @@ func _build_ui() -> void:
 	hud_root.add_child(result_overlay)
 	var result_box := VBoxContainer.new()
 	result_box.set_anchors_preset(Control.PRESET_CENTER)
-	result_box.position = Vector2(-280.0, -170.0)
-	result_box.size = Vector2(560.0, 260.0)
+	result_box.position = Vector2(-280.0, -200.0)
+	result_box.size = Vector2(560.0, 340.0)
 	result_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	result_box.add_theme_constant_override("separation", 16)
 	result_overlay.add_child(result_box)
@@ -442,8 +505,11 @@ func _build_ui() -> void:
 	_outline(result_detail, 8)
 	result_box.add_child(result_detail)
 	var restart_button := _make_button("NOCHMAL SPIELEN", result_box)
+	result_history_button = _make_button("ZUGVERLAUF", result_box)
 	var quit_button := _make_button("HAUPTMENÜ", result_box)
 	restart_button.pressed.connect(func() -> void: new_match_pressed.emit())
+	result_history_button.pressed.connect(func() -> void: history_requested.emit())
+	result_history_button.visible = false
 	quit_button.pressed.connect(func() -> void: restart_pressed.emit())
 
 	menu_overlay = ColorRect.new()
@@ -507,6 +573,9 @@ func _build_ui() -> void:
 	rules_back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	rules_back.pressed.connect(_show_rules.bind(false))
 
+	match_replay = MatchReplayScript.new()
+	match_replay.name = "MatchReplay"
+	hud_root.add_child(match_replay)
 	_apply_safe_area()
 	_apply_responsive_layout()
 
@@ -528,9 +597,9 @@ func _build_main_menu() -> void:
 	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 	main_menu.toast_requested.connect(show_toast)
-	main_menu.screen_layout_changed.connect(_apply_responsive_layout)
 	main_menu.group_create_requested.connect(func(settings: Dictionary, max_players: int) -> void: group_create_requested.emit(settings, max_players))
 	main_menu.group_join_requested.connect(func(code: String) -> void: group_join_requested.emit(code))
+	main_menu.group_resume_requested.connect(func(session: Dictionary) -> void: group_resume_requested.emit(session))
 
 
 ## A short message that slides in at the top, stays a few seconds and fades.
@@ -666,11 +735,18 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 		return
 	if viewport_size == Vector2.ZERO:
 		viewport_size = get_viewport().get_visible_rect().size
-	var landscape := ScreenLayout.is_landscape()
-	var column_width := viewport_size.x if landscape else minf(viewport_size.x, MAX_COLUMN_WIDTH)
+	var column_width := minf(viewport_size.x, MAX_COLUMN_WIDTH)
 	hud_column.offset_left = -column_width * 0.5
 	hud_column.offset_right = column_width * 0.5
-	hand_dock.apply(landscape, viewport_size, column_width)
+	# Two hand cards plus a slightly smaller next card share one row.
+	var usable := column_width - 24.0 - 20.0
+	var card_width := clampf(usable / 3.25, 96.0, 240.0)
+	var card_height := clampf(card_width * 1.12, 110.0, minf(290.0, viewport_size.y * 0.19))
+	for position: int in range(2):
+		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
+		for place: Control in hand_anchors[position]:
+			place.custom_minimum_size = Vector2(card_width, card_height) * factor
+		next_anchors[position].custom_minimum_size = Vector2(card_width * 0.8, card_height * 0.86) * factor
 	top_tray.offset_left = 0.0
 	top_tray.offset_right = 0.0
 	bottom_tray.offset_left = 0.0
@@ -679,7 +755,6 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	top_tray.offset_bottom = top_tray.get_combined_minimum_size().y
 	bottom_tray.offset_bottom = 0.0
 	bottom_tray.offset_top = -bottom_tray.get_combined_minimum_size().y
-	hand_dock.set_side_limits(top_tray.offset_bottom, bottom_tray.offset_top)
 	var insets := get_board_insets()
 	board_insets_changed.emit(insets.x, insets.y)
 

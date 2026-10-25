@@ -67,7 +67,9 @@ func is_blocked(cell: Vector2i) -> bool:
 
 ## Called once per full round. Returns {"collapsed": [], "restored": [], "warned": []}.
 ## `board_size` is the grid; `rng` keeps tests deterministic.
-func advance_round(round_number: int, board_size: Vector2i, rng: RandomNumberGenerator) -> Dictionary:
+func advance_round(
+	round_number: int, board_size: Vector2i, rng: RandomNumberGenerator, occupied: Dictionary = {}
+) -> Dictionary:
 	var result := {"collapsed": [] as Array[Vector2i], "restored": [] as Array[Vector2i], "warned": [] as Array[Vector2i]}
 	if not shifting_tiles or round_number < FIRST_SHIFT_ROUND:
 		return result
@@ -88,7 +90,7 @@ func advance_round(round_number: int, board_size: Vector2i, rng: RandomNumberGen
 	for y: int in range(board_size.y):
 		for x: int in range(board_size.x):
 			var cell := Vector2i(x, y)
-			if not collapsed.has(cell) and not warned.has(cell):
+			if not collapsed.has(cell) and not warned.has(cell) and not occupied.has(cell):
 				candidates.append(cell)
 	var room := mini(WARNED_PER_ROUND, MAX_COLLAPSED - collapsed.size() - warned.size())
 	for _i: int in range(maxi(room, 0)):

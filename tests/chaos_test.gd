@@ -45,6 +45,11 @@ func _test_rules() -> void:
 		_expect(rules.collapsed.size() + rules.warned.size() <= ChaosRules.MAX_COLLAPSED, "Never more than %d tiles are out" % ChaosRules.MAX_COLLAPSED)
 	var calm := ChaosRules.new()
 	_expect(calm.advance_round(5, Vector2i(5, 5), rng)["warned"].is_empty(), "Tiles stay put without the shifting option")
+	var occupied := ChaosRules.new()
+	occupied.shifting_tiles = true
+	var held_cells := {Vector2i(0, 0): true, Vector2i(2, 2): true}
+	var warning := occupied.advance_round(2, Vector2i(5, 5), rng, held_cells)
+	_expect(warning["warned"].all(func(cell: Vector2i) -> bool: return not held_cells.has(cell)), "New warnings do not appear under pieces already on the board")
 
 
 func _test_bot() -> void:

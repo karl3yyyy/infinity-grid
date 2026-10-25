@@ -19,7 +19,7 @@ const FINITE_START_LINES: Array[String] = [
 
 const FINITE_OUT_LINES: Array[String] = [
 	"wurde aus dem endlichen Grid gelöscht. Speicher wieder frei.",
-	"ist abgestürzt. Seine Echos laufen als Geister weiter.",
+	"ist abgestürzt. Keine Figur mehr, kein Prozess mehr.",
 ]
 
 const MENU_TAGLINES: Array[String] = [

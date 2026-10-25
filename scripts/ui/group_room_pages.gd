@@ -45,10 +45,14 @@ func show_create(back: Callable) -> void:
 	menu._add_menu_button(menu._content, "KARTENEFFEKTE  [%s]" % ("AN" if menu.finite_effects else "AUS"), "Jede Karte: Schritt ODER Effekt (Schlag, Stoß, Schild, Tausch)", func() -> void:
 		menu.finite_effects = not menu.finite_effects
 		show_create(back))
+	var layout := ScreenLayout.mode()
+	menu._add_menu_button(menu._content, "BILDSCHIRM: %s" % str(ScreenLayout.NAMES[layout]), "%s Gilt nur für dich." % str(ScreenLayout.HINTS[layout]), func() -> void:
+		ScreenLayout.next_mode()
+		show_create(back))
 	menu._add_menu_button(menu._content, "> RAUM ÖFFNEN", "Verbindet mit dem Server", func() -> void:
 		menu.group_create_requested.emit({"tiles": menu.finite_tiles, "effects": menu.finite_effects}, menu.group_max))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zurück", show_entry.bind(back))
-	menu._focus_first_entry(3)
+	menu._focus_first_entry(4)
 
 
 func show_join(back: Callable) -> void:
@@ -87,6 +91,9 @@ func show_lobby(client: GroupClient) -> void:
 	client.joined.connect(_on_joined)
 	client.lobby_changed.connect(_on_lobby)
 	client.started.connect(func(_info: Dictionary) -> void: _in_lobby = false)
+	client.resumed.connect(func(_info: Dictionary) -> void:
+		_in_lobby = false
+		menu.close_menu())
 	client.rejected.connect(_on_rejected)
 	client.connection_lost.connect(func() -> void:
 		if _in_lobby:
@@ -121,6 +128,7 @@ func _on_rejected(reason: String) -> void:
 		"started": "Das Spiel in diesem Raum läuft schon.",
 		"host_left": "Der Gastgeber hat den Raum geschlossen.",
 		"code_taken": "Kein freier Raum-Code. Versuch es noch einmal.",
+		"match_over": "Die Partie kann nicht mehr fortgesetzt werden.",
 	}
 	_leave_lobby_with(str(texts.get(reason, "Das hat nicht geklappt (%s)." % reason)))
 

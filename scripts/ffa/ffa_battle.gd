@@ -49,6 +49,7 @@ var _turns_done: int = 0
 var _incoming: Array[Dictionary] = []
 var _animating_remote: bool = false
 var _effects: bool = false
+var _reconnecting: bool = false
 ## True while the player aims the card's effect instead of its step.
 var _effect_mode: bool = false
 
@@ -108,19 +109,41 @@ func start_online(info: Dictionary) -> void:
 	await _begin_game(seats, bool(settings.get("tiles", false)), int(info["seed"]), info["cards"] as Array, bool(settings.get("effects", false)))
 
 
-func _begin_game(seats: Array, shifting_tiles: bool, rng_seed: int, card_names: Array, card_effects: bool) -> void:
+func resume_online(info: Dictionary) -> void:
+	_online = true
+	_my_seat = int(info["seat"])
+	_is_host = bool(info.get("host", false))
+	var names: Array = info.get("names", [])
+	for seat: int in range(FfaRules.PLAYERS):
+		_names[seat] = str(names[seat])
+	var settings: Dictionary = info.get("settings", {})
+	var seats: Array = []
+	for seat: Variant in info.get("humans", []):
+		seats.append(int(seat))
+	await _begin_game(
+		seats, bool(settings.get("tiles", false)), int(info["seed"]),
+		info["cards"] as Array, bool(settings.get("effects", false)), info,
+	)
+
+
+func _begin_game(
+	seats: Array, shifting_tiles: bool, rng_seed: int, card_names: Array,
+	card_effects: bool, resume_info: Dictionary = {},
+) -> void:
 	_game_id += 1
 	var game := _game_id
 	_humans = seats.size()
 	_shifting_tiles = shifting_tiles
 	_effects = card_effects
 	_effect_mode = false
+	_reconnecting = false
 	_turns_done = 0
 	_incoming.clear()
 	_animating_remote = false
 	for seat: int in range(FfaRules.PLAYERS):
 		_is_human[seat] = seat in seats
 	_view_seat = _my_seat
+	ScreenLayout.set_finite_grid_active(true)
 	_active = true
 	_busy = true
 	battle_ui.main_menu.close_menu()
@@ -137,17 +160,55 @@ func _begin_game(seats: Array, shifting_tiles: bool, rng_seed: int, card_names: 
 	camera.set_board(FfaRules.SIZE, false, FfaWorldHands.FRAMING_MARGIN_CELLS)
 	camera.set_seat_view(_my_seat)
 	_make_looks()
-	_spawn_units()
 	if _online:
 		battle_ui.set_opponent_remote(true)
 	else:
 		battle_ui.set_opponent_remote(false)
 		battle_ui.set_opponent_bot(true)
 	_refresh_ui()
-	battle_ui.set_instruction(GridLore.finite_start_line())
-	await battle_ui.play_card_deal()
+	if resume_info.is_empty():
+		_spawn_units()
+		battle_ui.set_instruction(GridLore.finite_start_line())
+		if seats.size() > 0:
+			var starter := await _run_ping(seats)
+			if game != _game_id:
+				return
+			rules.current = starter
+			_refresh_ui()
+		await battle_ui.play_card_deal()
+	else:
+		var starter := int(resume_info.get("starter", -1))
+		if starter < 0:
+			starter = await _run_ping(seats)
+		if game != _game_id:
+			return
+		rules.current = starter
+		var history: Array = resume_info.get("moves", [])
+		if not _replay_turns(history):
+			_out_of_sync()
+			return
+		_turns_done = history.size()
+		_spawn_rules_pieces()
+		_sync_tiles()
+		_sync_shields()
+		battle_ui.ensure_cards_visible()
+		battle_ui.show_toast("Finite Grid ist wieder verbunden.")
 	if game == _game_id:
-		_begin_turn()
+		if rules.winner == FfaRules.RUNNING:
+			_begin_turn()
+		else:
+			_finish()
+
+
+## Node Ping before the first turn: returns the seat that starts.
+func _run_ping(seats: Array) -> int:
+	var ping := FfaPing.new()
+	ping.name = "FfaPing"
+	add_child(ping)
+	ping.setup(battle_manager, player_controller)
+	if _online:
+		return await ping.run_online(client, _my_seat)
+	return await ping.run_seats(seats)
 
 
 func _clear_units() -> void:
@@ -176,21 +237,31 @@ func _make_looks() -> void:
 
 func _spawn_units() -> void:
 	for seat: int in range(FfaRules.PLAYERS):
-		var color: Color = FfaFloor.SEAT_COLORS[seat]
-		for index: int in range(5):
-			var cell := FfaRules.start_cell(seat, index)
-			var unit := BattleUnit.new()
-			unit.configure("S%d Figur" % (seat + 1), seat, cell, color.darkened(0.25), color.lightened(0.5))
-			unit.is_master = index == 2
-			unit.rest_yaw = _yaw_toward_center(floor_grid.grid_to_world(cell))
-			unit.rotation.y = unit.rest_yaw
-			unit.scale = Vector3.ONE * (1.08 if unit.is_master else 1.0)
-			units_root.add_child(unit)
-			unit.position = floor_grid.grid_to_world(cell)
-			floor_grid.set_occupant(cell, unit)
-			unit.died.connect(_on_unit_died)
-			_dress(unit, _looks[seat], color)
-			_units.append(unit)
+		for index: int in range(FfaRules.PIECES_PER_PLAYER):
+			_spawn_unit(seat, FfaRules.start_cell(seat, index), index == 2)
+
+
+func _spawn_rules_pieces() -> void:
+	for cell: Vector2i in rules.pieces:
+		var piece: Dictionary = rules.pieces[cell]
+		_spawn_unit(int(piece["owner"]), cell, bool(piece["master"]))
+
+
+func _spawn_unit(seat: int, cell: Vector2i, is_master: bool) -> BattleUnit:
+	var color: Color = FfaFloor.SEAT_COLORS[seat]
+	var unit := BattleUnit.new()
+	unit.configure("S%d Figur" % (seat + 1), seat, cell, color.darkened(0.25), color.lightened(0.5))
+	unit.is_master = is_master
+	unit.rest_yaw = _yaw_toward_center(floor_grid.grid_to_world(cell))
+	unit.rotation.y = unit.rest_yaw
+	unit.scale = Vector3.ONE * (1.08 if unit.is_master else 1.0)
+	units_root.add_child(unit)
+	unit.position = floor_grid.grid_to_world(cell)
+	floor_grid.set_occupant(cell, unit)
+	unit.died.connect(_on_unit_died)
+	_dress(unit, _looks[seat], color)
+	_units.append(unit)
+	return unit
 
 
 static func _yaw_toward_center(world_position: Vector3) -> float:
@@ -228,6 +299,11 @@ func _runs_bot(seat: int) -> bool:
 
 
 func _begin_turn() -> void:
+	if _reconnecting:
+		_busy = true
+		player_controller.enabled = false
+		battle_ui.set_instruction("Verbindung wird wiederhergestellt. Bitte kurz warten.")
+		return
 	_deselect()
 	var seat := rules.current
 	_must_pass = rules.legal_moves(seat).is_empty() and not (_effects and FfaEffects.has_any(rules, seat))
@@ -393,9 +469,17 @@ func _after_turn() -> void:
 	_selected = null
 	_slot = -1
 	var parts: PackedStringArray = []
+	for seat: int in rules.last_events["core_lost"]:
+		if rules.alive[seat]:
+			parts.append("%s hat den KERN verloren und kämpft mit den Echos weiter." % _seat_name(seat))
 	for seat: int in rules.last_events["eliminated"]:
-		_make_ruins(seat)
 		parts.append("%s %s" % [_seat_name(seat), GridLore.finite_out_line()])
+	for revived: Dictionary in rules.last_events["revived"]:
+		var seat := int(revived["player"])
+		var is_core := bool(revived["master"])
+		_spawn_unit(seat, revived["cell"], is_core)
+		CombatEffects.pillar(units_root, floor_grid.grid_to_world(revived["cell"]), FfaFloor.SEAT_COLORS[seat])
+		parts.append("%s bekommt den KERN zurück." % _seat_name(seat) if is_core else "%s bekommt einen Echo zurück." % _seat_name(seat))
 	_sync_tiles()
 	_sync_shields()
 	if str(rules.last_events["tiles"]) != "":
@@ -405,17 +489,6 @@ func _after_turn() -> void:
 		_finish()
 		return
 	_begin_turn()
-
-
-## Pieces of an eliminated player stay as see-through ruins.
-func _make_ruins(seat: int) -> void:
-	for unit: BattleUnit in _units:
-		if is_instance_valid(unit) and not unit.is_dead and unit.team_id == seat:
-			unit.team_id = -1
-			unit.is_master = false
-			unit.role_override = "RUINE"
-			unit.refresh_role_label()
-			unit._set_projection_transparency(unit.visual_root, 0.55)
 
 
 ## Tiles that collapsed take the pieces on them; holes and warnings show on the floor.
@@ -553,6 +626,16 @@ func create_room(settings: Dictionary, max_players: int) -> void:
 		menu._show_home()
 
 
+func resume_room(session: Dictionary) -> void:
+	var room := _new_client()
+	var menu := battle_ui.main_menu
+	menu.show_group_lobby(room)
+	if room.resume_session(session) != OK:
+		room.disconnect_from_host()
+		menu.toast_requested.emit("Die gespeicherte Finite-Grid-Partie kann nicht verbunden werden.")
+		menu._show_home()
+
+
 func join_room(code: String) -> void:
 	var room := _new_client()
 	var menu := battle_ui.main_menu
@@ -577,11 +660,13 @@ func _new_client() -> GroupClient:
 func _attach_client(room_client: GroupClient) -> void:
 	client = room_client
 	client.started.connect(start_online)
+	client.resumed.connect(resume_online)
 	client.turn_received.connect(_on_turn_received)
 	client.seat_away.connect(_on_seat_away)
 	client.seat_back.connect(_on_seat_back)
 	client.seat_left.connect(_on_seat_left)
 	client.host_changed.connect(_on_host_changed)
+	client.reconnecting.connect(_on_reconnecting)
 	client.connection_lost.connect(_on_connection_lost)
 	client.rejected.connect(func(_reason: String) -> void: _on_connection_lost())
 
@@ -660,6 +745,44 @@ func _send_turn(fields: Dictionary) -> void:
 	client.send_turn(turn)
 
 
+func _replay_turns(history: Array) -> bool:
+	for index: int in range(history.size()):
+		var turn: Variant = history[index]
+		if not turn is Dictionary or int(turn.get("seq", -1)) != index or int(turn.get("seat", -1)) != rules.current:
+			return false
+		if rules.winner != FfaRules.RUNNING:
+			return false
+		var slot := int(turn.get("slot", -1))
+		if slot < 0 or slot > 1:
+			return false
+		match str(turn.get("type", "")):
+			"pass":
+				if not rules.legal_moves(rules.current).is_empty() or (_effects and FfaEffects.has_any(rules, rules.current)):
+					return false
+				rules.pass_turn(slot)
+			"move", "effect":
+				var origin_value: Variant = turn.get("from")
+				var target_value: Variant = turn.get("to")
+				if not origin_value is Vector2i or not target_value is Vector2i:
+					return false
+				var origin: Vector2i = origin_value
+				var target: Vector2i = target_value
+				if not rules.pieces.has(origin) or int(rules.pieces[origin]["owner"]) != rules.current:
+					return false
+				var is_effect := str(turn["type"]) == "effect"
+				if is_effect:
+					if not _effects or target not in FfaEffects.targets(rules, origin, slot):
+						return false
+					rules.apply_effect(origin, slot, target)
+				else:
+					if target not in rules.targets_for(rules.current, origin, slot):
+						return false
+					rules.apply_move(origin, slot, target)
+			_:
+				return false
+	return true
+
+
 func _on_seat_away(seat: int, seconds: int) -> void:
 	if _active:
 		battle_ui.show_toast("%s ist kurz weg – bis zu %d Sekunden Geduld." % [_seat_name(seat), seconds])
@@ -688,6 +811,16 @@ func _on_host_changed(seat: int) -> void:
 	_is_host = true
 	if _runs_bot(rules.current) and not _animating_remote:
 		_begin_turn()
+
+
+func _on_reconnecting() -> void:
+	if not _online or not _active:
+		return
+	_reconnecting = true
+	_busy = true
+	player_controller.enabled = false
+	_deselect()
+	battle_ui.set_instruction("Verbindung unterbrochen. Finite Grid versucht es erneut ...")
 
 
 func _on_connection_lost() -> void:

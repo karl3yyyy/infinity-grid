@@ -80,6 +80,7 @@ func _run_tests() -> void:
 	_server.stop()
 	_server = null
 	_test_online_server_cards()
+	_test_server_forward_card_list()
 	_test_shop_prices()
 	_test_emote_catalogue()
 	_test_server_rules_cards()
@@ -130,6 +131,23 @@ func _test_online_server_cards() -> void:
 		if not worker.contains("\"%s\"" % card.card_name):
 			missing.append(card.card_name)
 	_expect(not worker.is_empty() and missing.is_empty(), "The online server deals from the same card pool (missing: %s)" % ", ".join(missing))
+
+
+func _test_server_forward_card_list() -> void:
+	var worker := FileAccess.get_file_as_string("res://server/online/worker.js")
+	var block := worker.get_slice("const LONG_FORWARD_CARDS = new Set([", 1).get_slice("]);", 0)
+	var server_cards: Array[String] = []
+	for found: RegExMatch in RegEx.create_from_string("\"([^\"]+)\"").search_all(block):
+		server_cards.append(found.get_string(1))
+	server_cards.sort()
+	var expected_cards: Array[String] = []
+	for card: MovementCard in MovementCard.create_deck():
+		if card.has_long_forward_move():
+			expected_cards.append(card.card_name)
+	expected_cards.sort()
+	_expect(not block.is_empty() and server_cards == expected_cards, "The online long-forward card list matches GDScript movement offsets")
+	var group_room := FileAccess.get_file_as_string("res://server/online/group_room.js")
+	_expect(group_room.contains("drawCards(9, CARD_NAMES.filter((name) => !TOO_STRONG.includes(name)), false)"), "Finite Grid explicitly skips the standard card cap")
 
 
 ## The ranked referee (server/online/rules.js) must know the same cards.

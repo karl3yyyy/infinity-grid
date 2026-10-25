@@ -3,13 +3,15 @@ extends RefCounted
 
 ## Four-player free-for-all on a flat, closed square board. Every player starts
 ## on one side (0 bottom, 1 left, 2 top, 3 right) and moves toward the opposite
-## side. Whoever loses their Master is out; their pieces stay as neutral ruins.
-## Last Master standing wins. Node-free, so bots and tests use it directly.
+## side. Losing the Master (the core) does not end the game: the player goes on
+## with the echoes. Taking a core gives the taker their own core back (or a lost
+## echo). A player without any piece is out; the last one left wins. Node-free, so bots and tests use it directly.
 
 const SIZE: int = 9
 const PLAYERS: int = 4
 const NEUTRAL: int = -1
-const ROUND_LIMIT: int = 80
+const PIECES_PER_PLAYER: int = 5
+const ROUND_LIMIT: int = 120
 const RUNNING: int = -2
 const DRAW: int = -1
 
@@ -34,7 +36,7 @@ var _rng := RandomNumberGenerator.new()
 ## Online every client gets the same `card_names` (nine cards) and `rng_seed`, so all play the same game.
 func setup(shifting_tiles: bool, rng_seed: int = -1, card_names: Array = [], effects: bool = false) -> void:
 	card_effects = effects
-	var deck := MovementCard.cards_from_names(card_names) if card_names.size() == PLAYERS * 2 + 1 else MovementCard.draw_match_cards(PLAYERS * 2 + 1)
+	var deck := MovementCard.cards_from_names(card_names) if card_names.size() == PLAYERS * 2 + 1 else FfaDeck.draw(PLAYERS * 2 + 1)
 	if rng_seed >= 0:
 		_rng.seed = rng_seed
 	for player: int in range(PLAYERS):
@@ -42,7 +44,7 @@ func setup(shifting_tiles: bool, rng_seed: int = -1, card_names: Array = [], eff
 	pass_card = deck[PLAYERS * 2]
 	tiles.shifting_tiles = shifting_tiles
 	for player: int in range(PLAYERS):
-		for index: int in range(5):
+		for index: int in range(PIECES_PER_PLAYER):
 			pieces[start_cell(player, index)] = {"owner": player, "master": index == 2}
 
 
@@ -97,7 +99,9 @@ func can_enter(player: int, cell: Vector2i) -> bool:
 
 func targets_for(player: int, origin: Vector2i, slot: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	for cell: Vector2i in destinations(hands[player][slot], origin, player):
+	var piece: Dictionary = pieces[origin]
+	var card: MovementCard = hands[player][slot]
+	for cell: Vector2i in destinations(card, origin, player):
 		if can_enter(player, cell):
 			result.append(cell)
 	return result
@@ -125,29 +129,28 @@ func is_attacked(cell: Vector2i, player: int) -> bool:
 
 
 func apply_move(origin: Vector2i, slot: int, destination: Vector2i) -> void:
-	last_events = {"eliminated": [], "tiles": "", "captured": pieces.get(destination, {})}
+	last_events = {"eliminated": [], "revived": [], "core_lost": [], "tiles": "", "captured": pieces.get(destination, {})}
 	var piece: Dictionary = pieces[origin]
 	var captured: Dictionary = pieces.get(destination, {})
 	pieces.erase(origin)
 	tiles.protected.erase(destination)
 	pieces[destination] = piece
 	_move_protection(origin, destination)
-	if not captured.is_empty() and bool(captured["master"]) and int(captured["owner"]) >= 0:
-		_eliminate(int(captured["owner"]))
+	if not captured.is_empty():
+		_piece_lost(captured, current)
 	_exchange(slot)
 	_end_turn()
 
 
 ## Uses the card in `slot` for its effect on `target` (targets: see FfaEffects).
 func apply_effect(origin: Vector2i, slot: int, target: Vector2i) -> void:
-	last_events = {"eliminated": [], "tiles": "", "captured": {}}
+	last_events = {"eliminated": [], "revived": [], "core_lost": [], "tiles": "", "captured": {}}
 	match FfaEffects.kind_of_slot(self, slot):
 		CardEffect.Kind.STRIKE:
 			var victim: Dictionary = pieces[target]
 			pieces.erase(target)
 			tiles.protected.erase(target)
-			if bool(victim["master"]) and int(victim["owner"]) >= 0:
-				_eliminate(int(victim["owner"]))
+			_piece_lost(victim, current)
 		CardEffect.Kind.PUSH:
 			var landing := FfaEffects.push_landing(self, origin, target)
 			pieces[landing] = pieces[target]
@@ -172,7 +175,7 @@ func apply_effect(origin: Vector2i, slot: int, target: Vector2i) -> void:
 
 
 func pass_turn(slot: int) -> void:
-	last_events = {"eliminated": [], "tiles": "", "captured": {}}
+	last_events = {"eliminated": [], "revived": [], "core_lost": [], "tiles": "", "captured": {}}
 	_exchange(slot)
 	_end_turn()
 
@@ -196,11 +199,49 @@ func _move_protection(from: Vector2i, to: Vector2i) -> void:
 		tiles.protected.erase(from)
 
 
+## A piece was taken or fell away (`taker` -1: a collapsing tile). Losing the core
+## costs nothing more; taking one rewards the taker; no pieces left means out.
+func _piece_lost(piece: Dictionary, taker: int) -> void:
+	var owner := int(piece["owner"])
+	if owner < 0:
+		return
+	if bool(piece["master"]):
+		last_events["core_lost"].append(owner)
+		if taker >= 0 and taker != owner:
+			_reward(taker)
+	if cells_of(owner).is_empty():
+		_eliminate(owner)
+
+
+func _has_core(player: int) -> bool:
+	for cell: Vector2i in cells_of(player):
+		if bool(pieces[cell]["master"]):
+			return true
+	return false
+
+
+## Taking a core gives the taker their own core back, or else a lost echo, on a
+## free cell of their home line.
+func _reward(player: int) -> void:
+	if not alive[player]:
+		return
+	var wants_core := not _has_core(player)
+	if not wants_core and cells_of(player).size() >= PIECES_PER_PLAYER:
+		return
+	# The core returns to its own square if that one is free.
+	var order: Array[int] = [2, 0, 1, 3, 4]
+	for index: int in order:
+		var cell := start_cell(player, index)
+		if pieces.has(cell) or tiles.is_blocked(cell):
+			continue
+		pieces[cell] = {"owner": player, "master": wants_core}
+		last_events["revived"].append({"player": player, "cell": cell, "master": wants_core})
+		return
+
+
 func _eliminate(player: int) -> void:
 	alive[player] = false
 	last_events["eliminated"].append(player)
-	for cell: Vector2i in cells_of(player):
-		pieces[cell] = {"owner": NEUTRAL, "master": false}
 
 
 func _alive_count() -> int:
@@ -235,15 +276,14 @@ func _next_alive(from: int) -> int:
 
 
 func _shift_tiles() -> void:
-	var shift := tiles.advance_round(round_number, Vector2i(SIZE, SIZE), _rng)
+	var shift := tiles.advance_round(round_number, Vector2i(SIZE, SIZE), _rng, pieces)
 	var messages: PackedStringArray = []
 	for cell: Vector2i in shift["collapsed"]:
 		if pieces.has(cell):
 			var piece: Dictionary = pieces[cell]
 			pieces.erase(cell)
 			tiles.protected.erase(cell)
-			if bool(piece["master"]) and int(piece["owner"]) >= 0:
-				_eliminate(int(piece["owner"]))
+			_piece_lost(piece, -1)
 	if not shift["collapsed"].is_empty():
 		messages.append("Felder sind weggebrochen.")
 	if not shift["warned"].is_empty():

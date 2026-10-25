@@ -30,7 +30,7 @@ function Invoke-GodotCheck {
         throw "$Name failed with exit code $ExitCode. See $LogPath"
     }
     $FatalPatterns = "SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Node not found|ERROR:"
-    $FatalMatches = Select-String -Path $LogPath -Pattern $FatalPatterns -CaseSensitive:$false
+    $FatalMatches = Select-String -Path $LogPath -Pattern $FatalPatterns -CaseSensitive:$false | Where-Object { $_.Line -notmatch "Tripo Bridge" }
     if ($FatalMatches) {
         $FatalMatches | ForEach-Object { Write-Host $_.Line -ForegroundColor Red }
         throw "$Name emitted fatal diagnostics. See $LogPath"

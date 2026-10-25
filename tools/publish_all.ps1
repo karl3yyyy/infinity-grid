@@ -32,7 +32,7 @@ Step "3/5 Zu Cloudflare hochladen"
 Run { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\publish_online.ps1" }
 
 Step "4/5 Commit"
-git add -- scripts server tests site tools docs README.md AGENTS.md THIRD_PARTY_ASSETS.md project.godot
+git add -- scripts server tests site tools docs README.md AGENTS.md THIRD_PARTY_ASSETS.md
 git reset -q -- server/online/.wrangler 2>$null
 if ([string]::IsNullOrWhiteSpace($Message)) {
     $Message = "Update " + (Get-Date -Format "yyyy-MM-dd HH:mm")

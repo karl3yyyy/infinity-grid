@@ -221,7 +221,8 @@ func _show(text_value: String, with_button: bool) -> void:
 	_body.text = text_value
 	MenuMotion.type_in(_body, minf(0.9, 0.012 * text_value.length()))
 	_next_button.visible = with_button
-	_skip_button.visible = not _mandatory
+	# In the editor (testing) the tutorial can always be left.
+	_skip_button.visible = not _mandatory or OS.has_feature("editor")
 	SoundBoard.play("click", -12.0)
 
 

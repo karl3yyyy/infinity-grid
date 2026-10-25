@@ -6,6 +6,7 @@ const EnemyUnitScript := preload("res://scripts/units/enemy_unit.gd")
 const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
 const NetworkMatchScript := preload("res://scripts/battle/network_match.gd")
+const ChaosBotScript := preload("res://scripts/chaos/chaos_bot.gd")
 ## The same position with the same side to move ends the match in a draw on this count.
 const DRAW_REPETITIONS: int = 3
 
@@ -42,6 +43,10 @@ var network_team: int = -1
 var network_match: NetworkMatch
 ## Completed turns (moves and passes) in this match; numbers network turns.
 var turns_played: int = 0
+## Set in chaos mode (hidden king, optionally shifting tiles); null otherwise.
+var chaos: ChaosRules
+var _choosing_king: bool = false
+signal chaos_king_chosen
 ## Mode of the running match ("bot", "local", "network"); see _new_match.
 var match_mode: String = ""
 ## Survives the scene reload so "Neue Partie" starts the same mode again.
@@ -86,6 +91,7 @@ func setup(
 	battle_ui.card_selected.connect(_on_card_selected)
 	battle_ui.bot_training_requested.connect(_start_bot_training)
 	battle_ui.local_multiplayer_requested.connect(_start_local_multiplayer)
+	battle_ui.chaos_requested.connect(_start_chaos)
 	battle_ui.lan_match_requested.connect(_start_lan_match)
 	battle_ui.online_create_requested.connect(_start_online_create)
 	battle_ui.online_join_requested.connect(_start_online_join)
@@ -143,6 +149,8 @@ func _show_title_menu() -> void:
 		_replay_mode = ""
 		if mode == "bot":
 			_start_bot_training()
+		elif mode.begins_with("chaos"):
+			_start_chaos(mode == "chaos_shift")
 		else:
 			_start_local_multiplayer()
 		return
@@ -168,6 +176,92 @@ func _start_bot_training() -> void:
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	set_starter(await _ping_phase().run_local(true))
+
+
+func _start_chaos(shifting_tiles: bool) -> void:
+	if battle_over:
+		return
+	# Nobody wears the KERN look: all ten pieces must look alike.
+	for team: Array[BattleUnit] in [players, enemies]:
+		for unit: BattleUnit in team:
+			unit.is_master = false
+			unit.scale = Vector3.ONE
+			unit.role_override = "FIGUR"
+			unit.refresh_role_label()
+	_apply_match_looks(0)
+	battle_ui.main_menu.close_menu()
+	grid_manager.get_parent().visible = true
+	match_mode = "chaos_shift" if shifting_tiles else "chaos"
+	bot_opponent_enabled = true
+	bot_difficulty = BotAI.Difficulty.MEDIUM
+	battle_ui.set_opponent_bot(true, "CHAOS")
+	chaos = ChaosRules.new()
+	chaos.shifting_tiles = shifting_tiles
+	chaos.set_king(1, enemies.pick_random().grid_position)
+	camera_controller.set_player_view(0)
+	_refresh_ui()
+	set_starter(await _ping_phase().run_local(true))
+
+
+## Chaos: the player secretly taps one of their five pieces to be the king.
+func _choose_secret_king() -> void:
+	_choosing_king = true
+	input_locked = false
+	player_controller.enabled = true
+	battle_ui.set_instruction("Wähle geheim deinen KERN. Der Bot sieht nicht, wen du wählst.")
+	await chaos_king_chosen
+	input_locked = true
+	player_controller.enabled = false
+
+
+func _pick_king(coordinate: Vector2i) -> void:
+	var unit := grid_manager.get_unit_at(coordinate) as BattleUnit
+	if unit == null or unit.team_id != 0:
+		battle_ui.set_instruction("Tippe auf eine deiner Figuren.")
+		return
+	chaos.set_king(0, coordinate)
+	unit.role_override = "DEIN KERN"
+	unit.refresh_role_label()
+	_choosing_king = false
+	SoundBoard.play("click")
+	chaos_king_chosen.emit()
+
+
+func _is_blocked(coordinate: Vector2i) -> bool:
+	return chaos != null and chaos.is_blocked(coordinate)
+
+
+## At each round change: warned tiles collapse (taking the pieces on them), old
+## holes return and new tiles are warned. Returns the message and the winner
+## (-2: match goes on, -1: both kings fell, otherwise the surviving team).
+func _shift_tiles() -> Dictionary:
+	var board_size := grid_manager.grid_size
+	var rng := RandomNumberGenerator.new()
+	var shift := chaos.advance_round(round_number, board_size, rng)
+	var lost_kings: Array[int] = []
+	for cell: Vector2i in shift["restored"]:
+		grid_manager.set_tile_state(cell, 0)
+	for cell: Vector2i in shift["collapsed"]:
+		var unit := grid_manager.get_unit_at(cell) as BattleUnit
+		grid_manager.set_tile_state(cell, 2)
+		if unit == null:
+			continue
+		if chaos.is_king_at(unit.team_id, cell):
+			lost_kings.append(unit.team_id)
+		unit.play_death()
+	for cell: Vector2i in shift["warned"]:
+		grid_manager.set_tile_state(cell, 1)
+	var parts: PackedStringArray = []
+	if not shift["collapsed"].is_empty():
+		parts.append("Felder sind weggebrochen.")
+	if not shift["warned"].is_empty():
+		parts.append("Orange Felder brechen als Nächstes weg!")
+	var winner := -2
+	if lost_kings.size() == 2:
+		winner = -1
+	elif lost_kings.size() == 1:
+		winner = 1 - lost_kings[0]
+	return {"message": " ".join(parts), "winner": winner}
 
 
 func _start_local_multiplayer() -> void:
@@ -282,6 +376,8 @@ func set_starter(team: int) -> void:
 		camera_controller.set_player_view(team)
 	_refresh_ui()
 	await battle_ui.play_card_deal()
+	if chaos != null:
+		await _choose_secret_king()
 	_begin_turn(1)
 
 
@@ -430,6 +526,9 @@ func _on_card_selected(team_id: int, slot: int) -> void:
 func _on_cell_clicked(coordinate: Vector2i) -> void:
 	if pinging or input_locked or battle_over or not grid_manager.is_inside(coordinate):
 		return
+	if _choosing_king:
+		_pick_king(coordinate)
+		return
 	if must_pass:
 		battle_ui.set_instruction(_pass_instruction())
 		return
@@ -471,7 +570,7 @@ func _refresh_targets() -> void:
 	var card: MovementCard = hands[current_player][selected_card_slot]
 	for coordinate: Vector2i in card.destinations(selected_unit.grid_position, current_player, grid_manager.grid_size.x):
 		var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
-		if occupant == null or occupant.team_id != current_player:
+		if (occupant == null or occupant.team_id != current_player) and not _is_blocked(coordinate):
 			movement_targets.append(coordinate)
 	grid_manager.show_movement_targets(movement_targets, selected_unit.grid_position, current_player)
 
@@ -483,8 +582,10 @@ func _perform_move(destination: Vector2i) -> void:
 	var source := moving_unit.grid_position
 	var captured_unit := grid_manager.get_unit_at(destination) as BattleUnit
 	var captured_master := captured_unit != null and captured_unit.is_master
+	if chaos != null:
+		captured_master = captured_unit != null and chaos.is_king_at(captured_unit.team_id, destination)
 	# Any piece reaching the enemy KERN's starting square wins too.
-	var reached_temple := destination == temple_of(1 - current_player)
+	var reached_temple := chaos == null and destination == temple_of(1 - current_player)
 	grid_manager.clear_highlights()
 	# Each side moves in its master character's fighting style.
 	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))
@@ -494,6 +595,8 @@ func _perform_move(destination: Vector2i) -> void:
 	)
 	moving_unit.grid_position = destination
 	grid_manager.move_occupant(moving_unit, source, destination)
+	if chaos != null:
+		chaos.piece_moved(current_player, source, destination)
 	if _is_local_move():
 		var played: MovementCard = hands[current_player][selected_card_slot]
 		MatchStats.add_card("card_plays", played.card_name)
@@ -539,8 +642,17 @@ func _advance_turn() -> void:
 	current_player = 1 - current_player
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(current_player)
+	var tile_notice := ""
 	if current_player == starting_player:
 		round_number += 1
+		if chaos != null and chaos.shifting_tiles:
+			var shift := _shift_tiles()
+			tile_notice = str(shift["message"])
+			if int(shift["winner"]) != -2:
+				selected_card_slot = -1
+				_refresh_ui()
+				_finish_battle(int(shift["winner"]))
+				return
 	selected_card_slot = -1
 	var repetitions := _record_position()
 	if repetitions >= DRAW_REPETITIONS:
@@ -548,6 +660,8 @@ func _advance_turn() -> void:
 		_finish_battle(-1)
 		return
 	_begin_turn(repetitions)
+	if tile_notice != "":
+		battle_ui.set_instruction(tile_notice)
 
 
 ## Unlocks input for the side to move (or hands over to the bot / the other
@@ -623,7 +737,7 @@ func _has_legal_move(team_id: int) -> bool:
 		for card: MovementCard in hands[team_id]:
 			for coordinate: Vector2i in card.destinations(unit.grid_position, team_id, grid_manager.grid_size.x):
 				var occupant := grid_manager.get_unit_at(coordinate) as BattleUnit
-				if occupant == null or occupant.team_id != team_id:
+				if (occupant == null or occupant.team_id != team_id) and not _is_blocked(coordinate):
 					return true
 	return false
 
@@ -647,6 +761,8 @@ func _position_key() -> String:
 		parts.append("|".join(names))
 	parts.append(pass_card.card_name)
 	parts.append(str(current_player))
+	if chaos != null:
+		parts.append(chaos.state_key())
 	return ";".join(parts)
 
 
@@ -656,7 +772,7 @@ func _run_bot_turn() -> void:
 		return
 	# Let the "thinking" text render before the search blocks the frame.
 	await get_tree().process_frame
-	var choice := _choose_bot_move()
+	var choice := _choose_chaos_move() if chaos != null else _choose_bot_move()
 	if choice.is_empty():
 		return
 	if choice.has("pass"):
@@ -669,6 +785,26 @@ func _run_bot_turn() -> void:
 	await get_tree().create_timer(0.18).timeout
 	if not battle_over and current_player == 1:
 		await _perform_move(choice["destination"])
+
+
+func _choose_chaos_move() -> Dictionary:
+	var own: Array[Vector2i] = []
+	var enemy: Array[Vector2i] = []
+	for unit: BattleUnit in enemies:
+		if not unit.is_dead:
+			own.append(unit.grid_position)
+	for unit: BattleUnit in players:
+		if not unit.is_dead:
+			enemy.append(unit.grid_position)
+	var result := ChaosBotScript.new().choose_move(
+		1, own, enemy, chaos.king_cells[1], hands[1], hands[0], chaos.collapsed, chaos.warned, grid_manager.grid_size.x
+	)
+	if result.has("pass"):
+		return {"slot": int(result["slot"]), "pass": true}
+	var unit := grid_manager.get_unit_at(result["from"]) as BattleUnit
+	if unit == null:
+		return {}
+	return {"unit": unit, "slot": int(result["slot"]), "destination": result["to"]}
 
 
 func _choose_bot_move() -> Dictionary:
@@ -746,6 +882,8 @@ func _finish_battle(winner: int) -> void:
 		battle_ui.result_extra = AccessLevel.award(mode, local_won)
 		if mode == "online":
 			battle_ui.main_menu.account.report_online_result(local_won)
+	if chaos != null:
+		_reveal_kings()
 	SoundBoard.play("victory" if local_won else "defeat")
 	SoundBoard.say("victory" if local_won else "defeat")
 	input_locked = true
@@ -758,10 +896,19 @@ func _finish_battle(winner: int) -> void:
 		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if winner == network_team else "NIEDERLAGE\n" + GridLore.loss_line())
 	elif bot_opponent_enabled:
 		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if winner == 0 else "NIEDERLAGE\n" + GridLore.loss_line())
-		if winner == 0:
+		if winner == 0 and chaos == null:
 			_collect_bot_reward()
 	else:
 		battle_ui.show_result("SPIELER %d GEWINNT" % (winner + 1))
+
+
+## The match is over: every surviving king shows its role.
+func _reveal_kings() -> void:
+	for team: int in range(2):
+		for unit: BattleUnit in (players if team == 0 else enemies):
+			if not unit.is_dead and chaos.is_king_at(team, unit.grid_position):
+				unit.role_override = "KERN"
+				unit.refresh_role_label()
 
 
 ## Credits for beating the bot; the server adds them and caps them per day.
@@ -804,7 +951,7 @@ func _on_cancel_requested() -> void:
 
 ## Starts the same mode again; online there is no rematch, so it goes to the menu.
 func _new_match() -> void:
-	if match_mode in ["bot", "local"]:
+	if match_mode in ["bot", "local", "chaos", "chaos_shift"]:
 		_replay_mode = match_mode
 	_restart_battle()
 

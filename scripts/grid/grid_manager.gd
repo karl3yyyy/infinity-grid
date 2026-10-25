@@ -33,6 +33,8 @@ var _colors: Dictionary = {
 	GridCellData.Highlight.MOVE: Color("3fb8ff"),
 	GridCellData.Highlight.ATTACK: Color("ff4a3d"),
 	GridCellData.Highlight.OCCUPIED: Color("f0e6dc"),
+	GridCellData.Highlight.WARNING: Color("ffb02e"),
+	GridCellData.Highlight.COLLAPSED: Color("5a0f14"),
 }
 
 
@@ -113,6 +115,15 @@ func show_movement_targets(coordinates: Array[Vector2i], selected: Vector2i, mov
 		var selected_cell: GridCell = cells[selected]
 		selected_cell.highlight = GridCellData.Highlight.SELECTED
 		_update_cell_visual(selected_cell)
+
+
+## Chaos mode: 0 normal, 1 warned, 2 collapsed.
+func set_tile_state(coordinate: Vector2i, state: int) -> void:
+	if not is_inside(coordinate):
+		return
+	var cell: GridCell = cells[coordinate]
+	cell.tile_state = state
+	_refresh_cell(cell)
 
 
 func set_occupant(coordinate: Vector2i, unit: Node) -> void:
@@ -264,6 +275,10 @@ func _refresh_cell(cell: GridCell) -> void:
 		cell.highlight = GridCellData.Highlight.NORMAL
 	if cell.coordinate == hovered_coordinate and cell.highlight == GridCellData.Highlight.NORMAL:
 		cell.highlight = GridCellData.Highlight.HOVER
+	if cell.tile_state == 1:
+		cell.highlight = GridCellData.Highlight.WARNING
+	elif cell.tile_state == 2:
+		cell.highlight = GridCellData.Highlight.COLLAPSED
 	_update_cell_visual(cell)
 
 

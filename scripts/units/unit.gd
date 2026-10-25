@@ -8,6 +8,8 @@ var unit_name: String = "Unit"
 var team_id: int = 0
 var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
+## Replaces KERN / SCHÜLER on the label (chaos mode hides the real role).
+var role_override: String = ""
 var is_dead: bool = false
 ## Yaw the figure returns to after moving (faces the opposing side).
 var rest_yaw: float = 0.0
@@ -239,10 +241,16 @@ func _build_team_aura() -> void:
 
 func _update_status_label() -> void:
 	if status_label != null:
-		status_label.text = _role_name()
+		status_label.text = role_label()
 
 
-func _role_name() -> String:
+func refresh_role_label() -> void:
+	_update_status_label()
+
+
+func role_label() -> String:
+	if role_override != "":
+		return role_override
 	return "KERN" if is_master else "SCHÜLER"
 
 

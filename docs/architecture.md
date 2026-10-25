@@ -32,6 +32,13 @@ also keeps the installed app up to date.
 - `UnitMovement` plays a move in the character's fighting style;
   `CombatEffects` provides the spell circles, lightning, shots and debris.
 
+## Chaos mode
+
+`scripts/chaos/`: `ChaosRules` (secret king cells, warned/collapsed tiles) and
+`ChaosBot` are node-free. `GridBattleManager.chaos` is set only in chaos
+matches; it swaps the KERN/temple win for "capture the secret king" and runs
+the tile shifts at each round change. Local vs bot only, not online.
+
 ## Interface
 
 - `MainMenu` is the terminal-style menu. Pages for the shop (`ShopPages`),

@@ -4,6 +4,7 @@ extends CanvasLayer
 signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
+signal chaos_requested(shifting_tiles: bool)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
@@ -199,7 +200,7 @@ func ensure_cards_visible() -> void:
 
 
 func update_selection(unit: BattleUnit) -> void:
-	selection_label.text = "" if unit == null else ("KERN" if unit.is_master else "SCHÜLER")
+	selection_label.text = "" if unit == null else unit.role_label()
 
 
 func set_instruction(text_value: String) -> void:
@@ -490,6 +491,7 @@ func _build_main_menu() -> void:
 	main_menu.name = "MainMenu"
 	add_child(main_menu)
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
+	main_menu.chaos_requested.connect(func(shifting_tiles: bool) -> void: chaos_requested.emit(shifting_tiles))
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())
 	main_menu.online_create_requested.connect(func(invite_username: String) -> void: online_create_requested.emit(invite_username))

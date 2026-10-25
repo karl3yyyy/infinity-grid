@@ -8,12 +8,16 @@ enum Highlight {
 	MOVE,
 	ATTACK,
 	OCCUPIED,
+	WARNING,
+	COLLAPSED,
 }
 
 var coordinate: Vector2i
 var world_position: Vector3
 var occupant: Node = null
 var highlight: Highlight = Highlight.NORMAL
+## Chaos mode: 0 normal, 1 about to collapse, 2 collapsed.
+var tile_state: int = 0
 var visual: MeshInstance3D = null
 var material: StandardMaterial3D = null
 

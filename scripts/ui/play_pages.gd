@@ -30,6 +30,7 @@ func show_play() -> void:
 			menu.close_menu()
 			menu.online_quick_requested.emit())
 	menu._add_menu_button(menu._content, "GEGEN DEN BOT", "Training, drei Stufen", show_bot)
+	menu._add_menu_button(menu._content, "CHAOS", "Versteckter Kern, wandernde Felder", show_chaos)
 	menu._add_menu_button(menu._content, "ZU ZWEIT", "Abwechselnd an einem Gerät", menu._start_local_multiplayer)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
 	menu._focus_first_entry()
@@ -95,6 +96,14 @@ func show_leaderboard() -> void:
 		var line := menu._make_text("%2d. %-16s %5d  %s" % [index + 1, str(player.get("name", "")), int(player.get("rating", 0)), str(player.get("rank", ""))], 24, TerminalTheme.GREEN_BRIGHT if me else TerminalTheme.GREEN)
 		line.autowrap_mode = TextServer.AUTOWRAP_OFF
 		list.add_child(line)
+
+
+func show_chaos() -> void:
+	menu._set_page("CHAOS", show_play)
+	menu._add_menu_button(menu._content, "VERSTECKTER KERN", "Du wählst geheim deinen Kern. Den des Bots kennst du nicht.", func() -> void: menu._start_chaos(false))
+	menu._add_menu_button(menu._content, "WANDERNDE FELDER", "Versteckter Kern, dazu brechen Felder weg und kehren zurück.", func() -> void: menu._start_chaos(true))
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
+	menu._focus_first_entry()
 
 
 func show_bot() -> void:

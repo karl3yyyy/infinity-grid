@@ -6,6 +6,7 @@ extends Control
 
 signal bot_training_requested
 signal local_multiplayer_requested
+signal chaos_requested(shifting_tiles: bool)
 signal lan_match_requested
 ## invite_username: "" for a plain room code, else a friend to invite.
 signal online_create_requested(invite_username: String)
@@ -510,6 +511,11 @@ func _show_card_collection() -> void:
 func _start_bot_training() -> void:
 	close_menu()
 	bot_training_requested.emit()
+
+
+func _start_chaos(shifting_tiles: bool) -> void:
+	close_menu()
+	chaos_requested.emit(shifting_tiles)
 
 
 func _start_local_multiplayer() -> void:

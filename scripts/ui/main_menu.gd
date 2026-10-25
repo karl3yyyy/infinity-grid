@@ -348,7 +348,6 @@ func _show_collection() -> void:
 	_set_page("SAMMLUNG", _show_home)
 	var look := CharacterRoster.load_look()
 	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
-	_add_menu_button(_content, "ÜBERSICHT", "Alle Charaktere auf einen Blick", CharacterOverview.new(self, _show_collection, _show_character_picker).show)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
 	_add_menu_button(_content, "KARTENSKINS", "Deine Karten: %s" % CardSkins.skin(look["cards"])["name"], _show_card_skin_picker)
@@ -377,6 +376,9 @@ func _show_character_picker(start_id: String = "") -> void:
 	showcase.closed.connect(func() -> void:
 		showcase.queue_free()
 		_show_collection())
+	showcase.overview_requested.connect(func() -> void:
+		showcase.queue_free()
+		CharacterOverview.new(self, _show_collection, _show_character_picker).show())
 	showcase.open(start, selected)
 
 
@@ -408,37 +410,14 @@ func _show_card_skin_picker() -> void:
 
 func _show_board_picker() -> void:
 	_set_page("SPIELFELD", _show_collection)
-	_content.add_child(_make_text("So sehen die zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
-	_add_picker_grid("board", CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 3,
+	_content.add_child(_make_text("So sieht deine Plattform mit den zwei Reihen auf deiner Seite des Bretts aus.", 22, TerminalTheme.GREEN_DIM))
+	_add_picker_grid("board", CharacterRoster.BOARD_SKINS, str(CharacterRoster.load_look()["board"]), 1,
 		func(entry: Dictionary) -> Texture2D:
-			return ImageTexture.create_from_image(_board_preview(entry)),
+			return BoardPreview.make(_previews, str(entry["id"])),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("board", entry["id"])
 			_show_board_picker(), _show_board_picker)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
-
-
-## Two rows of three real board squares of the skin, glow added on top.
-func _board_preview(entry: Dictionary) -> Image:
-	var glow: Color = entry["glow"]
-	var square := 60
-	var image := Image.create(square * 3 + 8, square * 2 + 6, false, Image.FORMAT_RGBA8)
-	image.fill(Color("05070a"))
-	for row: int in range(2):
-		for column: int in range(3):
-			var images := BoardSkinPainter.paint(str(entry["id"]), (row + column) % 2 == 0, false, row * 3 + column)
-			var albedo: Image = images[0]
-			var mask: Image = images[1]
-			albedo.clear_mipmaps()
-			mask.clear_mipmaps()
-			albedo.resize(square, square, Image.INTERPOLATE_BILINEAR)
-			mask.resize(square, square, Image.INTERPOLATE_BILINEAR)
-			for y: int in range(square):
-				for x: int in range(square):
-					var lit := mask.get_pixel(x, y).r
-					var color := albedo.get_pixel(x, y) + glow * lit * 0.7
-					image.set_pixel(4 + column * (square + 1) + x, 3 + row * (square + 1) + y, Color(minf(color.r, 1.0), minf(color.g, 1.0), minf(color.b, 1.0)))
-	return image
 
 
 ## Live, animated preview of a fighter (the same pixel renderer as on the board).

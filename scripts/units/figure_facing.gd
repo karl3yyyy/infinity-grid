@@ -2,7 +2,8 @@ class_name FigureFacing
 extends RefCounted
 
 ## Which way the standing figures look, a setting. The look is fixed in the
-## world: turning the camera does not turn them.
+## world: turning the camera does not turn them. Only the player's own figures
+## follow the setting.
 ##   player - towards the player's seat
 ##   enemy  - towards the opposing side
 ##   own    - towards their own back line
@@ -12,9 +13,9 @@ const PROFILE_PATH := "user://ring_duel_profile.cfg"
 const MODES: Array[String] = ["player", "enemy", "own"]
 const NAMES: Dictionary = {"player": "ZUM SPIELER", "enemy": "ZUM GEGNER", "own": "ZUR EIGENEN SEITE"}
 const HINTS: Dictionary = {
-	"player": "Alle Figuren schauen zu dir.",
-	"enemy": "Jede Seite schaut zum Gegner.",
-	"own": "Jede Seite schaut von ihrem Gegner weg.",
+	"player": "Deine Figuren schauen zu dir.",
+	"enemy": "Deine Figuren schauen zum Gegner.",
+	"own": "Deine Figuren schauen vom Gegner weg.",
 }
 
 
@@ -41,7 +42,10 @@ static func next_mode() -> String:
 
 
 ## World yaw of a resting figure of `team`; `seat` is the team whose seat the camera sits at.
+## The setting only applies to the figures of the seat's side; the opposing figures always look towards the seat.
 static func yaw_for(team: int, seat: int) -> float:
+	if team != seat:
+		return 0.0 if seat == 0 else PI
 	match mode():
 		"enemy":
 			return PI if team == 0 else 0.0

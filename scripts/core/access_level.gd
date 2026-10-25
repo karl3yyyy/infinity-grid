@@ -98,8 +98,6 @@ const UNLOCKS: Dictionary = {
 	"character:kid": 25,
 	"character:doc": 45,
 	"echo:agents": 30,
-	"board:blood": 15,
-	"board:void": 55,
 	"skin:shadow_white": 12,
 	"skin:wired_ice": 20,
 	"skin:nova_solar": 28,

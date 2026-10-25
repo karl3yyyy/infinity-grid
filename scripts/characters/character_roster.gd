@@ -46,7 +46,7 @@ const CHARACTERS: Array[Dictionary] = [
 		"outfit": {"top": Color("d2691e"), "bottom": Color("8e3b12"), "sleeves": "short", "plain": true}},
 	{"id": "evlis", "style": "bazooka", "name": "EVLIS", "line": "Weißer Pudelmix im Ledermantel, sein eigener Herr. Alle sagen Dawg. Schießt sich mit einer Knochen-Bazooka durchs Grid.",
 		"model_scene": "res://assets/characters/evlis/dog.glb", "weapon_scene": "res://assets/characters/evlis/bone_launcher.glb", "scale": 1.5, "glow_color": Color("ff8a3c"),
-		"portrait_camera": {"y": 1.2, "size": 0.9}, "splash_camera": {"y": 1.0, "size": 1.55}, "signature": "Smoke"},
+		"portrait_camera": {"y": 1.2, "size": 0.9}, "splash_camera": {"y": 1.0, "size": 1.55}, "signature": "Cool"},
 	{"id": "kid", "style": "gunner", "name": "JUNO", "line": "Zu jung für die Arena. Trotzdem hier.",
 		"body": "female", "skin": "dark", "hair": "buzzed_f", "hair_color": Color("1e1612"), "scale": 0.86, "head_scale": 1.12, "glow_color": Color("ffc23a"),
 		"outfit": {"top": Color("e8b23a"), "bottom": Color("23303e"), "shoes": Color("e8e8e8")}},
@@ -72,11 +72,7 @@ const ECHO_STYLES: Array[Dictionary] = [
 ## Panel tint and border glow for the two rows of a player's half.
 const BOARD_SKINS: Array[Dictionary] = [
 	{"id": "standard", "name": "PLATINE", "line": "Retro-Mainboard in Blau: Leiterbahnen, Chips, Lötpunkte.", "tint": Color(1, 1, 1), "glow": Color("4fb6ff")},
-	{"id": "matrix", "name": "CODE", "line": "Grüner Code läuft über deine Felder.", "tint": Color(1, 1, 1), "glow": Color("2fd23a")},
-	{"id": "blood", "name": "LAVA", "line": "Schwarzer Fels mit glühenden Rissen.", "tint": Color(1, 1, 1), "glow": Color("ff6a1c")},
-	{"id": "neon", "name": "SYNTHWAVE", "line": "Neon-Raster und Sonnenuntergang wie in den 80ern.", "tint": Color(1, 1, 1), "glow": Color("ff2fd0")},
-	{"id": "gold", "name": "GOLD", "line": "Goldene Schaltkreise mit Ornamenten. Für Angeber.", "tint": Color(1, 1, 1), "glow": Color("ffc23a")},
-	{"id": "void", "name": "LEERE", "line": "Sterne und Nebel. Dein Feld schwebt im All.", "tint": Color(1, 1, 1), "glow": Color("8a6aff")},
+	{"id": "chip", "name": "MIKROCHIP", "line": "Zehn Chips auf grüner Platine: Leiterbahnen, Lötkontakte, Strom.", "tint": Color(1, 1, 1), "glow": Color("3dffb0")},
 ]
 
 
@@ -94,10 +90,6 @@ const PRICES: Dictionary = {
 	"character:baby": 600,
 	"echo:agents": 250,
 	"echo:cyborgs": 250,
-	"board:blood": 250,
-	"board:neon": 250,
-	"board:void": 300,
-	"board:gold": 500,
 	"cards:frost": 250,
 	"cards:lava": 250,
 	"cards:synth": 300,

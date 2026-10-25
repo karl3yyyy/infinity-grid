@@ -11,6 +11,8 @@ signal closed
 signal chosen(character_id: String, skin_id: String)
 ## item is a shop id: the locked character or the locked skin shown.
 signal buy_requested(item: String)
+## The ALLE button at the top right: show every character on one page.
+signal overview_requested
 
 const STYLE_COLORS := {
 	"mage": Color("2ad4ff"),
@@ -113,6 +115,21 @@ func _build_shell() -> void:
 	_counter.add_theme_font_size_override("font_size", 32)
 	_counter.add_theme_color_override("font_color", TerminalTheme.GREEN)
 	top.add_child(_counter)
+	var all_button := Button.new()
+	all_button.text = "ALLE"
+	all_button.add_theme_font_size_override("font_size", 28)
+	# A framed button so it reads as one next to the counter.
+	for state: String in ["normal", "hover", "pressed", "focus"]:
+		var frame := StyleBoxFlat.new()
+		frame.bg_color = Color(TerminalTheme.GREEN, 0.28 if state == "hover" else 0.12)
+		frame.border_color = TerminalTheme.GREEN_BRIGHT
+		frame.set_border_width_all(2)
+		frame.set_content_margin_all(8.0)
+		all_button.add_theme_stylebox_override(state, frame)
+	all_button.pressed.connect(func() -> void:
+		SoundBoard.play("select")
+		overview_requested.emit())
+	top.add_child(all_button)
 
 	var bottom := HBoxContainer.new()
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
@@ -339,9 +356,10 @@ func _splash_texture(character: Dictionary, accent: Color) -> Texture2D:
 		fighter.camera.rotation_degrees.x = 0.0
 		fighter.camera.size = float(framing["size"])
 		fighter.camera.position = Vector3(0.0, float(framing["y"]), 4.0)
-		fighter.model.play(StringName(str(character.get("signature", "Idle"))))
 		if fighter.model is BoneFighterModel:
-			(fighter.model as BoneFighterModel).add_smoke_puffs()
+			(fighter.model as BoneFighterModel).show_cool_pose()
+		else:
+			fighter.model.play(StringName(str(character.get("signature", "Idle"))))
 	elif "pram" in character.get("gear", []):
 		fighter.camera.rotation_degrees.x = 0.0
 		fighter.camera.size = 1.7

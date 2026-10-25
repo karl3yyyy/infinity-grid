@@ -1,7 +1,7 @@
 class_name CharacterOverview
 extends RefCounted
 
-## Sammlung > ÜBERSICHT: every character on one page as a grid of portraits.
+## Sammlung > CHARAKTERE > ALLE: every character on one page as a grid of portraits.
 ## Characters not owned yet are dimmed; a tap opens that character's big page.
 
 const COLUMNS: int = 3

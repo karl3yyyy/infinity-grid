@@ -43,6 +43,8 @@ func definitions() -> Dictionary:
 	_cache[&"Idle"] = _make(20.0, true, _merge(_breath(20.0), smoke["bones"]), _breath_hips(20.0), smoke["methods"])
 	var emote := _smoke_keys(0.0)
 	_cache[&"Smoke"] = _make(4.5, false, emote["bones"], [], emote["methods"])
+	var cool := _cool()
+	_cache[&"Cool"] = _make(12.5, true, cool["bones"], [], cool["methods"])
 	_cache[&"Jog_Fwd"] = _make(0.64, true, _walk(), [[0.0, 0.0], [0.16, 0.035], [0.32, 0.0], [0.48, 0.035], [0.64, 0.0]])
 	_cache[&"Pistol_Aim_Neutral"] = _make(1.0, true, _aim(0.0))
 	_cache[&"Pistol_Shoot"] = _make(0.5, false, _aim(1.0))
@@ -98,8 +100,8 @@ func _breath_hips(length: float) -> Array:
 func _smoke_keys(start: float) -> Dictionary:
 	var rest_arm: Vector3 = STANCE_DIRECTIONS["LArm"]
 	var rest_fore: Vector3 = STANCE_DIRECTIONS["LFore"]
-	var up_arm := Vector3(0.35, -0.3, 0.9)
-	var up_fore := Vector3(0.05, 1.0, 0.3)
+	var up_arm := Vector3(0.2, -0.3, 0.95)
+	var up_fore := Vector3(-0.65, 0.85, 0.45)
 	var bones := {
 		"LArm": [[start, rest_arm], [start + 0.7, up_arm], [start + 2.6, up_arm], [start + 3.4, rest_arm]],
 		"LFore": [[start, rest_fore], [start + 0.7, up_fore], [start + 1.7, up_fore], [start + 2.2, Vector3(0.4, 0.5, 0.7)], [start + 2.9, up_fore], [start + 3.4, rest_fore]],
@@ -305,3 +307,28 @@ func _toward(bone: int, direction: Vector3) -> Quaternion:
 	var parent := _skeleton.get_bone_parent(bone)
 	var parent_basis := _skeleton.get_bone_global_rest(parent).basis if parent >= 0 else Basis.IDENTITY
 	return (parent_basis.inverse() * turned).get_rotation_quaternion()
+
+
+## Cool portrait loop: the right paw runs through three gestures (relaxed at the
+## chest, a salute to the sunglasses, pointing at you), then the left paw takes
+## the cigarette for a drag, like the Smoke emote.
+## (His paws have no readable fingers, so the gestures are done with the arm.)
+func _cool() -> Dictionary:
+	var chill_arm := Vector3(-0.55, -0.6, 0.45)
+	var chill_fore := Vector3(-0.45, 0.2, 1.0)
+	var salute_arm := Vector3(-0.7, -0.1, 0.5)
+	var salute_fore := Vector3(0.1, 1.0, 0.4)
+	var point_arm := Vector3(-0.2, -0.2, 1.0)
+	var point_fore := Vector3(-0.1, 0.0, 1.0)
+	var gestures := {
+		"RArm": [[0.0, chill_arm], [2.0, chill_arm], [2.8, salute_arm], [4.8, salute_arm], [5.6, point_arm], [7.2, point_arm], [8.0, chill_arm], [12.5, chill_arm]],
+		"RFore": [[0.0, chill_fore], [2.0, chill_fore], [2.8, salute_fore], [4.8, salute_fore], [5.6, point_fore], [7.2, point_fore], [8.0, chill_fore], [12.5, chill_fore]],
+		"Spine2": [[0.0, Vector3(0, 0, 0.05)], [4.0, Vector3(0, 0.05, 0.08)], [8.0, Vector3(0, 0, 0.05)], [12.5, Vector3(0, 0, 0.05)]],
+		"Head": [[0.0, Vector3(0, 0.1, -0.08)], [4.0, Vector3(0, -0.1, -0.12)], [8.0, Vector3(0, 0.1, -0.08)], [12.5, Vector3(0, 0.1, -0.08)]],
+	}
+	# After the gestures the left paw takes the cigarette for a drag, as in the Smoke emote.
+	var drag := _smoke_keys(8.5)
+	var methods: Array = drag["methods"].duplicate()
+	methods.append([11.0, "show_puffs", [true]])
+	methods.append([12.2, "show_puffs", [false]])
+	return {"bones": _merge(gestures, drag["bones"]), "methods": methods}

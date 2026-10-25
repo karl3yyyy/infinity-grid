@@ -46,11 +46,3 @@ static func _build(fill_alpha: float) -> ImageTexture:
 				image.set_pixelv(point, Color.WHITE)
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
-
-
-## Hover: just a bright frame, no fill, so the model underneath stays visible.
-static func paint_hover(material: StandardMaterial3D, color: Color, opacity: float) -> void:
-	material.albedo_texture = _texture(false)
-	var tint := color
-	tint.a = opacity
-	material.albedo_color = tint

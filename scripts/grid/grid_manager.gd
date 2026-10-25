@@ -270,22 +270,14 @@ func _refresh_cell(cell: GridCell) -> void:
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
 		return
-	# The arena model is the skin; a cell only shows a frame that fills for highlights.
-	# Occupied cells stay plain so the model underneath shows; only play highlights light up.
-	var normal_tile := cell.highlight in [GridCellData.Highlight.NORMAL, GridCellData.Highlight.OCCUPIED]
-	var color: Color = ArenaHalf.GLOW if normal_tile else _colors[cell.highlight]
-	var hover := cell.highlight == GridCellData.Highlight.HOVER
-	if hover:
-		ArenaTileStyle.paint_hover(cell.material, Color.WHITE, 1.0)
-	else:
-		ArenaTileStyle.paint(cell.material, not normal_tile, color, 1.0)
+	# The arena model is the skin; a cell only lights up for selection, moves and
+	# attacks. Hover and occupied cells stay plain so the model shows underneath.
+	var plain := cell.highlight in [GridCellData.Highlight.NORMAL, GridCellData.Highlight.OCCUPIED, GridCellData.Highlight.HOVER]
+	var color: Color = ArenaHalf.GLOW if plain else _colors[cell.highlight]
+	ArenaTileStyle.paint(cell.material, not plain, color, 1.0)
 	for projection_value: Variant in _wrap_materials.get(cell.coordinate, []):
 		var projection: Dictionary = projection_value
-		if hover:
-			ArenaTileStyle.paint_hover(projection["material"], Color.WHITE, float(projection["opacity"]))
-		else:
-			ArenaTileStyle.paint(projection["material"], not normal_tile, color, float(projection["opacity"]))
-
+		ArenaTileStyle.paint(projection["material"], not plain, color, float(projection["opacity"]))
 
 ## The arena halves in the skins the two players chose.
 func set_side_skin(team: int, skin: Dictionary) -> void:

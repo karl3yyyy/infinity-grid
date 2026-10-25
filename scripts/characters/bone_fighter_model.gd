@@ -13,6 +13,7 @@ var weapon: Node3D
 var cigarette: Node3D
 var _cigarette_mount: BoneAttachment3D
 var _hand_mount: BoneAttachment3D
+var _puff_root: Node3D
 
 
 ## look: "model_scene" (glTF path), optional "weapon_scene", "scale".
@@ -69,11 +70,15 @@ func _add_cigarette() -> void:
 
 
 func _mouth_cigarette_pose() -> Transform3D:
-	return _bone_local(_cigarette_mount, Transform3D(Basis(Vector3.RIGHT, PI * 0.5) * Basis(Vector3.UP, -0.2), Vector3(-0.03, 0.34, 0.2)))
+	return _bone_local(_cigarette_mount, Transform3D(Basis(Vector3.RIGHT, PI * 0.5) * Basis(Vector3.UP, 0.9), Vector3(-0.045, 0.715, 0.2)))
 
 
 func _hand_cigarette_pose() -> Transform3D:
-	return _bone_local(_hand_mount, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 0.1, 0.0)))
+	# Pinched in the middle of the paw, in front of it, the glowing end pointing away from the mouth.
+	var hand := skeleton.get_bone_global_rest(skeleton.find_bone(_hand_mount.bone_name)).origin
+	var finger := skeleton.get_bone_global_rest(skeleton.find_bone(BONE_PREFIX + "LeftHandIndex1")).origin
+	var toward_fingers := (finger - hand).normalized()
+	return _bone_local(_hand_mount, Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), hand + toward_fingers * 0.03 + Vector3(0.0, 0.0, -0.04)))
 
 
 ## Places a model-space transform (bind pose) in a bone attachment's own space.
@@ -115,21 +120,55 @@ func show_smoke_pose(seconds: float = 2.2) -> void:
 	add_smoke_puffs()
 
 
-func add_smoke_puffs() -> void:
+## Called by the Cool animation: the exhale after the drag.
+func show_puffs(shown: bool) -> void:
+	if _puff_root != null:
+		_puff_root.visible = shown
+
+
+func add_smoke_puffs(shown: bool = true) -> void:
+	_puff_root = Node3D.new()
+	_puff_root.visible = shown
+	_cigarette_mount.add_child(_puff_root)
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(0.92, 0.94, 1.0, 0.42)
+	material.albedo_color = Color(0.92, 0.94, 1.0, 0.3)
 	for index: int in range(6):
 		var puff := MeshInstance3D.new()
 		var ball := SphereMesh.new()
-		ball.radius = 0.03 + 0.008 * float(index)
+		ball.radius = 0.02 + 0.005 * float(index)
 		ball.height = ball.radius * 2.0
 		ball.radial_segments = 10
 		ball.rings = 6
 		puff.mesh = ball
 		puff.material_override = material
 		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_cigarette_mount.add_child(puff)
-		var from := Vector3(0.02 - 0.03 * float(index), 0.39 + 0.045 * float(index), 0.2 + 0.012 * float(index))
+		_puff_root.add_child(puff)
+		var from := Vector3(0.02 - 0.03 * float(index), 0.76 + 0.045 * float(index), 0.2 + 0.012 * float(index))
 		puff.transform = _bone_local(_cigarette_mount, Transform3D(Basis.IDENTITY, from))
+
+
+## Showcase portrait: no weapon, a fat glowing cigarette in the mouth and the
+## "Cool" animation (thumbs up, peace). The weapon only belongs in the arena.
+func show_cool_pose() -> void:
+	if weapon != null:
+		weapon.visible = false
+	cigarette_in_hand(false)
+	var tube := (cigarette as MeshInstance3D).mesh as CylinderMesh
+	tube.top_radius = 0.014
+	tube.bottom_radius = 0.014
+	tube.height = 0.13
+	var ember := MeshInstance3D.new()
+	var tip := SphereMesh.new()
+	tip.radius = 0.02
+	tip.height = 0.04
+	ember.mesh = tip
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.albedo_color = Color("ff7a2a")
+	ember.material_override = glow
+	ember.position = Vector3(0.0, 0.065, 0.0)
+	cigarette.add_child(ember)
+	play(&"Cool")
+	add_smoke_puffs(false)

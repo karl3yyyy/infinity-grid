@@ -26,8 +26,10 @@ Get-ChildItem -LiteralPath $SiteRoot -Force |
 
 # Cloudflare static assets allow 25 MiB per file; worker.js joins the parts.
 # The expected part counts must match SPLIT_FILES in server/online/worker.js.
-foreach ($Split in @(@{ Name = "index.wasm"; Parts = 2 }, @{ Name = "index.pck"; Parts = 2 })) {
+# The pck is smaller than 20 MB now, so it is cut into 10 MB pieces to keep two parts.
+foreach ($Split in @(@{ Name = "index.wasm"; Parts = 2; Size = $PartSize }, @{ Name = "index.pck"; Parts = 2; Size = 10MB })) {
     $Bytes = [System.IO.File]::ReadAllBytes((Join-Path $SiteRoot $Split.Name))
+    $PartSize = $Split.Size
     $PartCount = [Math]::Ceiling($Bytes.Length / $PartSize)
     if ($PartCount -ne $Split.Parts) {
         throw "$($Split.Name) needs $PartCount parts; update SPLIT_FILES in server/online/worker.js and this script."

@@ -64,8 +64,11 @@ var _pulsing: Array[Dictionary] = []
 func build() -> void:
 	_build_world_environment()
 	_build_lights()
-	_build_floor()
-	_build_towers()
+	if HangarBackdrop.is_available():
+		_build_hangar()
+	else:
+		_build_floor()
+		_build_towers()
 	_build_code_rain()
 	_build_motes()
 
@@ -97,7 +100,7 @@ func _build_world_environment() -> void:
 	for level: int in range(7):
 		environment.set_glow_level(level, level >= 1 and level <= 4)
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("0a1024")
+	environment.fog_light_color = Color("06180f")
 	environment.fog_density = 0.025
 	environment.adjustment_enabled = true
 	environment.adjustment_contrast = 1.12
@@ -120,10 +123,22 @@ func _build_lights() -> void:
 		var neon := OmniLight3D.new()
 		neon.name = "NeonWash_%d" % side
 		neon.position = Vector3(float(side) * 6.0, 2.5, 0.0)
-		neon.light_color = CYAN if side < 0 else MAGENTA
+		neon.light_color = CYAN if side < 0 else CODE_GREEN
 		neon.light_energy = 2.2
 		neon.omni_range = 11.0
 		add_child(neon)
+
+
+## The hangar encloses the board; green code runs over its walls and floor.
+func _build_hangar() -> void:
+	var hangar := HangarBackdrop.new()
+	hangar.name = "Hangar"
+	add_child(hangar)
+	hangar.build()
+	var code := MatrixEffects.new()
+	code.name = "MatrixEffects"
+	add_child(code)
+	code.build(hangar.wall_half_width(), hangar.wall_height(), HangarBackdrop.FLOOR_Y)
 
 
 func _build_floor() -> void:
@@ -187,7 +202,7 @@ func _build_towers() -> void:
 func _build_code_rain() -> void:
 	var rain := CPUParticles3D.new()
 	rain.name = "CodeRain"
-	rain.amount = 140
+	rain.amount = 260
 	rain.lifetime = 4.0
 	rain.preprocess = 4.0
 	rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX

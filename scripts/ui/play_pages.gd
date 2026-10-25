@@ -30,7 +30,8 @@ func show_play() -> void:
 			menu.close_menu()
 			menu.online_quick_requested.emit())
 	menu._add_menu_button(menu._content, "GEGEN DEN BOT", "Training, drei Stufen", show_bot)
-	menu._add_menu_button(menu._content, "CHAOS", "Labor für neue Spielvarianten", show_chaos)
+	menu._add_menu_button(menu._content, "CHAOS", "Labor für neue Regeln: Kern verstecken, Karteneffekte, wandernde Felder", show_chaos)
+	menu._add_menu_button(menu._content, "FINITE GRID", "4 Prozesse in einem endlichen Grid. Nur einer bleibt übrig.", show_finite_grid)
 	menu._add_menu_button(menu._content, "ZU ZWEIT", "Abwechselnd an einem Gerät", menu._start_local_multiplayer)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
 	menu._focus_first_entry()
@@ -99,41 +100,73 @@ func show_leaderboard() -> void:
 
 
 const CHAOS_VARIANTS: Array[Dictionary] = [
-	{"key": "hidden_king", "title": "VERSTECKTER KERN", "text": "Du wählst geheim deinen Kern; den des Gegners kennst du nicht."},
-	{"key": "shifting_tiles", "title": "WANDERNDE FELDER", "text": "Felder brechen weg und kehren zurück."},
-	{"key": "card_effects", "title": "KARTENFÄHIGKEITEN", "text": "Jede Karte hat einen Effekt: Schritt ODER Effekt."},
+	{"key": "hidden_king", "title": "VERSTECKTER KERN", "short": "Kern versteckt", "text": "Du bestimmst geheim deinen KERN. Den des Gegners kennst du nicht."},
+	{"key": "shifting_tiles", "title": "WANDERNDE FELDER", "short": "Felder wandern", "text": "Felder warnen, brechen weg und kehren zurück."},
+	{"key": "card_effects", "title": "KARTENEFFEKTE", "short": "Karteneffekte", "text": "Jede Karte hat einen Effekt: Schritt ODER Effekt."},
 ]
 
 
-## The chaos lab: switch variants on or off, combine them freely, then start.
+func _chaos_summary() -> String:
+	var active: PackedStringArray = []
+	for variant: Dictionary in CHAOS_VARIANTS:
+		if bool(menu.chaos_options.get(str(variant["key"]), false)):
+			active.append(str(variant["short"]))
+	return ", ".join(active)
+
+
+## The chaos lab: new rules tried out on the living grid. Variants combine freely.
 func show_chaos() -> void:
 	menu._set_page("CHAOS LABOR", show_play)
-	for variant: Dictionary in CHAOS_VARIANTS:
-		var key := str(variant["key"])
-		var marker := "[X] " if bool(menu.chaos_options.get(key, false)) else "[  ] "
-		menu._add_menu_button(menu._content, marker + str(variant["title"]), str(variant["text"]), func() -> void:
-			menu.chaos_options[key] = not bool(menu.chaos_options.get(key, false))
-			show_chaos())
-	var any_on := false
-	for variant: Dictionary in CHAOS_VARIANTS:
-		any_on = any_on or bool(menu.chaos_options.get(str(variant["key"]), false))
-	if any_on:
-		menu._add_menu_button(menu._content, "START", "Gegen den Bot, mit den gewählten Varianten", menu._start_chaos)
+	menu._content.add_child(menu._make_text("Neue Regeln, getestet am lebenden Grid. Schalte Varianten an und kombiniere sie.", 22, TerminalTheme.GREEN_DIM))
+	var summary := _chaos_summary()
+	if summary != "":
+		menu._add_menu_button(menu._content, "> START", "Gegen den Bot: " + summary, menu._start_chaos)
 	else:
 		menu._content.add_child(menu._make_text("Wähle mindestens eine Variante.", MainMenu.TEXT_FONT_SIZE))
-	menu._add_menu_button(menu._content, "4 SPIELER", "Free for all auf großem Feld: jeder startet an einer Seite", show_ffa)
+	for variant: Dictionary in CHAOS_VARIANTS:
+		var key := str(variant["key"])
+		var on := bool(menu.chaos_options.get(key, false))
+		menu._add_menu_button(menu._content, "%s  [%s]" % [str(variant["title"]), "AN" if on else "AUS"], str(variant["text"]), func() -> void:
+			menu.chaos_options[key] = not on
+			show_chaos())
+	menu._add_menu_button(menu._content, "ALLES AN", "Totales Chaos: alle Varianten zugleich", func() -> void:
+		for variant: Dictionary in CHAOS_VARIANTS:
+			menu.chaos_options[str(variant["key"])] = true
+		show_chaos())
+	menu._add_menu_button(menu._content, "ÜBERRASCHUNG", "Das Grid würfelt die Varianten aus", func() -> void:
+		var any_on := false
+		while not any_on:
+			for variant: Dictionary in CHAOS_VARIANTS:
+				menu.chaos_options[str(variant["key"])] = randf() < 0.5
+				any_on = any_on or bool(menu.chaos_options[str(variant["key"])])
+		show_chaos())
+	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online-Chaos mit mehreren Leuten", func() -> void: show_friends_status(show_chaos))
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry()
 
 
-## Four-player free-for-all; "wandernde Felder" from the lab applies here too.
-func show_ffa() -> void:
-	menu._set_page("4 SPIELER", show_chaos)
-	var tiles := " (Wandernde Felder an)" if bool(menu.chaos_options.get("shifting_tiles", false)) else ""
-	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer gewinnt" + tiles, func() -> void: menu._start_ffa(1))
-	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten" + tiles, func() -> void: menu._start_ffa(2))
-	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite" + tiles, func() -> void: menu._start_ffa(4))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Chaos-Labor", show_chaos)
+## Four processes in one finite grid: its own mode next to chaos.
+func show_finite_grid() -> void:
+	menu._set_page("FINITE GRID", show_play)
+	menu._content.add_child(menu._make_text(GridLore.FINITE_LORE, 22, TerminalTheme.GREEN_DIM))
+	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 Karten. Die gespielte Karte wandert im Uhrzeigersinn weiter. Wer seinen KERN verliert, scheidet aus.", 22, TerminalTheme.GREEN_DIM))
+	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer bleibt übrig", func() -> void: menu._start_ffa(1))
+	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten", func() -> void: menu._start_ffa(2))
+	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite", func() -> void: menu._start_ffa(4))
+	menu._add_menu_button(menu._content, "WANDERNDE FELDER  [%s]" % ("AN" if menu.finite_tiles else "AUS"), "Felder brechen weg und kehren zurück", func() -> void:
+		menu.finite_tiles = not menu.finite_tiles
+		show_finite_grid())
+	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Alle deine Freunde ins Grid einladen", func() -> void: show_friends_status(show_finite_grid))
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
+	menu._focus_first_entry()
+
+
+## Online rooms for more than two people need their own server work; until then this says so.
+func show_friends_status(back: Callable) -> void:
+	menu._set_page("MIT FREUNDEN", back)
+	menu._content.add_child(menu._make_text("Online-Räume für mehrere Freunde sind noch in Arbeit. Das Grid sucht noch die Kabel.", MainMenu.TEXT_FONT_SIZE))
+	menu._content.add_child(menu._make_text("Bis dahin: Finite Grid mit 4 Spielern an einem Gerät, jeder an seiner Seite.", 22, TerminalTheme.GREEN_DIM))
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zurück", back)
 	menu._focus_first_entry()
 
 

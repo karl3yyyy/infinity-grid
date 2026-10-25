@@ -160,10 +160,10 @@ func _add_clock_row(parent: Control) -> void:
 	_opponent_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
-func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0, dim_all: bool = false) -> void:
+func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0, dim_all: bool = false, show_top: bool = true) -> void:
 	viewer_team = viewing_team
 	var placements: Array = []
-	for position: int in range(2):
+	for position: int in range(2 if show_top else 1):
 		var team_id := _team_at(position)
 		var bot_hand := (opponent_is_bot and team_id == 1) or (opponent_is_remote and position == 1)
 		var lift := 1.0 if position == 0 else -1.0
@@ -489,7 +489,7 @@ func _build_ui() -> void:
 	rules.add_theme_font_size_override("font_size", 27)
 	rules.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rules.text = "\n".join([
-		"> Jede Seite hat einen KERN (auf dem goldenen Sockel) und vier SCHÜLER.",
+		"> Jede Seite hat einen KERN (auf dem goldenen Sockel) und vier DAEMONEN.",
 		"> Wähle eine deiner zwei Karten und eine Figur. Die Karte zeigt, wohin sie ziehen darf: weißes Feld = Figur, leuchtende Felder = Ziele.",
 		"> Ziehst du auf einen Gegner, ist er geschlagen.",
 		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",

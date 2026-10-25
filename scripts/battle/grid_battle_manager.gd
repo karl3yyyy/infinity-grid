@@ -201,6 +201,7 @@ func _start_chaos(options: Dictionary) -> void:
 	_replay_chaos_options = options.duplicate()
 	chaos.set_king(0, temple_of(0))
 	chaos.set_king(1, temple_of(1))
+	grid_manager.set_temple_markers_visible(not chaos.hidden_king)
 	if chaos.hidden_king:
 		# Nobody wears the KERN look: all ten pieces must look alike.
 		for team: Array[BattleUnit] in [players, enemies]:
@@ -241,6 +242,7 @@ func _pick_king(coordinate: Vector2i) -> void:
 	chaos.set_king(0, coordinate)
 	unit.role_override = "DEIN KERN"
 	unit.refresh_role_label()
+	unit.mark_as_king()
 	_choosing_king = false
 	SoundBoard.play("click")
 	chaos_king_chosen.emit()
@@ -1079,6 +1081,7 @@ func _reveal_kings() -> void:
 			if not unit.is_dead and chaos.is_king_at(team, unit.grid_position):
 				unit.role_override = "KERN"
 				unit.refresh_role_label()
+				unit.mark_as_king()
 
 
 ## Credits for beating the bot; the server adds them and caps them per day.

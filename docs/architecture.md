@@ -41,7 +41,7 @@ shields), `CardEffect` (strike/push/shield/swap by card category) and
 matches. Add a variant by adding a flag to `ChaosRules`, an entry in
 `PlayPages.CHAOS_VARIANTS` and its hooks in the manager. Local vs bot only.
 
-## Four-player mode
+## Finite Grid (four players)
 
 `scripts/ffa/`: runs in the 3D game with the normal figures, cards, camera and
 fighting styles, on a closed 9x9 board with a plain slab for a floor (no arena
@@ -49,7 +49,9 @@ platforms yet). `FfaRules` (pure) holds pieces, hands, turn order, eliminations
 and tiles; `FfaBot` plays the bots; `FfaFloor` is a `GridManager` without
 wraparound; `FfaBattle` shows the match and takes the input. The camera turns to
 the seat of the human to move (`CameraController.set_seat_view`), so every
-player's "forward" points up the screen. Opened from Spielen > CHAOS > 4 SPIELER.
+player's "forward" points up the screen. The hands of the other three players
+show in `FfaSeatStrip` and the played card passes clockwise (`FfaRules.pass_giver`).
+Opened from Spielen > FINITE GRID, a separate entry next to CHAOS.
 
 ## Interface
 

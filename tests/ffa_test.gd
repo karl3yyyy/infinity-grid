@@ -56,6 +56,12 @@ func _test_rules() -> void:
 	_expect(rules.pieces[FfaRules.start_cell(1, 0)]["owner"] == FfaRules.NEUTRAL, "Their students stay as neutral ruins")
 	_expect(rules.hands[0][0] == pass_before, "The used card is exchanged with the pass card")
 	_expect(rules.current == 2, "Eliminated players are skipped")
+	rules.pass_turn(0)
+	_expect(rules.pass_giver == 2, "The pass card remembers who gave it")
+	var chain := FfaRules.new()
+	chain.setup(false)
+	chain.pass_turn(0)
+	_expect(chain.pass_giver == 0 and chain.next_after(chain.current) == 2, "Cards go on clockwise: seat 1 gives, seat 2 receives, seat 3 follows")
 	var last := FfaRules.new()
 	last.setup(false)
 	last.alive = [true, false, false, false]
@@ -95,6 +101,8 @@ func _test_screen() -> void:
 	await process_frame
 	_expect(battle.board_root.visible and battle._units.size() == 20, "The 3D four-player board opens with 20 figures")
 	_expect(battle.floor_grid.get_unit_at(FfaRules.start_cell(1, 2)) != null, "Figures stand on the cells of the flat floor")
+	_expect(battle._strip.visible and not battle._top_row.visible, "The other players' cards show in the top strip")
+	_expect(battle.battle_ui.hand_titles[1].text.begins_with("↻ KARTE  GRID"), "The card chain starts with the Grid and names who gets the next card")
 	var camera := main.get_node("CameraController") as CameraController
 	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
 	var deadline := Time.get_ticks_msec() + 20000

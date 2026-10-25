@@ -334,6 +334,11 @@ func hold_arena() -> void:
 			(child as Node3D).visible = false
 
 
+func set_temple_markers_visible(value: bool) -> void:
+	for half: ArenaHalf in _arena_halves:
+		half.set_temple_visible(value)
+
+
 ## Own half (team 0) flies up from below, the opponent's down from above; they
 ## meet in the middle and form the 5 x 5 board.
 func play_intro() -> void:

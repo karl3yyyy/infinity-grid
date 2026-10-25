@@ -8,7 +8,7 @@ var unit_name: String = "Unit"
 var team_id: int = 0
 var grid_position: Vector2i = Vector2i.ZERO
 var is_master: bool = false
-## Replaces KERN / SCHÜLER on the label (chaos mode hides the real role).
+## Replaces KERN / DAEMON on the label (chaos mode hides the real role).
 var role_override: String = ""
 ## Chaos shield: cannot be captured until the owner moves again.
 var shielded: bool = false
@@ -132,6 +132,25 @@ func _face_viewer() -> void:
 	rig.turn = wrapf(global_rotation.y - camera.global_rotation.y, -PI, PI)
 
 
+## Chaos hidden king: a gold ring at the feet that only the owner is shown.
+func mark_as_king() -> void:
+	if visual_root.get_node_or_null("KingRing") != null:
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "KingRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.5
+	torus.outer_radius = 0.58
+	ring.mesh = torus
+	ring.position = Vector3(0.0, 0.07, 0.0)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("ffd24a")
+	ring.material_override = material
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	visual_root.add_child(ring)
+
+
 func set_selected(value: bool) -> void:
 	selection_ring.visible = value and not is_dead
 
@@ -251,7 +270,7 @@ func refresh_role_label() -> void:
 
 
 func role_label() -> String:
-	var role := role_override if role_override != "" else ("KERN" if is_master else "SCHÜLER")
+	var role := role_override if role_override != "" else ("KERN" if is_master else GridLore.SIDE_PIECE)
 	return role + " [SCHILD]" if shielded else role
 
 

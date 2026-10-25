@@ -36,6 +36,8 @@ var _slot: int = -1
 var _targets: Array[Vector2i] = []
 var _notice: String = ""
 var _previous_grid: GridManager
+var _strip: FfaSeatStrip
+var _top_row: Control
 
 
 func setup(ui: GridBattleUI, camera_controller: CameraController, input: PlayerController, movement: UnitMovement, manager: GridBattleManager) -> void:
@@ -54,9 +56,20 @@ func setup(ui: GridBattleUI, camera_controller: CameraController, input: PlayerC
 	units_root = Node3D.new()
 	units_root.name = "FfaUnits"
 	board_root.add_child(units_root)
+	_install_strip()
 	player_controller.cell_clicked.connect(_on_cell_clicked)
 	player_controller.cancel_requested.connect(_on_cancel_requested)
 	battle_ui.card_selected.connect(_on_card_selected)
+
+
+## The top card row of the HUD is swapped for the hands of the other players.
+func _install_strip() -> void:
+	_top_row = battle_ui.hand_anchors[1][0].get_parent() as Control
+	_strip = FfaSeatStrip.new()
+	_strip.visible = false
+	var box := _top_row.get_parent()
+	box.add_child(_strip)
+	box.move_child(_strip, _top_row.get_index())
 
 
 ## humans: 0 (bots only, tests), 1, 2 (opposite seats) or 4.
@@ -82,13 +95,15 @@ func start(humans: int, shifting_tiles: bool) -> void:
 	_clear_units()
 	floor_grid.setup()
 	board_root.visible = true
+	_top_row.visible = false
+	_strip.visible = true
 	camera.set_board(FfaRules.SIZE, false)
 	camera.set_seat_view(0)
 	_make_looks()
 	_spawn_units()
 	battle_ui.set_opponent_bot(true)
 	_refresh_ui()
-	battle_ui.set_instruction("")
+	battle_ui.set_instruction(GridLore.finite_start_line())
 	await battle_ui.play_card_deal()
 	if game == _game_id:
 		_begin_turn()
@@ -178,13 +193,17 @@ func _begin_turn() -> void:
 
 func _refresh_ui() -> void:
 	var view := _view_seat
-	var opposite := (view + 2) % FfaRules.PLAYERS
 	var own_turn := rules.current == view and _is_human[view] and rules.winner == FfaRules.RUNNING
-	battle_ui.update_hands([rules.hands[view], rules.hands[opposite]], rules.pass_card, 0, _slot if own_turn else -1, 0, not own_turn)
+	battle_ui.update_hands([rules.hands[view], rules.hands[view]], rules.pass_card, 0, _slot if own_turn else -1, 0, not own_turn, false)
 	battle_ui.hand_titles[0].text = _seat_name(view)
 	battle_ui.hand_titles[0].modulate = FfaFloor.SEAT_COLORS[view].lightened(0.3)
-	battle_ui.hand_titles[1].text = _seat_name(opposite)
-	battle_ui.hand_titles[1].modulate = FfaFloor.SEAT_COLORS[opposite].lightened(0.3)
+	var names: Array[String] = []
+	for seat: int in range(FfaRules.PLAYERS):
+		names.append(_seat_name(seat))
+	_strip.show_seats(rules, names, view)
+	var giver := "GRID" if rules.pass_giver < 0 else names[rules.pass_giver]
+	battle_ui.hand_titles[1].text = "↻ KARTE  %s → %s → %s" % [giver, names[rules.current], names[rules.next_after(rules.current)]]
+	battle_ui.hand_titles[1].modulate = Color("ffc23a")
 	var mover := rules.current
 	battle_ui.set_header_text("RUNDE %02d  •  %s AM ZUG" % [rules.round_number, _seat_name(mover)], FfaFloor.SEAT_COLORS[mover].lightened(0.35))
 	battle_ui.update_selection(_selected)
@@ -300,7 +319,7 @@ func _after_turn() -> void:
 	var parts: PackedStringArray = []
 	for seat: int in rules.last_events["eliminated"]:
 		_make_ruins(seat)
-		parts.append("%s ist ausgeschieden!" % _seat_name(seat))
+		parts.append("%s %s" % [_seat_name(seat), GridLore.finite_out_line()])
 	_sync_tiles()
 	if str(rules.last_events["tiles"]) != "":
 		parts.append(str(rules.last_events["tiles"]))

@@ -26,6 +26,7 @@ var _model: Node3D
 var _team: int = 0
 var _skin_id: String = ""
 var _floor_offset: float = 0.0
+var _temple_visible: bool = true
 
 
 ## team 0 sits at the high rows (towards the camera), team 1 mirrors it.
@@ -37,6 +38,14 @@ func place(team: int, grid_depth: float) -> void:
 
 ## The platform itself plus a darker copy on each side, where the board wraps
 ## round: figures there stand on the same floor.
+## The crown on the KERN's start square gives nothing away only while it is hidden (hidden-king chaos).
+func set_temple_visible(value: bool) -> void:
+	_temple_visible = value
+	var marker := _model.get_node_or_null("TempleMarker") as Node3D if _model != null else null
+	if marker != null:
+		marker.visible = value
+
+
 func show_skin(skin_id: String, with_wrap_copies: bool = true) -> void:
 	var key := skin_id if MODELS.has(skin_id) else "standard"
 	if _model != null:
@@ -50,7 +59,10 @@ func show_skin(skin_id: String, with_wrap_copies: bool = true) -> void:
 	_model = Node3D.new()
 	_model.position = Vector3(0.0, _floor_offset, 0.0)
 	add_child(_model)
-	_model.add_child(TempleMarker.make(_team, -_floor_offset + TEMPLE_MARKER_HEIGHT))
+	var marker := TempleMarker.make(_team, -_floor_offset + TEMPLE_MARKER_HEIGHT)
+	marker.name = "TempleMarker"
+	marker.visible = _temple_visible
+	_model.add_child(marker)
 	var source := load(str(config["path"])) as PackedScene
 	var sides: Array[int] = [0]
 	if with_wrap_copies:

@@ -21,6 +21,8 @@ var alive: Array[bool] = [true, true, true, true]
 var current: int = 0
 var round_number: int = 1
 var winner: int = RUNNING
+## Who played the card now waiting in the middle (-1: nobody yet).
+var pass_giver: int = -1
 var tiles := ChaosRules.new()
 ## What the last turn changed, for the screen: eliminated players and tile messages.
 var last_events: Dictionary = {}
@@ -130,7 +132,13 @@ func pass_turn(slot: int) -> void:
 	_end_turn()
 
 
+## The seat that moves after `seat` (clockwise, skipping eliminated players).
+func next_after(seat: int) -> int:
+	return _next_alive(seat)
+
+
 func _exchange(slot: int) -> void:
+	pass_giver = current
 	var used: MovementCard = hands[current][slot]
 	hands[current][slot] = pass_card
 	pass_card = used

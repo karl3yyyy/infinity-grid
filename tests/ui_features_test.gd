@@ -3,6 +3,7 @@ extends SceneTree
 const EncyclopediaScript := preload("res://scripts/ui/card_encyclopedia.gd")
 const MatchReplayScript := preload("res://scripts/ui/match_replay.gd")
 const NetworkMatchScript := preload("res://scripts/battle/network_match.gd")
+const TutorialDirectorScript := preload("res://scripts/battle/tutorial_director.gd")
 const MainScene := preload("res://scenes/main.tscn")
 
 var failures: Array[String] = []
@@ -13,6 +14,19 @@ func _initialize() -> void:
 
 
 func _run_tests() -> void:
+	_expect(
+		TutorialDirectorScript.NODE_PING_INTRO.size() == 1
+		and TutorialDirectorScript.NODE_PING_INTRO[0].contains("Node Ping")
+		and TutorialDirectorScript.NODE_PING_INTRO[0].contains("Gleichstand"),
+		"The tutorial briefly explains the Node Ping before dealing cards"
+	)
+	_expect(
+		TutorialDirectorScript.MENU_RECAP.size() == 3
+		and TutorialDirectorScript.MENU_RECAP[0].contains("5×5")
+		and TutorialDirectorScript.MENU_RECAP[1].contains("passen")
+		and TutorialDirectorScript.MENU_RECAP[2].contains("gegnerischen KERN"),
+		"The menu tutorial recaps board, cards, passing and the win condition"
+	)
 	var cards := MovementCard.create_deck()
 	var encyclopedia: CardEncyclopedia = EncyclopediaScript.new(cards)
 	root.add_child(encyclopedia)
@@ -67,6 +81,25 @@ func _run_tests() -> void:
 	await process_frame
 	var grid := main.get_node_or_null("BattleScene/GridManager") as GridManager
 	var battle := main.get_node_or_null("BattleManager") as GridBattleManager
+	var stage := main.get_node_or_null("CameraController/CardStage") as CardStage
+	if stage != null:
+		var opponent_card: Card3D
+		for card_node: Card3D in stage._used_nodes():
+			if card_node.team_id >= 0 and card_node.team_id != stage._placements[0]["team"]:
+				opponent_card = card_node
+				break
+		if opponent_card != null:
+			stage._hovered = opponent_card
+			stage._update_hover_states()
+			_expect(opponent_card._hover_target, "Hovering an opponent card highlights it")
+			stage._hovered = null
+			stage._update_hover_states()
+			stage._toggle_preview(opponent_card)
+			_expect(stage._previewed == opponent_card and opponent_card._hover_target, "Tapping an opponent card opens its enlarged preview")
+			stage._toggle_preview(opponent_card)
+			_expect(stage._previewed == null and not opponent_card._hover_target, "Tapping a previewed opponent card closes its preview")
+		else:
+			_expect(false, "The opponent hand has visible preview cards")
 	if grid != null and battle != null:
 		var attacking_master: BattleUnit = battle.players[2]
 		var defending_master: BattleUnit = battle.enemies[2]
@@ -113,12 +146,61 @@ func _run_tests() -> void:
 		battle.battle_ui.match_replay._step(1)
 		_expect(attacking_master.grid_position == live_position and battle.hands[0] == live_hand and battle.pass_card == live_pass, "Replay navigation does not mutate the live board or cards")
 		battle.battle_ui.match_replay.close()
+	main.queue_free()
+	await process_frame
+	await process_frame
+	await _test_tutorial_node_ping()
 	if failures.is_empty():
 		print("UI FEATURE TESTS PASSED")
 	else:
 		for failure: String in failures:
 			push_error(failure)
 	quit(0 if failures.is_empty() else 1)
+
+
+func _test_tutorial_node_ping() -> void:
+	var main := MainScene.instantiate()
+	root.add_child(main)
+	current_scene = main
+	await process_frame
+	await process_frame
+	var battle := main.get_node("BattleManager") as GridBattleManager
+	var stage := main.get_node("CameraController/CardStage") as CardStage
+	battle._start_tutorial(false)
+	var last_dialog := ""
+	var observed_ping := false
+	var checked_hidden_cards := false
+	var finished_ping := false
+	var deadline := Time.get_ticks_msec() + 30000
+	while Time.get_ticks_msec() < deadline and not finished_ping:
+		if battle.tutorial != null and battle.tutorial._panel.visible and battle.tutorial._next_button.visible:
+			var dialog := battle.tutorial._body.text
+			if dialog != last_dialog:
+				last_dialog = dialog
+				battle.tutorial._next_button.pressed.emit()
+		var phase := battle.get_node_or_null("PingPhase") as PingPhase
+		if phase != null and phase.overlay.is_open():
+			observed_ping = true
+			if not checked_hidden_cards:
+				checked_hidden_cards = true
+				_expect(last_dialog == TutorialDirectorScript.NODE_PING_INTRO[0], "The tutorial explains the Node Ping immediately before playing it")
+				_expect(stage.state == CardStage.State.HIDDEN, "Tutorial cards stay hidden while the Node Ping is played")
+			if phase.overlay._choice_open:
+				phase.overlay._finish_choice(0)
+			elif phase.overlay._arena.accepting:
+				phase.overlay._arena.accepting = false
+				phase.overlay._on_spot_tapped(Vector2(0.5, 0.5))
+		elif observed_ping and stage.state != CardStage.State.HIDDEN:
+			finished_ping = true
+			_expect(not battle.pinging, "The tutorial leaves the Node Ping before dealing cards")
+			_expect(stage.state == CardStage.State.DEALING, "The card animation starts after the tutorial Node Ping")
+			break
+		await process_frame
+	_expect(observed_ping, "The tutorial launches the playable Node Ping minigame")
+	_expect(checked_hidden_cards, "The card deal is gated on completing the Node Ping")
+	_expect(finished_ping, "Completing the Node Ping lets the tutorial continue")
+	main.queue_free()
+	await process_frame
 
 
 func _expect(condition: bool, message: String) -> void:

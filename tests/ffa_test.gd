@@ -110,14 +110,34 @@ func _test_screen() -> void:
 	_expect(battle.battle_ui.hand_titles[1].text.begins_with("↻ KARTE  GRID"), "The card chain starts with the Grid and names who gets the next card")
 	var camera := main.get_node("CameraController") as CameraController
 	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
+	var initial_yaw := camera.target_yaw
+	camera.rotate_by_gesture(PI * 0.5)
+	_expect(absf(angle_difference(initial_yaw, camera.target_yaw)) > 1.0, "The camera can rotate freely around the full board")
+	camera.set_seat_view(0)
 	var deadline := Time.get_ticks_msec() + 20000
 	while (battle._busy or not battle._is_local(battle.rules.current)) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_expect(not battle._busy and battle._is_local(battle.rules.current), "The Node Ping names a starter and you may act once it is your turn")
 	var origin := FfaRules.start_cell(0, 2)
 	battle._on_cell_clicked(origin)
+	battle.rules.hands[0][0] = MovementCard.new("Test step", [Vector2i(0, 1)] as Array[Vector2i])
 	battle._on_card_selected(0, 0)
 	_expect(battle._selected != null and battle._selected.grid_position == origin and battle._slot == 0, "Piece and card can be chosen")
+	var target := Vector2i(origin.x, origin.y - 1)
+	var target_cell: GridCell = battle.floor_grid.cells[target]
+	_expect(
+		target in battle._targets
+		and target_cell.highlight == GridCell.Highlight.MOVE
+		and target_cell.material.albedo_color == FfaFloor.MOVE_GLOW,
+		"Finite Grid legal destinations use a vivid lime highlight"
+	)
+	var holograms_before := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	ui.emote_picked.emit("haha")
+	var local_holograms := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	_expect(local_holograms > holograms_before, "The local player's emote appears above their FFA Master")
+	battle._on_emote_received(1, "haha")
+	var remote_holograms := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	_expect(remote_holograms > local_holograms, "A received opponent emote appears above that FFA Master")
 	battle.start(0, false)
 	deadline = Time.get_ticks_msec() + 60000
 	while battle.rules.round_number < 3 and battle.rules.winner == FfaRules.RUNNING and Time.get_ticks_msec() < deadline:

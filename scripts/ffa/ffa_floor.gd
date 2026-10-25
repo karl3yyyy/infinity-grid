@@ -7,6 +7,7 @@ extends GridManager
 const SEAT_COLORS: Array[Color] = [Color("3a8fe7"), Color("6ee65a"), Color("e75a4a"), Color("ffc23a")]
 const SLAB_COLOR := Color("24404c")
 const GRID_GLOW := Color("6fc4ff")
+const MOVE_GLOW := Color("d7ff3f")
 
 var _seat_tints: Dictionary = {}
 
@@ -57,6 +58,9 @@ func _create_slab() -> void:
 ## highlights, warnings and holes use the normal cell colours.
 func _update_cell_visual(cell: GridCell) -> void:
 	if cell.material == null:
+		return
+	if cell.highlight == GridCellData.Highlight.MOVE:
+		ArenaTileStyle.paint(cell.material, true, MOVE_GLOW, 1.0)
 		return
 	var plain := cell.highlight in [GridCellData.Highlight.NORMAL, GridCellData.Highlight.OCCUPIED, GridCellData.Highlight.HOVER]
 	if not plain:

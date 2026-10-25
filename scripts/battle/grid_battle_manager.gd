@@ -67,6 +67,7 @@ const MOVE_SECONDS: float = 30.0
 const MAX_TIMEOUTS_IN_A_ROW: int = 3
 var turn_timer: TurnTimer
 var _timeouts_in_a_row: int = 0
+var ffa_battle: FfaBattle
 
 
 func setup(
@@ -563,6 +564,18 @@ func set_starter(team: int) -> void:
 	apply_figure_facing()
 	await grid_manager.play_intro()
 	pinging = false
+	if tutorial != null:
+		input_locked = true
+		player_controller.enabled = false
+		await tutorial.after_intro()
+		await tutorial.before_node_ping()
+		team = await _ping_phase().run_local(true)
+		pinging = false
+		starting_player = team
+		current_player = team
+		apply_figure_facing()
+		input_locked = true
+		player_controller.enabled = false
 	SoundBoard.play("glitch")
 	SoundBoard.say("start")
 	position_counts.clear()
@@ -570,8 +583,6 @@ func set_starter(team: int) -> void:
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(team)
 	_refresh_ui()
-	if tutorial != null:
-		await tutorial.after_intro()
 	await battle_ui.play_card_deal()
 	if tutorial != null:
 		await tutorial.after_deal()
@@ -584,6 +595,9 @@ func set_starter(team: int) -> void:
 
 ## The local player sent an emote: show it over their KERN, pass it on.
 func _on_emote_picked(emote_id: String) -> void:
+	if ffa_battle != null and ffa_battle.is_active():
+		ffa_battle.play_local_emote(emote_id)
+		return
 	var team := network_team if network_team >= 0 else current_player
 	show_emote(team, emote_id)
 	if network_match != null:

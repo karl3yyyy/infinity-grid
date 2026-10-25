@@ -10,6 +10,9 @@ const SPEAKER_NAME := "DOC VOSS"
 ## Hand of the player, hand of the bot, the shared pass card.
 const CARD_NAMES: Array = [["Shell", "Crane"], ["Pulse", "Echo"], ["Orbit"]]
 
+const NODE_PING_INTRO: Array[String] = [
+	"Bevor die Karten kommen: Der Node Ping entscheidet, wer den Startspieler wählt. Beide tippen geheim auf einen Punkt. Wer näher am Signal liegt, darf wählen; bei Gleichstand tippt ihr noch einmal.",
+]
 const INTRO: Array[String] = [
 	"Oh, ein neuer Knoten. Wie spontan. Ich bin Doc Voss und habe das Grid gebaut. Es sollte ein ruhiges Datennetz werden. Jetzt prügeln sich darin Leute mit Karten. Danke dafür.",
 	"Willkommen im Core System. Jede Partie ist die Übernahme einer Datenplattform. Hier siehst du das Brett: 5×5 Felder. Alles heißt bei uns anders, aber es ist derselbe Mist mit Terminal-Stimmung.",
@@ -35,8 +38,12 @@ const AFTER_MOVE: Array = [
 const OUTRO_WON: String = "Gewonnen. Gegen einen Bot, der dir freiwillig in die Arme gelaufen ist. Aber ich nehme, was ich kriegen kann."
 const OUTRO_OTHER: String = "Na ja, das war ein Match. Im Ernst, selbst das war eine Einladung. Beim nächsten Mal klappt es."
 const OUTRO: Array[String] = [
-	"Eine Sache noch: Vor jeder echten Partie gibt es den Node Ping. Ihr wählt heimlich einen Punkt, wer näher am Signal liegt, fängt an. Wählen beide denselben, gibt es eine Signal Collision. Zwei Hirne, ein Gedanke, null Plan.",
-	"Der Rest vom Menü erklärt sich selbst. Meistens. Viel Glück, Guest Threat. Das Grid sieht zu. Es applaudiert nicht.",
+	"Das war der Probelauf. Du kennst jetzt die Grundlagen; der Rest vom Menü erklärt sich selbst. Meistens. Viel Glück, Guest Threat. Das Grid sieht zu. Es applaudiert nicht.",
+]
+const MENU_RECAP: Array[String] = [
+	"Das Brett hat 5×5 Felder: links und rechts geht es auf der anderen Seite weiter. Oben und unten ist Schluss. Jede Karte zeigt dir genau, wohin deine Figur ziehen darf.",
+	"Du hast zwei Karten; die fünfte Karte liegt in der Mitte. Nach deinem Zug tauschst du die benutzte Karte mit der mittleren. Kein legaler Zug? Dann musst du passen.",
+	"Der Node Ping entscheidet, wer den Start wählt: Beide tippen geheim, dann zählt die Nähe zum Signal. Eine Signal Collision bedeutet Gleichstand und einen neuen Versuch. Schlage den gegnerischen KERN, um zu gewinnen. Such dir jetzt im Menü einen Modus aus.",
 ]
 
 signal _advanced
@@ -85,6 +92,12 @@ func after_intro() -> void:
 	_glow_masters(true)
 	await _say(INTRO[3])
 	_glow_masters(false)
+	_hide()
+
+
+func before_node_ping() -> void:
+	for line: String in NODE_PING_INTRO:
+		await _say(line)
 	_hide()
 
 
@@ -170,17 +183,25 @@ func _can_capture_master() -> bool:
 	return false
 
 
-## The match is over: a few words, then the tutorial counts as done.
+## The match is over: a short menu recap follows a tutorial win.
 func on_battle_over(winner: int) -> void:
 	_hide()
-	TutorialProgress.mark_done(battle.battle_ui.main_menu.account)
 	if _skipped:
+		TutorialProgress.mark_done(battle.battle_ui.main_menu.account)
 		return
 	await battle.get_tree().create_timer(1.8).timeout
 	await _say(OUTRO_WON if winner == 0 else OUTRO_OTHER)
-	for line: String in OUTRO:
-		await _say(line)
+	if winner == 0:
+		battle.grid_manager.get_parent().visible = false
+		battle.battle_ui.result_overlay.visible = false
+		battle.battle_ui.main_menu.open_menu(false)
+		for line: String in MENU_RECAP:
+			await _say(line)
+	else:
+		for line: String in OUTRO:
+			await _say(line)
 	_hide()
+	TutorialProgress.mark_done(battle.battle_ui.main_menu.account)
 
 
 func _guide_first_turn() -> void:

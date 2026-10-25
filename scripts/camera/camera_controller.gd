@@ -55,10 +55,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_clamp_view()
 
 
-## Turning and zooming stay within a small range around the starting view.
 func _clamp_view() -> void:
-	var offset := clampf(wrapf(target_yaw - base_yaw, -PI, PI), -MAX_YAW_OFFSET, MAX_YAW_OFFSET)
-	target_yaw = base_yaw + offset
+	target_yaw = wrapf(target_yaw, -PI, PI)
 	target_distance = clampf(target_distance, base_distance * ZOOM_IN_FACTOR, base_distance * ZOOM_OUT_FACTOR)
 
 

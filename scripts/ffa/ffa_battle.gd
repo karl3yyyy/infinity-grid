@@ -60,6 +60,7 @@ func setup(ui: GridBattleUI, camera_controller: CameraController, input: PlayerC
 	player_controller = input
 	unit_movement = movement
 	battle_manager = manager
+	battle_manager.ffa_battle = self
 	board_root = Node3D.new()
 	board_root.name = "FfaBoard"
 	board_root.visible = false
@@ -662,6 +663,7 @@ func _attach_client(room_client: GroupClient) -> void:
 	client.started.connect(start_online)
 	client.resumed.connect(resume_online)
 	client.turn_received.connect(_on_turn_received)
+	client.emote_received.connect(_on_emote_received)
 	client.seat_away.connect(_on_seat_away)
 	client.seat_back.connect(_on_seat_back)
 	client.seat_left.connect(_on_seat_left)
@@ -674,6 +676,34 @@ func _attach_client(room_client: GroupClient) -> void:
 func _leave_room() -> void:
 	if client != null and _online and _active:
 		client.leave()
+
+
+func is_active() -> bool:
+	return _active
+
+
+func play_local_emote(emote_id: String) -> void:
+	if not _active or EmoteWheel.entry(emote_id).is_empty():
+		return
+	var seat := _my_seat if _online else _view_seat
+	_show_emote(seat, emote_id)
+	if _online and client != null:
+		client.send_emote(emote_id)
+
+
+func _on_emote_received(seat: int, emote_id: String) -> void:
+	if not _active or seat == _my_seat:
+		return
+	_show_emote(seat, emote_id)
+
+
+func _show_emote(seat: int, emote_id: String) -> void:
+	if seat < 0 or seat >= FfaRules.PLAYERS:
+		return
+	for unit: BattleUnit in _units:
+		if unit.team_id == seat and unit.is_master and not unit.is_dead:
+			EmoteStage.perform(units_root, unit, seat, emote_id)
+			return
 
 
 ## Turns of other seats come in numbered; they run one after another once the board is idle.

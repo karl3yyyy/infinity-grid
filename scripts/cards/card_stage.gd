@@ -32,6 +32,7 @@ var _placements: Array = []
 var _pool: Array[Card3D] = []
 var _by_card: Dictionary = {}
 var _hovered: Card3D
+var _previewed: Card3D
 var _slot_bar: MeshInstance3D
 var _time: float = 0.0
 
@@ -123,7 +124,6 @@ func deal() -> void:
 		card_node.rotation = Vector3(0.0, PI, 0.0)
 		card_node.scale = Vector3.ONE * 0.15
 	_show_slot_bar(origin)
-	SoundBoard.play("boot")
 
 	# 1. Materialise.
 	var appear_time := DEAL_SECONDS * 0.22
@@ -172,14 +172,9 @@ func _process(delta: float) -> void:
 	_update_base_size()
 	var mouse := get_viewport().get_mouse_position()
 	var hover_node := _card_at(mouse) if state == State.READY else null
-	if hover_node != null and not hover_node.interactive:
-		hover_node = null
 	if hover_node != _hovered:
-		if _hovered != null:
-			_hovered.set_hovered(false)
 		_hovered = hover_node
-		if _hovered != null:
-			_hovered.set_hovered(true)
+		_update_hover_states()
 	if state == State.READY:
 		_follow_homes(delta, mouse)
 
@@ -199,7 +194,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	if card_node.interactive and card_node.team_id >= 0:
+		_previewed = null
+		_update_hover_states()
 		card_picked.emit(card_node.team_id, card_node.slot)
+	else:
+		_toggle_preview(card_node)
+
+
+func _toggle_preview(card_node: Card3D) -> void:
+	_previewed = null if _previewed == card_node else card_node
+	_update_hover_states()
+
+
+func _update_hover_states() -> void:
+	for card_node: Card3D in _pool:
+		card_node.set_hovered(card_node == _hovered or card_node == _previewed)
 
 
 # --- placement bookkeeping -------------------------------------------------
@@ -237,6 +246,9 @@ func _bind_cards() -> void:
 		if key != card_node.face_key:
 			card_node.face_key = key
 			card_node.show_card(placement["card"], placement["rotated"], placement["color"])
+	if _previewed != null and (_previewed.interactive or not _used_nodes().has(_previewed)):
+		_previewed = null
+		_update_hover_states()
 
 
 func _node_for(placement: Dictionary) -> Card3D:
@@ -319,9 +331,12 @@ func _follow_homes(delta: float, mouse: Vector2) -> void:
 		if card_node.is_selected():
 			lift = SELECT_LIFT
 			grow = 1.08
+		elif card_node == _previewed:
+			lift = HOVER_LIFT * 1.5
+			grow = 1.14
 		elif card_node == _hovered:
 			lift = HOVER_LIFT
-			grow = 1.04
+			grow = 1.06
 		var bob := sin(_time * 1.6 + float(card_node.get_index()) * 1.3) * 2.5
 		target.y += (lift * card_node.lift_direction + bob) * home_scale
 		card_node.position = card_node.position.lerp(target, weight)
@@ -329,7 +344,7 @@ func _follow_homes(delta: float, mouse: Vector2) -> void:
 		card_node.scale = Vector3.ONE * card_node.rest_scale
 		# Tilt towards the pointer for the picked and hovered card.
 		var tilt_target := Vector2.ZERO
-		if card_node.is_selected() or card_node == _hovered:
+		if card_node.is_selected() or card_node == _hovered or card_node == _previewed:
 			var offset := (mouse - viewport_size * 0.5) - Vector2(target.x, -target.y)
 			tilt_target = Vector2(clampf(offset.y / 300.0, -1.0, 1.0) * 0.14, clampf(offset.x / 300.0, -1.0, 1.0) * 0.2)
 		tilt_target.x += -REST_TILT * card_node.lift_direction + sin(_time * 1.1 + float(card_node.get_index())) * 0.025

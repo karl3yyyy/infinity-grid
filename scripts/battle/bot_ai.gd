@@ -16,7 +16,7 @@ const HEIGHT: int = 5
 const TEMPLE_CELLS: Array[int] = [22, 2]
 
 var difficulty: int = Difficulty.MEDIUM
-var max_think_msec: int = 1400
+var max_think_msec: int = 900
 var _deadline_msec: int = 0
 var _timed_out: bool = false
 var _cards: Array[MovementCard] = []
@@ -56,7 +56,7 @@ func choose_move(state: Dictionary, team: int) -> Dictionary:
 		Difficulty.MEDIUM:
 			best = _search_root(pieces, teams, hands, pass_card, team, root_moves, 2, 1000000)
 		_:
-			best = _search_iterative(pieces, teams, hands, pass_card, team, root_moves, 5)
+			best = _search_iterative(pieces, teams, hands, pass_card, team, root_moves, 3)
 	return {"from": _to_coord(best[0]), "slot": best[1], "to": _to_coord(best[2])}
 
 
@@ -74,10 +74,13 @@ func _choose_easy(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 
 func _search_iterative(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, pass_card: int, team: int, moves: Array, max_depth: int) -> Array:
 	_deadline_msec = Time.get_ticks_msec() + max_think_msec
-	var best: Array = _search_root(pieces, teams, hands, pass_card, team, moves, 2, 1000000)
-	for depth: int in range(3, max_depth + 1):
+	var best: Array = moves[0]
+	var candidate := _search_root(pieces, teams, hands, pass_card, team, moves, 1, _deadline_msec)
+	if not _timed_out:
+		best = candidate
+	for depth: int in range(2, max_depth + 1):
 		_timed_out = false
-		var candidate := _search_root(pieces, teams, hands, pass_card, team, moves, depth, _deadline_msec)
+		candidate = _search_root(pieces, teams, hands, pass_card, team, moves, depth, _deadline_msec)
 		if _timed_out:
 			break
 		best = candidate
@@ -95,6 +98,9 @@ func _search_root(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 	var alpha := -WIN_SCORE * 10
 	var beta := WIN_SCORE * 10
 	for move: Array in moves:
+		if Time.get_ticks_msec() > _deadline_msec:
+			_timed_out = true
+			break
 		var undo := _apply(pieces, teams, hands, team, move, pass_card)
 		var score := -_negamax(pieces, teams, hands, int(undo["pass"]), 1 - team, depth - 1, -beta, -alpha, 1)
 		_undo(pieces, teams, hands, team, move, undo)
@@ -114,11 +120,11 @@ func _search_root(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 func _negamax(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, pass_card: int, team: int, depth: int, alpha: int, beta: int, ply: int) -> int:
 	if not _master_alive(pieces, teams, team) or _temple_taken(pieces, teams, team):
 		return -WIN_SCORE + ply
-	if depth <= 0:
-		return _evaluate(pieces, teams, hands, team)
 	if Time.get_ticks_msec() > _deadline_msec:
 		_timed_out = true
 		return 0
+	if depth <= 0:
+		return _evaluate(pieces, teams, hands, team)
 	var moves := _generate_moves(pieces, teams, hands, team)
 	if moves.is_empty():
 		moves = _pass_moves()

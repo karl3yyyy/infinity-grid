@@ -40,9 +40,9 @@ The interface language is German.
   updates itself.
 - **Match learning:** a turn-by-turn replay shows board positions and card
   exchanges; the card encyclopedia includes plain-language moves and a
-  tappable board preview. Winning Master captures are highlighted in gold, and
-  normal matches warn when the active side's Master can be captured; Ranked
-  matches leave this warning off.
+  tappable board preview. Hover or tap an opponent card to enlarge it. Winning
+  Master captures are highlighted in gold, and normal matches warn when the
+  active side's Master can be captured; Ranked matches leave this warning off.
 
 ## How to play
 
@@ -57,7 +57,8 @@ its targets. Moves past the left or right edge come back on the other side.
 
 **Controls:** click or tap cards, pieces and squares; right-click or long press
 cancels; Escape opens the pause menu. On desktop, WASD/arrow keys pan, Q/E
-rotate and the mouse wheel zooms the camera.
+rotate the camera freely around the board and the mouse wheel zooms. On touch
+screens, drag with one finger to rotate, or use two fingers to rotate and zoom.
 
 ## Run it locally
 

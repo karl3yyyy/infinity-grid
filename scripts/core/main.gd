@@ -74,22 +74,11 @@ func _ready() -> void:
 		unit_movement,
 		units
 	)
-	battle_ui.ffa_requested.connect(func(humans: int, shifting_tiles: bool) -> void: _open_ffa(battle_ui, humans, shifting_tiles))
-
-
-## The four-player mode is a flat 2D screen above everything; closing it
-## returns to the main menu.
-func _open_ffa(battle_ui: GridBattleUI, humans: int, shifting_tiles: bool) -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "FfaLayer"
-	layer.layer = 80
-	add_child(layer)
-	var screen := FfaScreen.new()
-	layer.add_child(screen)
-	screen.closed.connect(func() -> void:
-		layer.queue_free()
-		battle_ui.main_menu.open_menu(false))
-	screen.start(humans, shifting_tiles)
+	var ffa_battle := FfaBattle.new()
+	ffa_battle.name = "FfaBattle"
+	add_child(ffa_battle)
+	ffa_battle.setup(battle_ui, camera_controller, player_controller, unit_movement, battle_manager)
+	battle_ui.ffa_requested.connect(ffa_battle.start)
 
 
 func _check_for_web_update() -> void:

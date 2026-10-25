@@ -14,6 +14,9 @@ var base_distance: float = 11.5
 const MAX_YAW_OFFSET: float = 0.75
 const ZOOM_IN_FACTOR: float = 0.7
 const ZOOM_OUT_FACTOR: float = 1.2
+## Board edge length in cells and whether its left/right copies show (the 4-player board is 9 and closed).
+var board_cells: int = 5
+var board_wraps: bool = true
 var _shake_time: float = 0.0
 var _shake_strength: float = 0.0
 ## Screen pixels covered by the card trays above and below the board.
@@ -65,6 +68,19 @@ func focus_on(world_position: Vector3) -> void:
 func set_player_view(team_id: int) -> void:
 	target_focus = Vector3.ZERO
 	base_yaw = 0.0 if team_id == 0 else PI
+	target_yaw = base_yaw
+
+
+func set_board(cells: int, wraps: bool) -> void:
+	board_cells = cells
+	board_wraps = wraps
+	_update_framing()
+
+
+## Four seats around a square board: 0 bottom, 1 left, 2 top, 3 right.
+func set_seat_view(seat: int) -> void:
+	target_focus = Vector3.ZERO
+	base_yaw = [0.0, -PI * 0.5, PI, PI * 0.5][clampi(seat, 0, 3)]
 	target_yaw = base_yaw
 
 
@@ -122,11 +138,11 @@ func _update_framing() -> void:
 		return
 	var aspect_ratio := viewport_size.x / viewport_size.y
 	# On phones only a sliver of the wrapped copies shows, so the board itself is big.
-	var repeated_side_cells := 0.3 if aspect_ratio < 0.8 else 1.5
-	var total_board_width := (5.0 + repeated_side_cells * 2.0) * 1.4
+	var repeated_side_cells := (0.3 if aspect_ratio < 0.8 else 1.5) if board_wraps else 0.0
+	var total_board_width := (float(board_cells) + repeated_side_cells * 2.0) * 1.4
 	var free_height := maxf(viewport_size.y * 0.3, viewport_size.y - board_insets.x - board_insets.y)
 	var width_fit := total_board_width / aspect_ratio
-	var height_fit := BOARD_VISUAL_DEPTH * viewport_size.y / free_height
+	var height_fit := (BOARD_VISUAL_DEPTH + float(board_cells - 5) * 1.4) * viewport_size.y / free_height
 	target_distance = maxf(7.4, maxf(width_fit, height_fit))
 	base_distance = target_distance
 	distance = target_distance

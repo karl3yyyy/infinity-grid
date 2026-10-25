@@ -104,6 +104,13 @@ func update_header(current_player: int, round_number: int) -> void:
 	set_turn_timer(_timer_seconds)
 
 
+## A header the caller words itself (four-player mode).
+func set_header_text(text_value: String, color: Color) -> void:
+	_header_text = text_value
+	_header_color = color
+	set_turn_timer(_timer_seconds)
+
+
 ## Seconds left for the player's move, shown after the turn text (-1: no clock).
 ## The last five seconds turn red.
 func set_turn_timer(seconds_left: int) -> void:
@@ -153,7 +160,7 @@ func _add_clock_row(parent: Control) -> void:
 	_opponent_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
-func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
+func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0, dim_all: bool = false) -> void:
 	viewer_team = viewing_team
 	var placements: Array = []
 	for position: int in range(2):
@@ -166,8 +173,8 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 				"team": team_id, "slot": slot, "rotated": position == 1,
 				"color": TEAM_COLORS[team_id], "lift_direction": lift,
 				"selected": team_id == current_player and slot == selected_slot,
-				"dimmed": team_id != current_player,
-				"interactive": team_id == current_player and not bot_hand,
+				"dimmed": dim_all or team_id != current_player,
+				"interactive": team_id == current_player and not bot_hand and not dim_all,
 			})
 		if team_id == current_player:
 			placements.append({

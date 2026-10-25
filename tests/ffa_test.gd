@@ -89,26 +89,30 @@ func _test_screen() -> void:
 	await process_frame
 	await process_frame
 	var ui := main.get_node("BattleUI") as GridBattleUI
+	var battle := main.get_node("FfaBattle") as FfaBattle
+	battle.bot_delay = 0.0
 	ui.main_menu.ffa_requested.emit(1, true)
 	await process_frame
-	var layer := main.get_node_or_null("FfaLayer")
-	_expect(layer != null and layer.get_child(0) is FfaScreen, "The four-player screen opens")
-	var screen := layer.get_child(0) as FfaScreen
-	_expect(screen.rules.current == 0, "You move first in a solo game")
-	var origin := FfaRules.start_cell(0, 2)
-	screen._on_cell_pressed(origin)
-	screen._on_card_pressed(0)
-	_expect(screen._selected == origin and screen._slot == 0, "Piece and card can be chosen")
-	screen.bot_delay = 0.0
-	screen.start(0, true)
+	_expect(battle.board_root.visible and battle._units.size() == 20, "The 3D four-player board opens with 20 figures")
+	_expect(battle.floor_grid.get_unit_at(FfaRules.start_cell(1, 2)) != null, "Figures stand on the cells of the flat floor")
+	var camera := main.get_node("CameraController") as CameraController
+	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
 	var frames := 0
-	while screen.rules.winner == FfaRules.RUNNING and frames < 6000:
+	while battle._busy and frames < 600:
 		await process_frame
 		frames += 1
-	_expect(screen.rules.winner != FfaRules.RUNNING and screen._result_panel.visible, "A bots-only game plays through the screen to a result")
-	screen.closed.emit()
-	await process_frame
-	_expect(main.get_node_or_null("FfaLayer") == null or main.get_node("FfaLayer").is_queued_for_deletion(), "Closing returns to the menu")
+	_expect(not battle._busy and battle.rules.current == 0, "You move first and may act once the cards are dealt")
+	var origin := FfaRules.start_cell(0, 2)
+	battle._on_cell_clicked(origin)
+	battle._on_card_selected(0, 0)
+	_expect(battle._selected != null and battle._selected.grid_position == origin and battle._slot == 0, "Piece and card can be chosen")
+	battle.start(0, false)
+	frames = 0
+	while battle.rules.round_number < 3 and battle.rules.winner == FfaRules.RUNNING and frames < 6000:
+		await process_frame
+		frames += 1
+	_expect(battle.rules.round_number >= 3 or battle.rules.winner != FfaRules.RUNNING, "Bots play whole rounds on the 3D board, animated")
+	_expect(battle._units.filter(func(unit: BattleUnit) -> bool: return unit.position.distance_to(battle.floor_grid.grid_to_world(unit.grid_position)) > 0.05 and not unit.is_dead).is_empty(), "Every figure stands on its cell after the moves")
 	main.queue_free()
 	await process_frame
 

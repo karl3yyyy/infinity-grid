@@ -43,11 +43,13 @@ matches. Add a variant by adding a flag to `ChaosRules`, an entry in
 
 ## Four-player mode
 
-`scripts/ffa/`: a flat 2D screen (no 3D, no wraparound) on a closed 9x9 board.
-`FfaRules` (pure) holds pieces, hands, turn order, eliminations and tiles,
-`FfaBot` plays the bots, `FfaBoardView` draws, `FfaScreen` runs the match.
-Each player starts on one side and every card is turned to face the far side.
-Opened from Spielen > CHAOS > 4 SPIELER; `main.gd` hosts the screen above all UI.
+`scripts/ffa/`: runs in the 3D game with the normal figures, cards, camera and
+fighting styles, on a closed 9x9 board with a plain slab for a floor (no arena
+platforms yet). `FfaRules` (pure) holds pieces, hands, turn order, eliminations
+and tiles; `FfaBot` plays the bots; `FfaFloor` is a `GridManager` without
+wraparound; `FfaBattle` shows the match and takes the input. The camera turns to
+the seat of the human to move (`CameraController.set_seat_view`), so every
+player's "forward" points up the screen. Opened from Spielen > CHAOS > 4 SPIELER.
 
 ## Interface
 

@@ -54,6 +54,7 @@ var match_mode: String = ""
 ## Survives the scene reload so "Neue Partie" starts the same mode again.
 static var _replay_mode: String = ""
 static var _replay_chaos_options: Dictionary = {}
+static var _replay_ffa: Array = []
 ## Cards dealt for this match (hands + pass); the bot indexes into this list.
 var match_cards: Array[MovementCard] = []
 ## Look per team: {"character", "echo", "board"} (see CharacterRoster).
@@ -155,6 +156,8 @@ func _show_title_menu() -> void:
 			_start_bot_training()
 		elif mode == "chaos":
 			_start_chaos(_replay_chaos_options)
+		elif mode == "ffa":
+			battle_ui.ffa_requested.emit(int(_replay_ffa[0]), bool(_replay_ffa[1]))
 		else:
 			_start_local_multiplayer()
 		return
@@ -180,6 +183,12 @@ func _start_bot_training() -> void:
 	camera_controller.set_player_view(0)
 	_refresh_ui()
 	set_starter(await _ping_phase().run_local(true))
+
+
+## The four-player mode runs in FfaBattle; this only lets "Neue Partie" repeat it.
+func remember_ffa(humans: int, shifting_tiles: bool) -> void:
+	match_mode = "ffa"
+	_replay_ffa = [humans, shifting_tiles]
 
 
 func _start_chaos(options: Dictionary) -> void:
@@ -1113,7 +1122,7 @@ func _on_cancel_requested() -> void:
 
 ## Starts the same mode again; online there is no rematch, so it goes to the menu.
 func _new_match() -> void:
-	if match_mode in ["bot", "local", "chaos"]:
+	if match_mode in ["bot", "local", "chaos", "ffa"]:
 		_replay_mode = match_mode
 	_restart_battle()
 

@@ -21,21 +21,24 @@ if (Test-Path -LiteralPath $OutRoot) {
 }
 New-Item -ItemType Directory -Force -Path $OutRoot | Out-Null
 Get-ChildItem -LiteralPath $SiteRoot -Force |
-    Where-Object { $_.Name -notin @("index.wasm", ".nojekyll", ".gdignore") } |
+    Where-Object { $_.Name -notin @("index.wasm", "index.pck", ".nojekyll", ".gdignore") } |
     Copy-Item -Destination $OutRoot -Recurse -Force
 
 # Cloudflare static assets allow 25 MiB per file; worker.js joins the parts.
-$Wasm = [System.IO.File]::ReadAllBytes((Join-Path $SiteRoot "index.wasm"))
-$PartCount = [Math]::Ceiling($Wasm.Length / $PartSize)
-if ($PartCount -ne 2) {
-    throw "index.wasm needs $PartCount parts; update WASM_PARTS in server/online/worker.js."
-}
-for ($Index = 0; $Index -lt $PartCount; $Index++) {
-    $Start = $Index * $PartSize
-    $Length = [Math]::Min($PartSize, $Wasm.Length - $Start)
-    $Part = New-Object byte[] $Length
-    [Array]::Copy($Wasm, $Start, $Part, 0, $Length)
-    [System.IO.File]::WriteAllBytes((Join-Path $OutRoot "index.wasm.part$Index"), $Part)
+# The expected part counts must match SPLIT_FILES in server/online/worker.js.
+foreach ($Split in @(@{ Name = "index.wasm"; Parts = 2 }, @{ Name = "index.pck"; Parts = 2 })) {
+    $Bytes = [System.IO.File]::ReadAllBytes((Join-Path $SiteRoot $Split.Name))
+    $PartCount = [Math]::Ceiling($Bytes.Length / $PartSize)
+    if ($PartCount -ne $Split.Parts) {
+        throw "$($Split.Name) needs $PartCount parts; update SPLIT_FILES in server/online/worker.js and this script."
+    }
+    for ($Index = 0; $Index -lt $PartCount; $Index++) {
+        $Start = $Index * $PartSize
+        $Length = [Math]::Min($PartSize, $Bytes.Length - $Start)
+        $Part = New-Object byte[] $Length
+        [Array]::Copy($Bytes, $Start, $Part, 0, $Length)
+        [System.IO.File]::WriteAllBytes((Join-Path $OutRoot "$($Split.Name).part$Index"), $Part)
+    }
 }
 # Keep search engines away; only people with the link find the game.
 Set-Content -LiteralPath (Join-Path $OutRoot "_headers") -Value "/*`n  X-Robots-Tag: noindex, nofollow" -Encoding ascii

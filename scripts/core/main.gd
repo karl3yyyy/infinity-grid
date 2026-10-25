@@ -1,11 +1,11 @@
 extends Node3D
 
 const GridManagerScript := preload("res://scripts/grid/grid_manager.gd")
-const BattleManagerScript := preload("res://scripts/battle/onitama_battle_manager.gd")
+const BattleManagerScript := preload("res://scripts/battle/grid_battle_manager.gd")
 const PlayerControllerScript := preload("res://scripts/controllers/player_controller.gd")
 const UnitMovementScript := preload("res://scripts/units/unit_movement.gd")
 const CameraControllerScript := preload("res://scripts/camera/camera_controller.gd")
-const BattleUIScript := preload("res://scripts/ui/onitama_ui.gd")
+const BattleUIScript := preload("res://scripts/ui/grid_battle_ui.gd")
 const CyberEnvironmentScript := preload("res://scripts/core/cyber_environment.gd")
 
 
@@ -46,9 +46,14 @@ func _ready() -> void:
 	camera_controller.name = "CameraController"
 	add_child(camera_controller)
 
-	var battle_ui: OnitamaUI = BattleUIScript.new()
+	var battle_ui: GridBattleUI = BattleUIScript.new()
 	battle_ui.name = "BattleUI"
 	add_child(battle_ui)
+
+	var card_stage := CardStage.new()
+	card_stage.name = "CardStage"
+	camera_controller.add_child(card_stage)
+	battle_ui.attach_card_stage(card_stage)
 
 	var unit_movement: UnitMovement = UnitMovementScript.new()
 	unit_movement.name = "UnitMovement"
@@ -57,7 +62,8 @@ func _ready() -> void:
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
 	player_controller.setup(camera_controller, grid_manager)
-	var battle_manager: OnitamaBattleManager = BattleManagerScript.new()
+	player_controller.pointer_blocker = card_stage.is_over_card
+	var battle_manager: GridBattleManager = BattleManagerScript.new()
 	battle_manager.name = "BattleManager"
 	add_child(battle_manager)
 	battle_manager.setup(
@@ -76,7 +82,7 @@ func _check_for_web_update() -> void:
 
 ## Reloads into the new version, but never in the middle of a match.
 func _apply_web_update() -> void:
-	var battle := get_node_or_null("BattleManager") as OnitamaBattleManager
+	var battle := get_node_or_null("BattleManager") as GridBattleManager
 	# The board is only shown once a match was started from the menu.
 	var in_match: bool = battle != null and battle.grid_manager.get_parent().visible and not battle.battle_over
 	if in_match:

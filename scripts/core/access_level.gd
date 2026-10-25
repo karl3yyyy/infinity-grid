@@ -130,6 +130,8 @@ static func item_label(item: String) -> String:
 			return str(CharacterSkins.skin(id).get("name", id))
 		"echo":
 			return str(CharacterRoster.echo_style(id).get("name", id))
+		"cards":
+			return str(CardSkins.skin(id).get("name", id))
 		_:
 			return str(CharacterRoster.board_skin(id).get("name", id))
 

@@ -154,7 +154,7 @@ func _test_shop_prices() -> void:
 		server_prices[found.get_string(1)] = found.get_string(2).to_int()
 	_expect(not server_prices.is_empty() and server_prices == CharacterRoster.PRICES, "The shop server charges the prices the game shows")
 	var unknown: Array[String] = []
-	var lists := {"character": CharacterRoster.CHARACTERS, "skin": CharacterSkins.SKINS, "echo": CharacterRoster.ECHO_STYLES, "board": CharacterRoster.BOARD_SKINS}
+	var lists := {"character": CharacterRoster.CHARACTERS, "skin": CharacterSkins.SKINS, "echo": CharacterRoster.ECHO_STYLES, "board": CharacterRoster.BOARD_SKINS, "cards": CardSkins.SKINS}
 	for item: String in CharacterRoster.PRICES:
 		var ids: Array = (lists[item.get_slice(":", 0)] as Array).map(func(entry: Dictionary) -> String: return entry["id"])
 		if not item.get_slice(":", 1) in ids:
@@ -185,8 +185,8 @@ func _test_remote_move_replay() -> void:
 	current_scene = main
 	await process_frame
 	await process_frame
-	var battle := main.get_node("BattleManager") as OnitamaBattleManager
-	var ui := main.get_node("BattleUI") as OnitamaUI
+	var battle := main.get_node("BattleManager") as GridBattleManager
+	var ui := main.get_node("BattleUI") as GridBattleUI
 	var grid := main.get_node("BattleScene/GridManager") as GridManager
 	var network := battle._start_network_match()
 	network._on_match_started(1, ["Crane", "Wave", "Comet", "Shell", "Vortex"])

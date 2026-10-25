@@ -16,6 +16,8 @@ const TAP_MAX_MSEC: int = 420
 const LONG_PRESS_MSEC: int = 620
 const DRAG_THRESHOLD: float = 14.0
 
+## Screen position -> bool; true where a 3D card sits and the board must stay quiet.
+var pointer_blocker: Callable
 var _touch_positions: Dictionary = {}
 var _touch_starts: Dictionary = {}
 var _touch_started_at: Dictionary = {}
@@ -32,7 +34,9 @@ func setup(camera: CameraController, grid: GridManager) -> void:
 func _process(_delta: float) -> void:
 	if camera_controller == null or grid_manager == null:
 		return
-	var coordinate := _mouse_grid_coordinate()
+	var coordinate := Vector2i(-1, -1)
+	if not _is_over_card(get_viewport().get_mouse_position()):
+		coordinate = _mouse_grid_coordinate()
 	grid_manager.set_hover(coordinate)
 	if _touch_positions.size() == 1 and not _long_press_sent:
 		var index: int = _touch_positions.keys()[0]
@@ -58,7 +62,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		var hovered_control := get_viewport().gui_get_hovered_control()
-		if hovered_control is Button:
+		if hovered_control is Button or _is_over_card(event.position):
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var coordinate := _screen_to_grid(event.position)
@@ -76,7 +80,7 @@ func _input(event: InputEvent) -> void:
 func _handle_screen_touch(event: InputEventScreenTouch) -> bool:
 	mouse_suppressed_until_msec = Time.get_ticks_msec() + TOUCH_MOUSE_SUPPRESSION_MSEC
 	if event.pressed:
-		if _is_over_interactive_control(event.position):
+		if _is_over_interactive_control(event.position) or _is_over_card(event.position):
 			_ui_touch_indices[event.index] = true
 			return false
 		_touch_positions[event.index] = event.position
@@ -145,6 +149,10 @@ func _is_over_interactive_control(screen_position: Vector2) -> bool:
 		if control != null and control.is_visible_in_tree() and control.get_global_rect().has_point(screen_position):
 			return true
 	return false
+
+
+func _is_over_card(screen_position: Vector2) -> bool:
+	return pointer_blocker.is_valid() and bool(pointer_blocker.call(screen_position))
 
 
 func is_mouse_event_suppressed() -> bool:

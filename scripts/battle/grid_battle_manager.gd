@@ -1,4 +1,4 @@
-class_name OnitamaBattleManager
+class_name GridBattleManager
 extends Node
 
 const PlayerUnitScript := preload("res://scripts/units/player_unit.gd")
@@ -11,7 +11,7 @@ const DRAW_REPETITIONS: int = 3
 
 var grid_manager: GridManager
 var camera_controller: CameraController
-var battle_ui: OnitamaUI
+var battle_ui: GridBattleUI
 var player_controller: PlayerController
 var unit_movement: UnitMovement
 var units_parent: Node3D
@@ -60,7 +60,7 @@ var _timeouts_in_a_row: int = 0
 func setup(
 	grid: GridManager,
 	camera: CameraController,
-	ui: OnitamaUI,
+	ui: GridBattleUI,
 	player_input: PlayerController,
 	movement: UnitMovement,
 	unit_container: Node3D
@@ -280,6 +280,8 @@ func set_starter(team: int) -> void:
 	_record_position()
 	if not bot_opponent_enabled and network_team < 0:
 		camera_controller.set_player_view(team)
+	_refresh_ui()
+	await battle_ui.play_card_deal()
 	_begin_turn(1)
 
 
@@ -385,7 +387,7 @@ func apply_team_look(team: int, look: Dictionary) -> void:
 	team_looks[team] = look
 	var character := CharacterRoster.dressed_character(look)
 	var echo := str(CharacterRoster.echo_style(str(look.get("echo", "")))["id"])
-	var tint: Color = OnitamaUI.TEAM_COLORS[team]
+	var tint: Color = GridBattleUI.TEAM_COLORS[team]
 	var team_units: Array[BattleUnit] = players if team == 0 else enemies
 	for index: int in range(team_units.size()):
 		var unit := team_units[index]
@@ -488,7 +490,7 @@ func _perform_move(destination: Vector2i) -> void:
 	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))
 	await unit_movement.perform_move(
 		moving_unit, captured_unit, source, destination, grid_manager,
-		str(character.get("style", "brawler")), OnitamaUI.TEAM_COLORS[current_player]
+		str(character.get("style", "brawler")), GridBattleUI.TEAM_COLORS[current_player]
 	)
 	moving_unit.grid_position = destination
 	grid_manager.move_occupant(moving_unit, source, destination)
@@ -524,7 +526,7 @@ func _exchange_card(slot: int) -> void:
 	turns_played += 1
 
 
-## Onitama rule: a side without any legal move still has to give one card away.
+## Card-game rule: a side without any legal move still has to give one card away.
 func _pass_turn(slot: int) -> void:
 	input_locked = true
 	player_controller.enabled = false
@@ -562,6 +564,7 @@ func _begin_turn(repetitions: int) -> void:
 		turn_timer.stop()
 	input_locked = bot_turn or remote_turn
 	player_controller.enabled = not input_locked
+	battle_ui.ensure_cards_visible()
 	_refresh_ui()
 	if bot_turn:
 		battle_ui.set_instruction("Der Bot denkt nach ...")
@@ -844,6 +847,6 @@ func _beam_in(unit: BattleUnit, delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
 	if not is_instance_valid(unit) or unit.is_dead:
 		return
-	CombatEffects.pillar(units_parent, unit.global_position, OnitamaUI.TEAM_COLORS[unit.team_id])
+	CombatEffects.pillar(units_parent, unit.global_position, GridBattleUI.TEAM_COLORS[unit.team_id])
 	var grow := unit.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	grow.tween_property(unit.visual_root, "scale", Vector3.ONE, 0.25)

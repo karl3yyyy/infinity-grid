@@ -4,13 +4,13 @@
 
 `scripts/core/main.gd` builds the scene in code: the cyberpunk arena
 (`CyberEnvironment`), the board (`GridManager`), the camera, the HUD with the
-main menu (`OnitamaUI`, `MainMenu`), input (`PlayerController`), piece
-animation (`UnitMovement`) and the match (`OnitamaBattleManager`). On the web it
+main menu (`GridBattleUI`, `MainMenu`), input (`PlayerController`), piece
+animation (`UnitMovement`) and the match (`GridBattleManager`). On the web it
 also keeps the installed app up to date.
 
 ## Rules and state
 
-- `OnitamaBattleManager` owns the match: dealing cards, turns, legal moves,
+- `GridBattleManager` owns the match: dealing cards, turns, legal moves,
   captures, the card exchange, passing, threefold repetition and the result.
   It also drives the bot (`BotAI`, which searches a compact copy of the state)
   and network matches (`NetworkMatch`).
@@ -37,7 +37,7 @@ also keeps the installed app up to date.
 - `MainMenu` is the terminal-style menu. Pages for the shop (`ShopPages`),
   logins (`LoginPages`), profile pictures (`AvatarPicker`) and the swipeable
   character gallery (`CharacterShowcase`) draw into it.
-- `OnitamaUI` is the in-match HUD with cards (`CardView`), pause menu and rules.
+- `GridBattleUI` is the in-match HUD with cards (`CardView`), pause menu and rules.
 
 ## Networking
 

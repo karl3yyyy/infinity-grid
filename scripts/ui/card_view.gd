@@ -14,6 +14,8 @@ var accent_color: Color = Color("65bce8")
 var is_selected: bool = false
 var caption: String = ""
 var dimmed: bool = false
+## The 3D card raises the targets as light pillars; the flat face keeps a dim pad.
+var pillar_mode: bool = false
 
 
 func _init() -> void:
@@ -42,6 +44,38 @@ const PANEL := Color(0.02, 0.035, 0.05, 0.92)
 const AMBER := Color("ffc23a")
 
 
+## Layout shared by the flat draw and the 3D pillars, so both agree on the grid.
+static func layout_for(area: Rect2, lift: float, next_card: bool) -> Dictionary:
+	var frame := area.grow(-5.0)
+	frame.position.y += lift + 2.0
+	var cut := clampf(frame.size.x * 0.09, 6.0, 16.0)
+	var inner := frame.grow(-cut * 0.9)
+	var title_size := int(clampf(inner.size.x * 0.2, 16.0, 36.0))
+	var title_height := float(title_size) * 0.9
+	var rule_y := inner.position.y + title_height + 3.0
+	var tag_size := int(float(title_size) * 0.55)
+	var tag_baseline := rule_y + float(tag_size) + 1.0
+	rule_y += float(tag_size) + 2.0
+	var caption_height := float(title_size) * 0.75 + 2.0 if next_card else 0.0
+	var grid_space := Rect2(
+		Vector2(inner.position.x, rule_y + 5.0),
+		Vector2(inner.size.x, inner.end.y - rule_y - 5.0 - caption_height)
+	)
+	return {
+		"frame": frame, "cut": cut, "inner": inner, "title_size": title_size,
+		"title_height": title_height, "tag_size": tag_size, "tag_baseline": tag_baseline,
+		"rule_y": rule_y, "grid_space": grid_space,
+	}
+
+
+## Top-left corner and cell size of the 5x5 move diagram inside a card of this size.
+static func diagram_geometry(card_size: Vector2) -> Dictionary:
+	var space: Rect2 = layout_for(Rect2(Vector2.ZERO, card_size), 0.0, false)["grid_space"]
+	var cell := floorf(minf(space.size.x, space.size.y) / float(GRID_CELLS))
+	var grid_size := cell * float(GRID_CELLS)
+	return {"origin": space.position + (space.size - Vector2(grid_size, grid_size)) * 0.5, "cell": cell}
+
+
 ## Holographic data card: dark glass with cut corners, a neon border in the
 ## team colour, the name in terminal type and the move pattern as lit cells.
 func _draw() -> void:
@@ -49,11 +83,14 @@ func _draw() -> void:
 	if card == null or area.size.x < 24.0 or area.size.y < 24.0:
 		return
 	var lift := -6.0 if is_selected else 0.0
-	var frame := area.grow(-5.0)
-	frame.position.y += lift + 2.0
 	var next_card := caption != ""
+	var layout := layout_for(area, lift, next_card)
+	var frame: Rect2 = layout["frame"]
+	var cut: float = layout["cut"]
+	var inner: Rect2 = layout["inner"]
+	var title_size: int = layout["title_size"]
+	var title_height: float = layout["title_height"]
 	var color := AMBER if next_card else accent_color
-	var cut := clampf(frame.size.x * 0.09, 6.0, 16.0)
 	var outline := _cut_corners(frame, cut)
 
 	if is_selected:
@@ -67,27 +104,14 @@ func _draw() -> void:
 		y += 4.0
 	draw_polyline(_closed(outline), color.lightened(0.15) if is_selected else color, 2.5 if is_selected else 1.8, true)
 
-	var inner := frame.grow(-cut * 0.9)
 	var font := TerminalTheme.font()
-	var title_size := int(clampf(inner.size.x * 0.2, 16.0, 36.0))
-	var title_height := float(title_size) * 0.9
 	draw_string(font, Vector2(inner.position.x, inner.position.y + title_height * 0.8), card.card_name.to_upper(),
 		HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, title_size, color.lightened(0.35))
-	var rule_y := inner.position.y + title_height + 3.0
+	var rule_y: float = layout["rule_y"] - float(layout["tag_size"]) - 2.0
 	draw_line(Vector2(inner.position.x, rule_y), Vector2(inner.end.x, rule_y), Color(color, 0.6), 1.0)
-	var tag_size := int(float(title_size) * 0.55)
-	var tag_height := float(tag_size) + 2.0
-	draw_string(font, Vector2(inner.position.x, rule_y + float(tag_size) + 1.0), card.category(),
-		HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, tag_size, card.category_color())
-	rule_y += tag_height
-	var caption_height := 0.0
-	if next_card:
-		caption_height = float(title_size) * 0.75 + 2.0
-	var grid_space := Rect2(
-		Vector2(inner.position.x, rule_y + 5.0),
-		Vector2(inner.size.x, inner.end.y - rule_y - 5.0 - caption_height)
-	)
-	_draw_diagram(grid_space, color)
+	draw_string(font, Vector2(inner.position.x, layout["tag_baseline"]), card.category(),
+		HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, int(layout["tag_size"]), card.category_color())
+	_draw_diagram(layout["grid_space"], color)
 	if next_card:
 		draw_string(font, Vector2(inner.position.x, inner.end.y), "> " + caption,
 			HORIZONTAL_ALIGNMENT_CENTER, inner.size.x, int(float(title_size) * 0.7), Color(color, 0.85))
@@ -129,6 +153,9 @@ func _draw_diagram(space: Rect2, color: Color) -> void:
 			if coordinate == Vector2i(2, 2):
 				draw_rect(square.grow(-2.0), Color("e8fff4"))
 				draw_rect(square.grow(-cell * 0.32), Color("0a1018"))
+			elif targets.has(coordinate) and pillar_mode:
+				draw_rect(square.grow(-1.0), Color(color, 0.3))
+				draw_rect(square.grow(-2.5), Color(color, 0.22))
 			elif targets.has(coordinate):
 				draw_rect(square.grow(-1.0), Color(color, 0.25))
 				draw_rect(square.grow(-2.5), Color(color, 0.95))

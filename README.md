@@ -69,7 +69,7 @@ Logs go to `logs/validation/`.
 
 | Path | Contents |
 | --- | --- |
-| `scripts/battle/` | Match flow and rules (`onitama_battle_manager.gd`), movement cards, bot AI, capture effects, network matches |
+| `scripts/battle/` | Match flow and rules (`grid_battle_manager.gd`), movement cards, bot AI, capture effects, network matches |
 | `scripts/grid/` | The cylindrical board, its cells and the procedurally painted board skins |
 | `scripts/units/` | Pieces (`BattleUnit`) and their move/attack animations |
 | `scripts/characters/` | Character roster, skins, profile pictures and the pixel-art fighter renderer |

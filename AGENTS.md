@@ -38,10 +38,10 @@ Separate the project into these systems:
 1. GridManager and GridCell data
 2. BattleUnit and UnitMovement
 3. MovementCard
-4. OnitamaBattleManager, including the local bot
+4. GridBattleManager, including the local bot
 5. PlayerController
 6. CameraController
-7. OnitamaUI and MainMenu
+7. GridBattleUI and MainMenu
 
 Keep game rules separate from rendering and keep edge projections non-authoritative.
 

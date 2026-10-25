@@ -1,4 +1,4 @@
-class_name OnitamaUI
+class_name GridBattleUI
 extends CanvasLayer
 
 signal card_selected(team_id: int, slot: int)
@@ -18,19 +18,21 @@ signal board_insets_changed(top_pixels: float, bottom_pixels: float)
 signal emote_picked(emote_id: String)
 
 const MainMenuScript := preload("res://scripts/ui/main_menu.gd")
-const CardViewScript := preload("res://scripts/ui/card_view.gd")
+const PASS_CARD_COLOR := Color("c9a648")
 const TEAM_COLORS: Array[Color] = [Color("3fa9ff"), Color("ff5a3c")]
 const MAX_COLUMN_WIDTH: float = 760.0
 ## Opponent cards are drawn smaller, like a hand seen across the table.
-const OPPONENT_CARD_SCALE: float = 0.7
+const OPPONENT_CARD_SCALE: float = 0.92
 
 var round_label: Label
 var instruction_label: Label
 var selection_label: Label
-## card_views[position][slot]; position 0 = bottom (viewer), 1 = top (opponent).
-var card_views: Array = [[], []]
-## Next-card slot per position; only the side about to move shows the pass card.
-var next_views: Array[CardView] = [null, null]
+## Empty places that reserve room for the 3D cards (see CardStage).
+## hand_anchors[position][slot]; position 0 = bottom (viewer), 1 = top (opponent).
+var hand_anchors: Array = [[], []]
+## Pass-card place per position; the card rests where the side about to move sits.
+var next_anchors: Array[Control] = [null, null]
+var card_stage: CardStage
 var hand_titles: Array[Label] = []
 var opponent_is_bot: bool = false
 ## Opponent plays on another phone; only the viewer's own hand is clickable.
@@ -149,26 +151,51 @@ func _add_clock_row(parent: Control) -> void:
 
 func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0) -> void:
 	viewer_team = viewing_team
+	var placements: Array = []
 	for position: int in range(2):
 		var team_id := _team_at(position)
-		var rotated := position == 1
 		var bot_hand := (opponent_is_bot and team_id == 1) or (opponent_is_remote and position == 1)
+		var lift := 1.0 if position == 0 else -1.0
 		for slot: int in range(2):
-			var view: CardView = card_views[position][slot]
-			var card: MovementCard = hands[team_id][slot]
-			var selected := team_id == current_player and slot == selected_slot
-			view.disabled = team_id != current_player or bot_hand
-			view.dimmed = team_id != current_player
-			view.show_card(card, rotated, TEAM_COLORS[team_id], selected)
-		var next_view: CardView = next_views[position]
-		next_view.disabled = true
-		next_view.dimmed = false
+			placements.append({
+				"card": hands[team_id][slot], "anchor": hand_anchors[position][slot],
+				"team": team_id, "slot": slot, "rotated": position == 1,
+				"color": TEAM_COLORS[team_id], "lift_direction": lift,
+				"selected": team_id == current_player and slot == selected_slot,
+				"dimmed": team_id != current_player,
+				"interactive": team_id == current_player and not bot_hand,
+			})
 		if team_id == current_player:
-			next_view.show_card(pass_card, rotated, Color("c9a648"), false, "NÄCHSTE")
-		else:
-			next_view.show_card(null, rotated, Color("c9a648"), false)
+			placements.append({
+				"card": pass_card, "anchor": next_anchors[position],
+				"team": -1, "slot": -1, "rotated": position == 1,
+				"color": PASS_CARD_COLOR, "lift_direction": lift,
+				"selected": false, "dimmed": false, "interactive": false,
+			})
 		hand_titles[position].text = _team_name(team_id)
 		hand_titles[position].modulate = TEAM_COLORS[team_id].lightened(0.3)
+	if card_stage != null:
+		card_stage.present(placements)
+
+
+## The 3D cards hang under the camera; the HUD only keeps their places free.
+func attach_card_stage(stage: CardStage) -> void:
+	card_stage = stage
+	card_stage.card_picked.connect(_emit_card_selected)
+
+
+## Opening scene of a match; returns when the last card has landed.
+func play_card_deal() -> void:
+	if card_stage != null:
+		card_stage.set_skin(CardSkins.current())
+		await card_stage.deal()
+
+
+func ensure_cards_visible() -> void:
+	if card_stage != null:
+		if card_stage.state == CardStage.State.HIDDEN:
+			card_stage.set_skin(CardSkins.current())
+		card_stage.show_instantly()
 
 
 func update_selection(unit: BattleUnit) -> void:
@@ -535,28 +562,27 @@ func _add_hand_row(parent: Control, position: int) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
 	parent.add_child(row)
-	var views: Array = []
+	var places: Array = []
 	for slot: int in range(2):
-		var view: CardView = CardViewScript.new()
-		view.pressed.connect(_on_card_view_pressed.bind(position, slot))
-		views.append(view)
-	var next_view: CardView = CardViewScript.new()
-	next_view.disabled = true
+		places.append(_make_card_place())
+	var next_place := _make_card_place()
 	# Opponent row mirrors the order so the next card sits on the same screen side.
 	if position == 0:
-		row.add_child(views[0])
-		row.add_child(views[1])
-		row.add_child(next_view)
+		row.add_child(places[0])
+		row.add_child(places[1])
+		row.add_child(next_place)
 	else:
-		row.add_child(next_view)
-		row.add_child(views[1])
-		row.add_child(views[0])
-	card_views[position] = views
-	next_views[position] = next_view
+		row.add_child(next_place)
+		row.add_child(places[1])
+		row.add_child(places[0])
+	hand_anchors[position] = places
+	next_anchors[position] = next_place
 
 
-func _on_card_view_pressed(position: int, slot: int) -> void:
-	_emit_card_selected(_team_at(position), slot)
+func _make_card_place() -> Control:
+	var place := Control.new()
+	place.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return place
 
 
 func _emit_card_selected(team_id: int, slot: int) -> void:
@@ -616,9 +642,9 @@ func _apply_responsive_layout(viewport_size: Vector2 = Vector2.ZERO) -> void:
 	var card_height := clampf(card_width * 1.12, 110.0, minf(290.0, viewport_size.y * 0.19))
 	for position: int in range(2):
 		var factor := 1.0 if position == 0 else OPPONENT_CARD_SCALE
-		for view: CardView in card_views[position]:
-			view.custom_minimum_size = Vector2(card_width, card_height) * factor
-		next_views[position].custom_minimum_size = Vector2(card_width * 0.8, card_height * 0.86) * factor
+		for place: Control in hand_anchors[position]:
+			place.custom_minimum_size = Vector2(card_width, card_height) * factor
+		next_anchors[position].custom_minimum_size = Vector2(card_width * 0.8, card_height * 0.86) * factor
 	top_tray.offset_left = 0.0
 	top_tray.offset_right = 0.0
 	bottom_tray.offset_left = 0.0

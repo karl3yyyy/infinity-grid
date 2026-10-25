@@ -1,5 +1,5 @@
 // The game rules on the server, used to referee ranked matches.
-// Mirrors scripts/battle/movement_card.gd and OnitamaBattleManager; the card
+// Mirrors scripts/battle/movement_card.gd and GridBattleManager; the card
 // offsets are checked against the game by tests/lan_test.gd.
 //
 // Win: capture the enemy master, or move any piece onto its starting square.

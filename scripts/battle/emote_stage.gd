@@ -21,7 +21,7 @@ static func perform(parent: Node3D, kern: BattleUnit, team: int, emote_id: Strin
 			if kern.rig != null:
 				kern.rig.perform([["Idle_Talking", 2.4]])
 		_:
-			_hologram(parent, kern, emote["text"], OnitamaUI.TEAM_COLORS[team].lightened(0.35), 110, 2.0)
+			_hologram(parent, kern, emote["text"], GridBattleUI.TEAM_COLORS[team].lightened(0.35), 110, 2.0)
 
 
 ## Glitchy hologram above the KERN: flicker in, hover up, flicker out.

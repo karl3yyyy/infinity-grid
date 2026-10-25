@@ -11,8 +11,8 @@ const QUICK_BOT_OFFER_SECONDS: float = 30.0
 ## Animations run faster while catching up on several missed turns.
 const CATCH_UP_TIME_SCALE: float = 6.0
 
-var battle: OnitamaBattleManager
-var ui: OnitamaUI
+var battle: GridBattleManager
+var ui: GridBattleUI
 var client: MatchClient
 ## Turns from the server not applied yet, each with its "seq".
 var _pending_turns: Array[Dictionary] = []
@@ -27,7 +27,7 @@ var invite_username: String = ""
 var chess_clock: ChessClock
 
 
-func setup(battle_manager: OnitamaBattleManager, battle_ui: OnitamaUI) -> void:
+func setup(battle_manager: GridBattleManager, battle_ui: GridBattleUI) -> void:
 	battle = battle_manager
 	ui = battle_ui
 	# Keep the connection alive while the pause menu is open.

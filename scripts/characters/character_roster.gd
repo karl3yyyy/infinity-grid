@@ -98,6 +98,11 @@ const PRICES: Dictionary = {
 	"board:neon": 250,
 	"board:void": 300,
 	"board:gold": 500,
+	"cards:frost": 250,
+	"cards:lava": 250,
+	"cards:synth": 300,
+	"cards:void": 300,
+	"cards:gold": 500,
 	"skin:shadow_white": 250,
 	"skin:shadow_red": 350,
 	"skin:wired_rust": 250,
@@ -150,7 +155,7 @@ static func random_skin_id(character_id: String) -> String:
 	return options.pick_random()
 
 
-## The player's current choice: {"character", "echo", "board"}.
+## The player's current choice: {"character", "echo", "board", "cards"}.
 static func load_look() -> Dictionary:
 	var config := ConfigFile.new()
 	config.load(PROFILE_PATH)
@@ -158,9 +163,10 @@ static func load_look() -> Dictionary:
 		"character": str(config.get_value("look", "character", CHARACTERS[0]["id"])),
 		"echo": str(config.get_value("look", "echo", ECHO_STYLES[0]["id"])),
 		"board": str(config.get_value("look", "board", BOARD_SKINS[0]["id"])),
+		"cards": str(config.get_value("look", "cards", CardSkins.SKINS[0]["id"])),
 	}
 	# A choice that is not (or no longer) owned falls back to the free default.
-	var defaults := {"character": CHARACTERS[0]["id"], "echo": ECHO_STYLES[0]["id"], "board": BOARD_SKINS[0]["id"]}
+	var defaults := {"character": CHARACTERS[0]["id"], "echo": ECHO_STYLES[0]["id"], "board": BOARD_SKINS[0]["id"], "cards": CardSkins.SKINS[0]["id"]}
 	for key: String in look:
 		if not AccountService.owns("%s:%s" % [key, look[key]]):
 			look[key] = defaults[key]

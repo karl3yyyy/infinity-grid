@@ -42,9 +42,19 @@ const CARD_NAMES = [
   "Ember", "Drift", "Zephyr", "Eclipse", "Prism", "Pulse", "Echo", "Serpent", "Viper",
 ];
 
-// Static assets are limited to 25 MiB per file, so the engine's index.wasm is
-// uploaded in parts (tools/publish_online.ps1) and joined here.
-const WASM_PARTS = ["/index.wasm.part0", "/index.wasm.part1"];
+// Static assets are limited to 25 MiB per file, so the engine's index.wasm and
+// the game data index.pck are uploaded in parts (tools/publish_online.ps1) and
+// joined here.
+const SPLIT_FILES = {
+  "/index.wasm": {
+    type: "application/wasm",
+    parts: ["/index.wasm.part0", "/index.wasm.part1"],
+  },
+  "/index.pck": {
+    type: "application/octet-stream",
+    parts: ["/index.pck.part0", "/index.pck.part1"],
+  },
+};
 
 // Must match EmoteWheel.CATALOGUE in scripts/ui/emote_wheel.gd.
 const EMOTE_IDS = [
@@ -63,8 +73,8 @@ const ROOM_IDLE_SECONDS = 6 * 60 * 60;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/index.wasm") {
-      return serveSplitWasm(request, env);
+    if (Object.hasOwn(SPLIT_FILES, url.pathname)) {
+      return serveSplitFile(request, env, SPLIT_FILES[url.pathname]);
     }
     if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
       return handleWebhook(request, env);
@@ -560,12 +570,12 @@ export class Lobby {
   webSocketClose() {}
 }
 
-async function serveSplitWasm(request, env) {
+async function serveSplitFile(request, env, file) {
   const parts = await Promise.all(
-    WASM_PARTS.map((path) => env.ASSETS.fetch(new Request(new URL(path, request.url))))
+    file.parts.map((path) => env.ASSETS.fetch(new Request(new URL(path, request.url))))
   );
   if (parts.some((part) => !part.ok)) {
-    return new Response("Engine file missing", { status: 500 });
+    return new Response("Game file missing", { status: 500 });
   }
   const length = parts.reduce((sum, part) => sum + Number(part.headers.get("Content-Length") || 0), 0);
   const { readable, writable } = new TransformStream();
@@ -575,7 +585,7 @@ async function serveSplitWasm(request, env) {
     }
     await writable.close();
   })();
-  const headers = { "Content-Type": "application/wasm", "Cache-Control": "public, max-age=3600" };
+  const headers = { "Content-Type": file.type, "Cache-Control": "public, max-age=3600" };
   if (length > 0) {
     headers["Content-Length"] = String(length);
   }

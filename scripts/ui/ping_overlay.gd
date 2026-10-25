@@ -108,7 +108,7 @@ func mark(spot: Vector2, color: Color, text: String) -> void:
 func reveal(picks: Array, signal_spot: Vector2) -> void:
 	_arena.clear()
 	for team: int in range(2):
-		_arena.add_mark(picks[team], OnitamaUI.TEAM_COLORS[team], str(team + 1))
+		_arena.add_mark(picks[team], GridBattleUI.TEAM_COLORS[team], str(team + 1))
 	await get_tree().create_timer(0.4).timeout
 	SoundBoard.play("signal")
 	_arena.signal_spot = signal_spot

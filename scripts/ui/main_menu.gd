@@ -351,6 +351,7 @@ func _show_collection() -> void:
 	_add_menu_button(_content, "ÜBERSICHT", "Alle Charaktere auf einen Blick", CharacterOverview.new(self, _show_collection, _show_character_picker).show)
 	_add_menu_button(_content, "ECHOS", "Deine Schüler: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
 	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
+	_add_menu_button(_content, "KARTENSKINS", "Deine Karten: %s" % CardSkins.skin(look["cards"])["name"], _show_card_skin_picker)
 	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
 	_add_menu_button(_content, "EMOTE-RAD", _emotes.summary(), _emotes.show_slots)
 	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
@@ -386,10 +387,22 @@ func _show_echo_picker() -> void:
 	_content.add_child(_make_text("Deine vier Schüler sind keine Menschen, sondern Kopien, die das Grid erschaffen hat.", 22, TerminalTheme.GREEN_DIM))
 	_add_picker_grid("echo", CharacterRoster.ECHO_STYLES, str(look["echo"]), 3,
 		func(entry: Dictionary) -> Texture2D:
-			return _fighter_preview(CharacterRoster.echo_look(entry["id"], master, OnitamaUI.TEAM_COLORS[0]), OnitamaUI.TEAM_COLORS[0], 0.75 if entry["id"] == "echo" else 0.0),
+			return _fighter_preview(CharacterRoster.echo_look(entry["id"], master, GridBattleUI.TEAM_COLORS[0]), GridBattleUI.TEAM_COLORS[0], 0.75 if entry["id"] == "echo" else 0.0),
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("echo", entry["id"])
 			_show_echo_picker(), _show_echo_picker)
+	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+
+
+func _show_card_skin_picker() -> void:
+	_set_page("KARTENSKINS", _show_collection)
+	_content.add_child(_make_text("So sehen deine Karten im Spiel aus: Rückseite beim Austeilen, Leuchten bei der Auswahl.", 22, TerminalTheme.GREEN_DIM))
+	_add_picker_grid("cards", CardSkins.SKINS, str(CharacterRoster.load_look()["cards"]), 3,
+		func(entry: Dictionary) -> Texture2D:
+			return ImageTexture.create_from_image(CardSkins.preview_image(entry)),
+		func(entry: Dictionary) -> void:
+			CharacterRoster.save_look_value("cards", entry["id"])
+			_show_card_skin_picker(), _show_card_skin_picker)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 
 
@@ -509,7 +522,7 @@ func _show_card_collection() -> void:
 	for card: MovementCard in deck:
 		var view: CardView = CardViewScript.new()
 		view.custom_minimum_size = Vector2(card_width, card_width * 1.08)
-		view.show_card(card, false, OnitamaUI.TEAM_COLORS[0], false)
+		view.show_card(card, false, GridBattleUI.TEAM_COLORS[0], false)
 		grid.add_child(view)
 	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
 	_focus_first_entry()

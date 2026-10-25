@@ -10,12 +10,12 @@ extends Node
 ## Without an answer the winner simply starts.
 const CHOICE_SECONDS: float = 5.0
 
-var battle: OnitamaBattleManager
+var battle: GridBattleManager
 var controller: PlayerController
 var overlay: PingOverlay
 
 
-func setup(battle_manager: OnitamaBattleManager, input: PlayerController) -> void:
+func setup(battle_manager: GridBattleManager, input: PlayerController) -> void:
 	battle = battle_manager
 	controller = input
 	overlay = PingOverlay.new()
@@ -62,7 +62,7 @@ func run_network(client: MatchClient, team: int) -> int:
 	await overlay.open()
 	while true:
 		var pick := await overlay.ask_pick("Tippe geheim irgendwohin. Wer näher am Signal liegt, entscheidet, wer beginnt.")
-		overlay.mark(pick, OnitamaUI.TEAM_COLORS[team], str(team + 1))
+		overlay.mark(pick, GridBattleUI.TEAM_COLORS[team], str(team + 1))
 		client.send_node_ping(pick)
 		overlay.set_text("Warte auf das Signal ...")
 		var result: Dictionary = await client.ping_result

@@ -6,7 +6,7 @@ Sie enthält **keine** geheimen Schlüssel oder Passwörter.
 
 ## 1. Das Spiel
 
-- **Infinity Grid**: rundenbasiertes Karten-Strategiespiel (Onitama-artig), Godot 4.7.2, GDScript.
+- **Infinity Grid**: rundenbasiertes Karten-Strategiespiel, Godot 4.7.2, GDScript.
 - Brett 5×5, links/rechts **endlos** (Ränder gehen ineinander über), oben/unten geschlossen.
 - Pro Seite ein **KERN** (früher „Meister“) und vier **Schüler**. Wer den gegnerischen KERN schlägt, gewinnt.
 - 19 Bewegungskarten, pro Partie 5: je 2 pro Spieler + 1 Wechselkarte. Gespielte Karte tauscht mit der Wechselkarte.

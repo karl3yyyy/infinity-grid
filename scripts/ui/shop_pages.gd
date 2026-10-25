@@ -4,7 +4,7 @@ extends RefCounted
 ## The shop pages: cosmetics for credits, credit packs for real money and the
 ## buy dialog, drawn into the MainMenu's terminal frame with its page helpers.
 
-const KIND_NAMES := {"character": "Charakter", "skin": "Skin", "echo": "Echos", "board": "Spielfeld"}
+const KIND_NAMES := {"character": "Charakter", "skin": "Skin", "echo": "Echos", "board": "Spielfeld", "cards": "Karten"}
 
 var menu: MainMenu
 var account: AccountService
@@ -161,6 +161,8 @@ func _entry(item: String) -> Dictionary:
 			return CharacterRoster.character(id)
 		"echo":
 			return CharacterRoster.echo_style(id)
+		"cards":
+			return CardSkins.skin(id)
 	return CharacterRoster.board_skin(id)
 
 

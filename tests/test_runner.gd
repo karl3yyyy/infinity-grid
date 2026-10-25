@@ -21,11 +21,11 @@ func _run_tests() -> void:
 	await process_frame
 
 	var grid := main.get_node_or_null("BattleScene/GridManager") as GridManager
-	var battle := main.get_node_or_null("BattleManager") as OnitamaBattleManager
-	var ui := main.get_node_or_null("BattleUI") as OnitamaUI
+	var battle := main.get_node_or_null("BattleManager") as GridBattleManager
+	var ui := main.get_node_or_null("BattleUI") as GridBattleUI
 	var camera := main.get_node_or_null("CameraController") as CameraController
 	_expect(grid != null, "GridManager exists")
-	_expect(battle != null, "Onitama battle manager exists")
+	_expect(battle != null, "Battle manager exists")
 	_expect(ui != null, "Card-selection UI exists")
 	_expect(camera != null and camera.projection == Camera3D.PROJECTION_ORTHOGONAL and camera.pitch < deg_to_rad(70.0), "Board uses an oblique camera behind the active side")
 	if battle != null and ui != null:
@@ -45,7 +45,7 @@ func _run_tests() -> void:
 		ui._apply_responsive_layout(Vector2(720.0, 1280.0))
 		var insets := ui.get_board_insets()
 		_expect(insets.x > 150.0 and insets.y > 150.0 and insets.x + insets.y < 1280.0 * 0.62, "Portrait HUD keeps opponent cards on top, own cards below and room for the board")
-		_expect(ui.card_views[0].size() == 2 and ui.card_views[1].size() == 2 and ui.next_views.size() == 2, "Each side shows two card diagrams plus a next-card slot")
+		_expect(ui.hand_anchors[0].size() == 2 and ui.hand_anchors[1].size() == 2 and ui.next_anchors.size() == 2, "Each side reserves room for two 3D cards plus a next-card place")
 		_expect(ProjectSettings.get_setting("display/window/size/viewport_height") > ProjectSettings.get_setting("display/window/size/viewport_width"), "Project runs in portrait format")
 	if grid != null:
 		_expect(grid.cells.size() == 25, "Grid contains 25 cells")
@@ -256,7 +256,7 @@ func _test_bot_levels() -> void:
 	_expect(elapsed < 4000, "Hard bot answers within the think-time budget (%d ms)" % elapsed)
 
 
-func _test_pass_and_draw(battle: OnitamaBattleManager, ui: OnitamaUI) -> void:
+func _test_pass_and_draw(battle: GridBattleManager, ui: GridBattleUI) -> void:
 	battle.bot_opponent_enabled = false
 	battle.current_player = 0
 	var saved_hand: Array = battle.hands[0].duplicate()
@@ -299,7 +299,7 @@ func _first_living_student(team: Array[BattleUnit]) -> BattleUnit:
 	return null
 
 
-func _find_legal_move(battle: OnitamaBattleManager, team_id: int) -> Dictionary:
+func _find_legal_move(battle: GridBattleManager, team_id: int) -> Dictionary:
 	var team: Array[BattleUnit] = battle.players if team_id == 0 else battle.enemies
 	for unit: BattleUnit in team:
 		for slot: int in range(2):

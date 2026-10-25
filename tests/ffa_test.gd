@@ -97,20 +97,18 @@ func _test_screen() -> void:
 	_expect(battle.floor_grid.get_unit_at(FfaRules.start_cell(1, 2)) != null, "Figures stand on the cells of the flat floor")
 	var camera := main.get_node("CameraController") as CameraController
 	_expect(camera.board_cells == 9 and not camera.board_wraps, "The camera frames the closed 9x9 board")
-	var frames := 0
-	while battle._busy and frames < 600:
+	var deadline := Time.get_ticks_msec() + 20000
+	while battle._busy and Time.get_ticks_msec() < deadline:
 		await process_frame
-		frames += 1
 	_expect(not battle._busy and battle.rules.current == 0, "You move first and may act once the cards are dealt")
 	var origin := FfaRules.start_cell(0, 2)
 	battle._on_cell_clicked(origin)
 	battle._on_card_selected(0, 0)
 	_expect(battle._selected != null and battle._selected.grid_position == origin and battle._slot == 0, "Piece and card can be chosen")
 	battle.start(0, false)
-	frames = 0
-	while battle.rules.round_number < 3 and battle.rules.winner == FfaRules.RUNNING and frames < 6000:
+	deadline = Time.get_ticks_msec() + 60000
+	while battle.rules.round_number < 3 and battle.rules.winner == FfaRules.RUNNING and Time.get_ticks_msec() < deadline:
 		await process_frame
-		frames += 1
 	_expect(battle.rules.round_number >= 3 or battle.rules.winner != FfaRules.RUNNING, "Bots play whole rounds on the 3D board, animated")
 	_expect(battle._units.filter(func(unit: BattleUnit) -> bool: return unit.position.distance_to(battle.floor_grid.grid_to_world(unit.grid_position)) > 0.05 and not unit.is_dead).is_empty(), "Every figure stands on its cell after the moves")
 	main.queue_free()

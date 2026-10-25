@@ -5,6 +5,7 @@ signal card_selected(team_id: int, slot: int)
 signal bot_training_requested
 signal local_multiplayer_requested
 signal chaos_requested(options: Dictionary)
+signal ffa_requested(humans: int, shifting_tiles: bool)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
@@ -503,6 +504,7 @@ func _build_main_menu() -> void:
 	main_menu.name = "MainMenu"
 	add_child(main_menu)
 	main_menu.bot_training_requested.connect(func() -> void: bot_training_requested.emit())
+	main_menu.ffa_requested.connect(func(humans: int, shifting_tiles: bool) -> void: ffa_requested.emit(humans, shifting_tiles))
 	main_menu.chaos_requested.connect(func(options: Dictionary) -> void: chaos_requested.emit(options))
 	main_menu.local_multiplayer_requested.connect(func() -> void: local_multiplayer_requested.emit())
 	main_menu.lan_match_requested.connect(func() -> void: lan_match_requested.emit())

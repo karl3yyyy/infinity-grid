@@ -121,7 +121,19 @@ func show_chaos() -> void:
 		menu._add_menu_button(menu._content, "START", "Gegen den Bot, mit den gewählten Varianten", menu._start_chaos)
 	else:
 		menu._content.add_child(menu._make_text("Wähle mindestens eine Variante.", MainMenu.TEXT_FONT_SIZE))
+	menu._add_menu_button(menu._content, "4 SPIELER", "Free for all auf großem Feld: jeder startet an einer Seite", show_ffa)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
+	menu._focus_first_entry()
+
+
+## Four-player free-for-all; "wandernde Felder" from the lab applies here too.
+func show_ffa() -> void:
+	menu._set_page("4 SPIELER", show_chaos)
+	var tiles := " (Wandernde Felder an)" if bool(menu.chaos_options.get("shifting_tiles", false)) else ""
+	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer gewinnt" + tiles, func() -> void: menu._start_ffa(1))
+	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten" + tiles, func() -> void: menu._start_ffa(2))
+	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite" + tiles, func() -> void: menu._start_ffa(4))
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Chaos-Labor", show_chaos)
 	menu._focus_first_entry()
 
 

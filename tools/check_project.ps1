@@ -46,6 +46,9 @@ Invoke-GodotCheck -Name "core-tests" -Arguments @(
 Invoke-GodotCheck -Name "chaos-tests" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--script", "res://tests/chaos_test.gd"
 )
+Invoke-GodotCheck -Name "ffa-tests" -Arguments @(
+    "--headless", "--path", $ProjectRoot, "--script", "res://tests/ffa_test.gd"
+)
 Invoke-GodotCheck -Name "lan-tests" -Arguments @(
     "--headless", "--path", $ProjectRoot, "--script", "res://tests/lan_test.gd"
 )

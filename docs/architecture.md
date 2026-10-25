@@ -41,6 +41,14 @@ shields), `CardEffect` (strike/push/shield/swap by card category) and
 matches. Add a variant by adding a flag to `ChaosRules`, an entry in
 `PlayPages.CHAOS_VARIANTS` and its hooks in the manager. Local vs bot only.
 
+## Four-player mode
+
+`scripts/ffa/`: a flat 2D screen (no 3D, no wraparound) on a closed 9x9 board.
+`FfaRules` (pure) holds pieces, hands, turn order, eliminations and tiles,
+`FfaBot` plays the bots, `FfaBoardView` draws, `FfaScreen` runs the match.
+Each player starts on one side and every card is turned to face the far side.
+Opened from Spielen > CHAOS > 4 SPIELER; `main.gd` hosts the screen above all UI.
+
 ## Interface
 
 - `MainMenu` is the terminal-style menu. Pages for the shop (`ShopPages`),

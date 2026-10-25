@@ -10,6 +10,8 @@ var card: MovementCard
 ## True when the card belongs to the side facing the camera from the far end;
 ## its diagram is rotated 180° so targets match the board on screen.
 var rotated: bool = false
+## Extra clockwise quarter turns of the diagram (4-player mode: a side faces its opposite).
+var quarter_turns: int = 0
 var accent_color: Color = Color("65bce8")
 var is_selected: bool = false
 var caption: String = ""
@@ -145,7 +147,10 @@ func _draw_diagram(space: Rect2, color: Color) -> void:
 	var origin := space.position + (space.size - Vector2(grid_size, grid_size)) * 0.5
 	var targets: Dictionary = {}
 	for offset: Vector2i in card.offsets:
-		targets[card.diagram_cell(offset, rotated)] = true
+		var target := card.diagram_cell(offset, rotated)
+		for _turn: int in range(quarter_turns):
+			target = Vector2i(2 - (target.y - 2), 2 + (target.x - 2))
+		targets[target] = true
 	for row: int in range(GRID_CELLS):
 		for column: int in range(GRID_CELLS):
 			var square := Rect2(origin + Vector2(column, row) * cell, Vector2(cell, cell))

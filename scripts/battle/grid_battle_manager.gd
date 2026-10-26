@@ -598,7 +598,7 @@ func _on_emote_picked(emote_id: String) -> void:
 	if ffa_battle != null and ffa_battle.is_active():
 		ffa_battle.play_local_emote(emote_id)
 		return
-	var team := network_team if network_team >= 0 else current_player
+	var team := network_team if network_team >= 0 else (0 if bot_opponent_enabled else current_player)
 	show_emote(team, emote_id)
 	if network_match != null:
 		network_match.client.send_emote(emote_id)

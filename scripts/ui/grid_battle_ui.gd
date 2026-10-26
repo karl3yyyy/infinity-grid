@@ -400,8 +400,8 @@ func _build_ui() -> void:
 	header.add_child(selection_label)
 	# Emotes sit outside the menu so they are one tap away during a match.
 	emote_button = _make_button("EMOTE", header)
-	emote_button.custom_minimum_size = Vector2(52.0, 44.0)
-	emote_button.add_theme_font_size_override("font_size", 28)
+	emote_button.custom_minimum_size = Vector2(128.0, 56.0)
+	emote_button.add_theme_font_size_override("font_size", 26)
 	emote_button.pressed.connect(func() -> void: emote_wheel.open())
 	history_button = _make_button("ZUG", header)
 	history_button.custom_minimum_size = Vector2(46.0, 44.0)

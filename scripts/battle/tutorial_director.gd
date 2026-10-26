@@ -43,7 +43,7 @@ const OUTRO: Array[String] = [
 const MENU_RECAP: Array[String] = [
 	"Das Brett hat 5×5 Felder: links und rechts geht es auf der anderen Seite weiter. Oben und unten ist Schluss. Jede Karte zeigt dir genau, wohin deine Figur ziehen darf.",
 	"Du hast zwei Karten; die fünfte Karte liegt in der Mitte. Nach deinem Zug tauschst du die benutzte Karte mit der mittleren. Kein legaler Zug? Dann musst du passen.",
-	"Der Node Ping entscheidet, wer den Start wählt: Beide tippen geheim, dann zählt die Nähe zum Signal. Eine Signal Collision bedeutet Gleichstand und einen neuen Versuch. Schlage den gegnerischen KERN, um zu gewinnen. Such dir jetzt im Menü einen Modus aus.",
+	"Der Node Ping bestimmt den Start. Unter SPIELEN wartet Ranked gegen echte Gegner. Chaos verändert die Regeln, und im Finite Grid kämpfen bis zu vier Seiten auf einem großen Brett. Such dir im Hauptmenü einen Modus aus.",
 ]
 
 signal _advanced
@@ -188,13 +188,16 @@ func on_battle_over(winner: int) -> void:
 	_hide()
 	if _skipped:
 		TutorialProgress.mark_done(battle.battle_ui.main_menu.account)
-		return
-	await battle.get_tree().create_timer(1.8).timeout
-	await _say(OUTRO_WON if winner == 0 else OUTRO_OTHER)
-	if winner == 0:
 		battle.grid_manager.get_parent().visible = false
 		battle.battle_ui.result_overlay.visible = false
 		battle.battle_ui.main_menu.open_menu(false)
+		queue_free()
+		return
+	await battle.get_tree().create_timer(1.8).timeout
+	await _say(OUTRO_WON if winner == 0 else OUTRO_OTHER)
+	battle.grid_manager.get_parent().visible = false
+	battle.battle_ui.result_overlay.visible = false
+	if winner == 0:
 		for line: String in MENU_RECAP:
 			await _say(line)
 	else:
@@ -202,6 +205,8 @@ func on_battle_over(winner: int) -> void:
 			await _say(line)
 	_hide()
 	TutorialProgress.mark_done(battle.battle_ui.main_menu.account)
+	battle.battle_ui.main_menu.open_menu(false)
+	queue_free()
 
 
 func _guide_first_turn() -> void:

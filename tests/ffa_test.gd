@@ -132,9 +132,11 @@ func _test_screen() -> void:
 		"Finite Grid legal destinations use a vivid lime highlight"
 	)
 	var holograms_before := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
-	ui.emote_picked.emit("haha")
+	ui.emote_button.pressed.emit()
+	_expect(ui.emote_wheel.visible, "The match HUD opens the emote wheel in Finite Grid")
+	ui.emote_wheel._choose("haha")
 	var local_holograms := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
-	_expect(local_holograms > holograms_before, "The local player's emote appears above their FFA Master")
+	_expect(local_holograms > holograms_before, "An emote chosen from the HUD appears above the local FFA Master")
 	battle._on_emote_received(1, "haha")
 	var remote_holograms := battle.units_root.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
 	_expect(remote_holograms > local_holograms, "A received opponent emote appears above that FFA Master")

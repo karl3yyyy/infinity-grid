@@ -116,7 +116,6 @@ func show_email(register: bool) -> void:
 			status.text = _error_text(account._last_error))
 	menu._content.add_child(status)
 	menu._add_menu_button(menu._content, "< ZURÜCK", "Andere Anmeldung wählen", show_login)
-	address.grab_focus.call_deferred()
 
 
 func _google() -> void:

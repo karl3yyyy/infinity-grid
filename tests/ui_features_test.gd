@@ -24,8 +24,10 @@ func _run_tests() -> void:
 		TutorialDirectorScript.MENU_RECAP.size() == 3
 		and TutorialDirectorScript.MENU_RECAP[0].contains("5×5")
 		and TutorialDirectorScript.MENU_RECAP[1].contains("passen")
-		and TutorialDirectorScript.MENU_RECAP[2].contains("gegnerischen KERN"),
-		"The menu tutorial recaps board, cards, passing and the win condition"
+		and TutorialDirectorScript.MENU_RECAP[2].contains("Ranked")
+		and TutorialDirectorScript.MENU_RECAP[2].contains("Chaos")
+		and TutorialDirectorScript.MENU_RECAP[2].contains("Finite Grid"),
+		"The tutorial returns to the main menu and teases Ranked, Chaos and Finite Grid"
 	)
 	var cards := MovementCard.create_deck()
 	var encyclopedia: CardEncyclopedia = EncyclopediaScript.new(cards)
@@ -82,6 +84,39 @@ func _run_tests() -> void:
 	var grid := main.get_node_or_null("BattleScene/GridManager") as GridManager
 	var battle := main.get_node_or_null("BattleManager") as GridBattleManager
 	var stage := main.get_node_or_null("CameraController/CardStage") as CardStage
+	var battle_ui := main.get_node("BattleUI") as GridBattleUI
+	var menu := battle_ui.main_menu
+	menu._login.show_email(true)
+	await process_frame
+	var login_fields: Array[LineEdit] = []
+	for child: Node in menu._content.get_children():
+		if child is LineEdit:
+			login_fields.append(child)
+	_expect(
+		login_fields.size() == 2 and login_fields[0].visible and login_fields[1].visible
+		and not login_fields[0].has_focus(),
+		"Email registration displays both in-game fields without opening a system prompt"
+	)
+	menu._show_home()
+	var emote_button := battle_ui.emote_button
+	var emote_wheel := battle_ui.emote_wheel
+	_expect(emote_button.custom_minimum_size.x >= 100.0, "The match emote control has enough width for a reliable tap")
+	var unit_container: Node3D = main.get_node("BattleScene/Units")
+	var emotes_before := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	emote_button.pressed.emit()
+	_expect(emote_wheel.visible, "The match emote button opens its wheel")
+	emote_wheel._choose("haha")
+	var emotes_after := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	_expect(emotes_after > emotes_before, "Choosing an emote displays it above the player's KERN")
+	battle.current_player = 1
+	var bot_turn_emotes_before := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	battle._on_emote_picked("haha")
+	var bot_turn_emotes_after := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	_expect(
+		bot_turn_emotes_after > bot_turn_emotes_before
+		and unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).back().global_position.distance_to(battle.players[2].global_position + Vector3(0, 2.6, 0)) < 0.1,
+		"Emotes in Bot Training stay above the local KERN during the bot's turn"
+	)
 	if stage != null:
 		var opponent_card: Card3D
 		for card_node: Card3D in stage._used_nodes():

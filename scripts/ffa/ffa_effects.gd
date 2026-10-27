@@ -9,7 +9,8 @@ const NO_CELL := Vector2i(-1, -1)
 
 
 static func kind_of_slot(rules: FfaRules, slot: int) -> int:
-	return CardEffect.kind_of(rules.hands[rules.current][slot])
+	var card: MovementCard = rules.pass_card if slot == 2 else rules.hands[rules.current][slot]
+	return CardEffect.kind_of(card)
 
 
 ## Where a pushed piece lands, or NO_CELL when the push is not possible.
@@ -52,7 +53,7 @@ static func has_any(rules: FfaRules, player: int) -> bool:
 	rules.current = player
 	var found := false
 	for origin: Vector2i in rules.cells_of(player):
-		for slot: int in range(2):
+		for slot: int in range(3):
 			if not targets(rules, origin, slot).is_empty():
 				found = true
 				break

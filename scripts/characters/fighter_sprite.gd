@@ -7,11 +7,11 @@ extends Node3D
 ## a rim light in the team colour. UnitMovement drives it through walking,
 ## pose() and release().
 
-const FRAME_SIZE := Vector2i(120, 168)
+const FRAME_SIZE := Vector2i(240, 336)
 ## World height of the sprite quad on the board.
 const DISPLAY_HEIGHT: float = 1.85
 ## The low-res model animates at this rate, like hand-drawn sprite frames.
-const FRAMES_PER_SECOND: float = 18.0
+const FRAMES_PER_SECOND: float = 20.0
 
 const POSE_ANIMATIONS := {
 	"cast": &"Spell_Simple_Shoot",
@@ -23,6 +23,22 @@ const POSE_ANIMATIONS := {
 	"cheer": &"Dance",
 	"hit": &"Hit_Chest",
 	"death": &"Death01",
+}
+
+const VICTORY_ROUTINES: Dictionary = {
+	"shadow": {"steps": [["Pistol_Aim_Neutral", 0.55], ["Cheer", 1.0]], "spins": 0},
+	"wired": {"steps": [["Spell_Simple_Enter", 0.4], ["Spell_Simple_Shoot", 0.65], ["Dance", 0.8]], "spins": 0},
+	"nova": {"steps": [["Cheer", 0.7], ["Dance", 1.2]], "spins": 1},
+	"brute": {"steps": [["Punch_Enter", 0.35], ["Punch_Cross", 0.45], ["Cheer", 1.0]], "spins": 0},
+	"baby": {"steps": [["Jump", 0.55], ["Dance", 0.8]], "spins": 1},
+	"agent": {"steps": [["Pistol_Aim_Neutral", 0.55], ["Pistol_Shoot", 0.45], ["Dance", 0.8]], "spins": 0},
+	"mira": {"steps": [["Spell_Simple_Enter", 0.4], ["Cheer", 1.0]], "spins": 1},
+	"opa": {"steps": [["Sitting_Enter", 0.5], ["Sitting_Exit", 0.65], ["Cheer", 0.8]], "spins": 0},
+	"punk": {"steps": [["Punch_Jab", 0.35], ["Punch_Cross", 0.4], ["Dance", 0.8]], "spins": 1},
+	"doc": {"steps": [["Spell_Simple_Enter", 0.45], ["Spell_Simple_Shoot", 0.55], ["Cheer", 0.9]], "spins": 1},
+	"monk": {"steps": [["Sitting_Enter", 0.6], ["Sitting_Idle", 0.7], ["Dance", 0.8]], "spins": 0},
+	"evlis": {"steps": [["Pistol_Aim_Neutral", 0.5], ["Pistol_Shoot", 0.45], ["Cheer", 0.9]], "spins": 0},
+	"kid": {"steps": [["Jump", 0.45], ["Punch_Jab", 0.35], ["Cheer", 0.8]], "spins": 1},
 }
 
 const SPRITE_SHADER := """
@@ -251,6 +267,15 @@ func perform(steps: Array, spins: int = 0) -> void:
 		model.play(step[0], 0.12)
 		await get_tree().create_timer(float(step[1])).timeout
 	release()
+
+
+static func victory_routine(character_id: String) -> Dictionary:
+	return (VICTORY_ROUTINES.get(character_id, VICTORY_ROUTINES["shadow"]) as Dictionary).duplicate(true)
+
+
+func perform_victory(character_id: String) -> void:
+	var routine := victory_routine(character_id)
+	await perform(routine["steps"], int(routine["spins"]))
 
 
 func release(_duration: float = 0.2) -> void:

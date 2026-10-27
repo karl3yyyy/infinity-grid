@@ -18,7 +18,7 @@ var rng := RandomNumberGenerator.new()
 func choose_move(rules: FfaRules, player: int) -> Dictionary:
 	var moves := rules.legal_moves(player)
 	if moves.is_empty():
-		return {"pass": true, "slot": rng.randi_range(0, 1)}
+		return {"pass": true, "slot": rng.randi_range(0, 2)}
 	var best: Dictionary = moves[0]
 	var best_score := -INF
 	for move: Dictionary in moves:

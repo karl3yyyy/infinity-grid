@@ -8,8 +8,9 @@
 //                                -> {"type":"group","code":"48213","seat":0,"token","host":true,...}
 //   mode=group_join&code=48213&name=..&avatar=..
 //   mode=group_resume&code=..&token=..
+//   mode=group_watch&code=..&key=.. -> read-only watch_start snapshot and turns
 // Server messages: group (you are in), lobby {players, max, settings}, group_start,
-// move|pass|effect (relayed, with "seat" and "seq"), emote, seat_away, seat_back,
+// move|pass|effect (relayed, with "seat" and "seq"), emote, match_ended, seat_away, seat_back,
 // seat_left (a bot takes over), host {seat}, error {reason}.
 // Client messages: start (host), move|pass|effect, emote, leave, raw "ping".
 // A turn names the seat it is for. A player may only send for their own seat; the
@@ -60,12 +61,22 @@ export class GroupRoom {
         if (socket) send(socket, message);
       }
     }
+    for (const socket of this.state.getWebSockets("watcher")) {
+      if (socket.readyState === 1) send(socket, message);
+    }
   }
 
   accept(seat, firstMessage) {
     const [client, server] = Object.values(new WebSocketPair());
     this.state.acceptWebSocket(server, [String(seat)]);
     if (firstMessage) send(server, firstMessage);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  acceptWatcher(firstMessage) {
+    const [client, server] = Object.values(new WebSocketPair());
+    this.state.acceptWebSocket(server, ["watcher"]);
+    send(server, firstMessage);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -88,6 +99,7 @@ export class GroupRoom {
     return {
       type, code: room.code, seat: player.seat, token: player.token, host: this.hostSeat(room) === player.seat,
       max: room.max, settings: room.settings, phase: room.phase,
+      watch_key: room.watch_key,
     };
   }
 
@@ -112,13 +124,18 @@ export class GroupRoom {
     const name = cleanText(url.searchParams.get("name"), 16) || "Gast";
     const avatar = cleanText(url.searchParams.get("avatar"), 40);
     let room = await this.load();
+    if (room && room.phase === "ended") {
+      await this.state.storage.deleteAll();
+      room = null;
+    }
 
     if (mode === "group_create") {
       if (room) return rejectSocket("code_taken");
       const max = Math.min(MAX_PLAYERS, Math.max(2, Number(url.searchParams.get("max")) || MAX_PLAYERS));
       const player = { seat: SEAT_ORDER[0], token: newToken(), name, avatar };
       room = {
-        code, phase: "lobby", max, players: [player], moves: [], away: {},
+        code, phase: "lobby", max, players: [player], moves: [], away: {}, finished: [],
+        watch_key: newToken(),
         settings: { tiles: url.searchParams.get("tiles") === "1", effects: url.searchParams.get("effects") === "1" },
       };
       await this.save(room);
@@ -136,6 +153,18 @@ export class GroupRoom {
       const response = this.accept(player.seat, this.intro(room, player, "group"));
       this.broadcast(room, this.lobbyView(room));
       return response;
+    }
+
+    if (mode === "group_watch") {
+      const key = url.searchParams.get("key");
+      if (!room || room.phase !== "playing" || room.starter === undefined || !key || key !== room.watch_key) {
+        return rejectSocket("not_found");
+      }
+      const info = this.startMessage(room, { seat: -1, token: "" });
+      info.type = "watch_start";
+      info.moves = room.moves;
+      info.starter = room.starter;
+      return this.acceptWatcher(info);
     }
 
     if (mode === "group_resume") {
@@ -162,9 +191,27 @@ export class GroupRoom {
     } catch {
       return;
     }
-    const seat = Number(this.state.getTags(socket)[0]);
+    const tag = this.state.getTags(socket)[0];
+    if (tag === "watcher") return;
+    const seat = Number(tag);
     const room = await this.load();
     if (!room) return;
+    if (message.type === "finish") {
+      if (room.phase === "playing" && room.players.some((player) => player.seat === seat && !player.left)) {
+        room.finished = room.finished || [];
+        if (!room.finished.includes(seat)) room.finished.push(seat);
+        const activeSeats = room.players.filter((player) => !player.left).map((player) => player.seat);
+        if (!activeSeats.every((activeSeat) => room.finished.includes(activeSeat))) {
+          await this.save(room);
+          return;
+        }
+        room.phase = "ended";
+        await this.save(room);
+        this.broadcast(room, { type: "match_ended" });
+      }
+      return;
+    }
+    if (room.phase === "ended") return;
     if (message.type === "leave") {
       await this.drop(room, seat, true);
     } else if (message.type === "start") {
@@ -305,9 +352,10 @@ export class GroupRoom {
   }
 
   async webSocketClose(socket) {
+    if (this.state.getTags(socket)[0] === "watcher") return;
     const seat = Number(this.state.getTags(socket)[0]);
     const room = await this.load();
-    if (!room || this.socketFor(seat, socket)) return;
+    if (!room || room.phase === "ended" || this.socketFor(seat, socket)) return;
     const player = room.players.find((other) => other.seat === seat);
     if (!player || player.left) return;
     if (room.phase === "lobby") {

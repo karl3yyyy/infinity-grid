@@ -200,8 +200,8 @@ func _field(placeholder: String, secret: bool) -> LineEdit:
 	field.custom_minimum_size.y = 52.0
 	field.add_theme_font_size_override("font_size", 30)
 	field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD if secret else LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
-	WebTextInput.attach(field, placeholder)
 	menu._content.add_child(field)
+	WebTextInput.attach(field, placeholder)
 	return field
 
 

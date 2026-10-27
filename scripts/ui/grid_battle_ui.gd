@@ -10,11 +10,13 @@ signal chaos_requested(options: Dictionary)
 signal ffa_requested(humans: int, shifting_tiles: bool, card_effects: bool)
 signal group_create_requested(settings: Dictionary, max_players: int)
 signal group_join_requested(code: String)
+signal group_watch_requested(code: String, watch_key: String)
 signal group_resume_requested(session: Dictionary)
 signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
 signal online_join_requested(code: String)
+signal online_watch_requested(code: String, watch_key: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal restart_pressed
@@ -176,7 +178,7 @@ func _add_clock_row(parent: Control) -> void:
 	_opponent_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
-func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0, dim_all: bool = false, show_top: bool = true) -> void:
+func update_hands(hands: Array, pass_card: MovementCard, current_player: int, selected_slot: int, viewing_team: int = 0, dim_all: bool = false, show_top: bool = true, selectable_pass_card: bool = false) -> void:
 	viewer_team = viewing_team
 	var placements: Array = []
 	for position: int in range(2 if show_top else 1):
@@ -195,9 +197,12 @@ func update_hands(hands: Array, pass_card: MovementCard, current_player: int, se
 		if team_id == current_player:
 			placements.append({
 				"card": pass_card, "anchor": next_anchors[position],
-				"team": -1, "slot": -1, "rotated": position == 1,
-				"color": PASS_CARD_COLOR, "lift_direction": lift,
-				"selected": false, "dimmed": false, "interactive": false,
+				"team": team_id if selectable_pass_card else -1,
+				"slot": 2 if selectable_pass_card else -1, "rotated": position == 1,
+				"color": PASS_CARD_COLOR,
+				"lift_direction": lift,
+				"selected": selectable_pass_card and team_id == current_player and selected_slot == 2,
+				"dimmed": false, "interactive": selectable_pass_card and not bot_hand and not dim_all,
 			})
 		hand_titles[position].text = _team_name(team_id)
 		hand_titles[position].modulate = TEAM_COLORS[team_id].lightened(0.3)
@@ -400,8 +405,8 @@ func _build_ui() -> void:
 	header.add_child(selection_label)
 	# Emotes sit outside the menu so they are one tap away during a match.
 	emote_button = _make_button("EMOTE", header)
-	emote_button.custom_minimum_size = Vector2(128.0, 56.0)
-	emote_button.add_theme_font_size_override("font_size", 26)
+	emote_button.custom_minimum_size = Vector2(128.0, 56.0) * (1.12 if AccessibilitySettings.is_enabled() else 1.0)
+	emote_button.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(26))
 	emote_button.pressed.connect(func() -> void: emote_wheel.open())
 	history_button = _make_button("ZUG", header)
 	history_button.custom_minimum_size = Vector2(46.0, 44.0)
@@ -433,7 +438,7 @@ func _build_ui() -> void:
 	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction_label.custom_minimum_size.y = 42.0
-	instruction_label.add_theme_font_size_override("font_size", 26)
+	instruction_label.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(26))
 	instruction_label.modulate = TerminalTheme.GREEN_BRIGHT
 	_outline(instruction_label, 7)
 	bottom_box.add_child(instruction_label)
@@ -441,7 +446,7 @@ func _build_ui() -> void:
 	capture_warning_label.text = "KERN-ALARM  ·  GEWINNZUG LEUCHTET GOLD"
 	capture_warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	capture_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	capture_warning_label.add_theme_font_size_override("font_size", 22)
+	capture_warning_label.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(22))
 	capture_warning_label.modulate = Color("ffc23a")
 	_outline(capture_warning_label, 6)
 	capture_warning_label.visible = false
@@ -450,7 +455,7 @@ func _build_ui() -> void:
 	core_threat_label.text = "KERN IN GEFAHR  ·  GEGNER KANN IHN SCHLAGEN"
 	core_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	core_threat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	core_threat_label.add_theme_font_size_override("font_size", 22)
+	core_threat_label.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(22))
 	core_threat_label.modulate = Color("ff5b56")
 	_outline(core_threat_label, 6)
 	core_threat_label.visible = false
@@ -593,12 +598,14 @@ func _build_main_menu() -> void:
 	main_menu.online_create_requested.connect(func(invite_username: String) -> void: online_create_requested.emit(invite_username))
 	main_menu.online_ranked_requested.connect(func(ticket: String) -> void: online_ranked_requested.emit(ticket))
 	main_menu.online_join_requested.connect(func(code: String) -> void: online_join_requested.emit(code))
+	main_menu.online_watch_requested.connect(func(code: String, watch_key: String) -> void: online_watch_requested.emit(code, watch_key))
 	main_menu.online_quick_requested.connect(func() -> void: online_quick_requested.emit())
 	main_menu.online_resume_requested.connect(func(session: Dictionary) -> void: online_resume_requested.emit(session))
 	main_menu.quit_requested.connect(func() -> void: quit_pressed.emit())
 	main_menu.toast_requested.connect(show_toast)
 	main_menu.group_create_requested.connect(func(settings: Dictionary, max_players: int) -> void: group_create_requested.emit(settings, max_players))
 	main_menu.group_join_requested.connect(func(code: String) -> void: group_join_requested.emit(code))
+	main_menu.group_watch_requested.connect(func(code: String, watch_key: String) -> void: group_watch_requested.emit(code, watch_key))
 	main_menu.group_resume_requested.connect(func(session: Dictionary) -> void: group_resume_requested.emit(session))
 
 
@@ -694,8 +701,9 @@ func _emit_card_selected(team_id: int, slot: int) -> void:
 func _make_button(label_text: String, parent: Control) -> Button:
 	var button := Button.new()
 	button.text = label_text
-	button.custom_minimum_size = Vector2(120.0, 48.0)
-	button.add_theme_font_size_override("font_size", 34)
+	var scale_factor := 1.12 if AccessibilitySettings.is_enabled() else 1.0
+	button.custom_minimum_size = Vector2(120.0, 48.0) * scale_factor
+	button.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(34))
 	button.add_to_group("interactive_ui")
 	parent.add_child(button)
 	return button

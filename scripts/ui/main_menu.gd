@@ -14,12 +14,14 @@ signal lan_match_requested
 signal online_create_requested(invite_username: String)
 signal online_ranked_requested(ticket: String)
 signal online_join_requested(code: String)
+signal online_watch_requested(code: String, watch_key: String)
 signal online_quick_requested
 signal online_resume_requested(session: Dictionary)
 signal quit_requested
 ## Room for up to four players (Finite Grid online): open one or join by code.
 signal group_create_requested(settings: Dictionary, max_players: int)
 signal group_join_requested(code: String)
+signal group_watch_requested(code: String, watch_key: String)
 signal group_resume_requested(session: Dictionary)
 ## A short message for the player, shown over whatever is on screen.
 signal toast_requested(text: String)
@@ -308,6 +310,11 @@ func _show_home() -> void:
 
 func _show_settings() -> void:
 	_set_page("EINSTELLUNGEN", _show_home)
+	var accessibility_label := "AN" if AccessibilitySettings.is_enabled() else "AUS"
+	_add_menu_button(_content, "BARRIEREFREI: %s" % accessibility_label, "Größere Schrift, stärkerer Kontrast und reduzierte Menüanimationen.", func() -> void:
+		AccessibilitySettings.set_enabled(not AccessibilitySettings.is_enabled())
+		TerminalTheme.apply_accessibility_mode(AccessibilitySettings.is_enabled())
+		_show_settings())
 	_add_menu_button(_content, "TON: %s" % ("AN" if SoundBoard.is_enabled() else "AUS"), "Musik, Effekte und Sprachansagen", func() -> void:
 		SoundBoard.set_enabled(not SoundBoard.is_enabled())
 		_show_settings())
@@ -563,7 +570,7 @@ func _add_menu_button(parent: Control, title: String, subtitle: String, action: 
 	button.text = title
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	button.add_theme_font_size_override("font_size", ENTRY_FONT_SIZE)
+	button.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(ENTRY_FONT_SIZE))
 	button.focus_mode = Control.FOCUS_ALL
 	button.mouse_entered.connect(button.grab_focus)
 	button.focus_entered.connect(func() -> void:
@@ -591,7 +598,7 @@ func _focus_first_entry(preferred_index: int = 0) -> void:
 func _make_text(text_value: String, font_size: int, color: Color = TerminalTheme.GREEN) -> Label:
 	var label := Label.new()
 	label.text = text_value
-	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(font_size))
 	label.add_theme_color_override("font_color", color)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label

@@ -7,6 +7,7 @@
 // Protocol (wss://<worker>/play?...), shared with the PC host for the basics:
 //   mode=create                      -> {"type":"room","code":"4821"}
 //   mode=join&code=4821              -> both: {"type":"start","team","cards","code","token"}
+//   mode=watch&code=4821&key=...     -> read-only watch_start snapshot and turns
 //   mode=quick                       -> {"type":"queued"}, later {"type":"matched","code","team"}
 //   mode=match&code=<12>&team=0|1    -> both: start (the lobby sends players here)
 //   mode=resume&code=..&token=..     -> {"type":"resume","team","cards","code","token","moves":[...]}
@@ -23,7 +24,7 @@
 // signing in with e-mail or Google in auth.js (/api/auth, /auth/google);
 // friends in friends.js (/api/friends); ranked queue, rating and leaderboard in
 // ranked.js (/api/ranked, /play?mode=ranked). Rooms for up to four players
-// (Finite Grid) are in group_room.js (/play?mode=group_create|group_join|group_resume). Ranked rooms referee every move
+// (Finite Grid) are in group_room.js (/play?mode=group_create|group_join|group_resume|group_watch). Ranked rooms referee every move
 // with rules.js and settle the result themselves.
 
 import { handleAccountApi } from "./accounts.js";
@@ -117,8 +118,11 @@ export default {
     if (mode === "ranked") {
       return env.RANKED.get(env.RANKED.idFromName("ranked")).fetch(request);
     }
-    if (mode === "group_create" || mode === "group_join" || mode === "group_resume") {
+    if (mode === "group_create" || mode === "group_join" || mode === "group_resume" || mode === "group_watch") {
       return routeGroup(request, env, url, mode, code);
+    }
+    if (mode === "watch" && !/^(\d{4}|[a-z0-9]{12})$/.test(code)) {
+      return rejectSocket("not_found");
     }
     if (mode === "create") {
       code = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
@@ -128,7 +132,7 @@ export default {
       return rejectSocket("bad_request");
     } else if (mode === "resume" && !/^(\d{4}|[a-z0-9]{12})$/.test(code)) {
       return rejectSocket("not_found");
-    } else if (!["create", "join", "match", "resume"].includes(mode)) {
+    } else if (!["create", "join", "match", "resume", "watch"].includes(mode)) {
       return rejectSocket("bad_request");
     }
     const room = env.ROOMS.get(env.ROOMS.idFromName(code));
@@ -196,7 +200,7 @@ export class Room {
       // A ranked pairing from ranked.js: both seats are known, the server referees.
       const body = await request.json();
       const cards = drawCards(5);
-      const room = { code: "", phase: "matching", cards, tokens: [null, null], moves: [], ranked: { players: body.players, game: newGame(cards) } };
+      const room = { code: "", phase: "matching", cards, tokens: [null, null], moves: [], finished: [], watch_key: newToken(), ranked: { players: body.players, game: newGame(cards) } };
       await this.save(room);
       await this.arm(room, Date.now() + MATCH_JOIN_SECONDS * 1000);
       return new Response("ok");
@@ -213,7 +217,7 @@ export class Room {
       if (room) {
         return rejectSocket("code_taken");
       }
-      room = { code, phase: "waiting", cards: drawCards(5), tokens: [newToken(), null], moves: [] };
+      room = { code, phase: "waiting", cards: drawCards(5), tokens: [newToken(), null], moves: [], finished: [], watch_key: newToken() };
       await this.save(room);
       await this.arm(room, Date.now() + ROOM_IDLE_SECONDS * 1000);
       return this.accept(0, { type: "room", code });
@@ -231,13 +235,24 @@ export class Room {
       return response;
     }
 
+    if (mode === "watch") {
+      const key = url.searchParams.get("key");
+      if (!room || room.phase !== "playing" || room.starter === undefined || !key || key !== room.watch_key) {
+        return rejectSocket("not_found");
+      }
+      return this.acceptWatcher({
+        type: "watch_start", code: room.code, cards: room.cards, moves: room.moves,
+        starter: room.starter, looks: room.looks || [null, null],
+      });
+    }
+
     if (mode === "match") {
       const team = Number(url.searchParams.get("team"));
       if (team !== 0 && team !== 1) {
         return rejectSocket("bad_request");
       }
       if (!room) {
-        room = { code, phase: "matching", cards: drawCards(5), tokens: [null, null], moves: [] };
+        room = { code, phase: "matching", cards: drawCards(5), tokens: [null, null], moves: [], finished: [], watch_key: newToken() };
         await this.arm(room, Date.now() + MATCH_JOIN_SECONDS * 1000);
       }
       room.code = code;
@@ -270,6 +285,7 @@ export class Room {
       const old = this.socketFor(seat);
       const response = this.accept(seat, {
         type: "resume", team: seat, cards: room.cards, code: room.code, token, moves: room.moves,
+        watch_key: room.watch_key,
         starter: room.starter === undefined ? -1 : room.starter, ping: room.ping || null,
         opponent_look: (room.looks || [null, null])[1 - seat],
         clock: this.runningClock(room) ? clockView(room.ranked.clock, Date.now()) : null,
@@ -296,11 +312,24 @@ export class Room {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  acceptWatcher(firstMessage) {
+    const [client, server] = Object.values(new WebSocketPair());
+    this.state.acceptWebSocket(server, ["watcher"]);
+    send(server, firstMessage);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  sendToWatchers(message) {
+    for (const socket of this.state.getWebSockets("watcher")) {
+      if (socket.readyState === 1) send(socket, message);
+    }
+  }
+
   sendStart(room) {
     for (const seat of [0, 1]) {
       const socket = this.socketFor(seat);
       if (socket) {
-        send(socket, { type: "start", team: seat, cards: room.cards, code: room.code, token: room.tokens[seat], ping: true });
+        send(socket, { type: "start", team: seat, cards: room.cards, code: room.code, token: room.tokens[seat], watch_key: room.watch_key, ping: true });
       }
     }
   }
@@ -361,13 +390,27 @@ export class Room {
     } catch {
       return;
     }
-    const seat = Number(this.state.getTags(socket)[0]);
+    const tag = this.state.getTags(socket)[0];
+    if (tag === "watcher") return;
+    const seat = Number(tag);
     const room = await this.load();
     if (!room || room.phase !== "playing") {
       return;
     }
     if (message.type === "leave") {
       await this.end(room, seat);
+      return;
+    }
+    if (message.type === "finish") {
+      room.finished = room.finished || [];
+      if (!room.finished.includes(seat)) room.finished.push(seat);
+      if (room.finished.length < 2) {
+        await this.save(room);
+        return;
+      }
+      room.phase = "ended";
+      await this.save(room);
+      this.sendToWatchers({ type: "match_ended" });
       return;
     }
     if (message.type === "look") {
@@ -383,6 +426,7 @@ export class Room {
       if (other) {
         send(other, look);
       }
+      this.sendToWatchers({ ...look, team: seat });
       return;
     }
     if (message.type === "emote") {
@@ -392,7 +436,8 @@ export class Room {
       if (EMOTE_IDS.includes(message.id) && now - this.lastEmote[seat] > 2000) {
         this.lastEmote[seat] = now;
         const other = this.socketFor(1 - seat);
-        if (other) send(other, { type: "emote", id: message.id });
+        if (other) send(other, { type: "emote", id: message.id, team: seat });
+        this.sendToWatchers({ type: "emote", id: message.id, team: seat });
       }
       return;
     }
@@ -436,6 +481,7 @@ export class Room {
     if (other) {
       send(other, message);
     }
+    this.sendToWatchers(message);
     if (clock && outcome.winner === undefined && !outcome.draw) {
       await this.arm(room);
       this.sendClock(room);
@@ -462,9 +508,11 @@ export class Room {
         send(socket, { type: "ranked_result", score: scores[seat], reason, ...results[seat] });
       }
     }
+    this.sendToWatchers({ type: "ranked_result" });
   }
 
   async webSocketClose(socket) {
+    if (this.state.getTags(socket)[0] === "watcher") return;
     const seat = Number(this.state.getTags(socket)[0]);
     const room = await this.load();
     if (!room || this.socketFor(seat, socket)) {
@@ -543,6 +591,7 @@ export class Room {
     if (other) {
       send(other, { type: "opponent_left" });
     }
+    this.sendToWatchers({ type: "match_ended" });
   }
 }
 

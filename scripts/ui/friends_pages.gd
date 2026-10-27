@@ -113,9 +113,9 @@ func show_friends() -> void:
 	field.placeholder_text = "Benutzername"
 	field.max_length = 16
 	field.custom_minimum_size = Vector2(320.0, 52.0)
-	WebTextInput.attach(field, "Benutzername")
 	field.add_theme_font_size_override("font_size", 30)
 	add_row.add_child(field)
+	WebTextInput.attach(field, "Benutzername")
 	var status := menu._make_text("", 22, TerminalTheme.GREEN_BRIGHT)
 	var add := func() -> void:
 		if field.text.strip_edges().is_empty():
@@ -179,7 +179,9 @@ func _fill(list: VBoxContainer, status: Label) -> void:
 	for person: Dictionary in friends:
 		var who := str(person["username"])
 		var dot := "*" if person.get("online", false) else "-"
-		menu._add_menu_button(list, "%s %s" % [dot, who], "%s · %d  –  antippen zum Herausfordern" % [str(person.get("rank", "")), int(person.get("rating", 1000))], _show_friend.bind(person))
+		var active_match: Variant = person.get("active_match", null)
+		var hint := "Partie läuft · antippen zum Zuschauen" if active_match is Dictionary else "%s · %d  –  antippen zum Herausfordern" % [str(person.get("rank", "")), int(person.get("rating", 1000))]
+		menu._add_menu_button(list, "%s %s" % [dot, who], hint, _show_friend.bind(person))
 	var outgoing: Array = overview.get("outgoing", [])
 	if not outgoing.is_empty():
 		_heading(list, "GESENDET")
@@ -191,7 +193,19 @@ func _show_friend(person: Dictionary) -> void:
 	var who := str(person["username"])
 	menu._set_page(who, show_friends)
 	menu._content.add_child(menu._make_text("%s  ·  %d PUNKTE" % [str(person.get("rank", "")), int(person.get("rating", 1000))], MainMenu.TEXT_FONT_SIZE, TerminalTheme.GREEN_BRIGHT))
-	menu._content.add_child(menu._make_text("online" if person.get("online", false) else "gerade nicht online", 22, TerminalTheme.GREEN_DIM))
+	var activity_value: Variant = person.get("active_match", {})
+	var activity: Dictionary = activity_value if activity_value is Dictionary else {}
+	var playing := not activity.is_empty()
+	menu._content.add_child(menu._make_text("spielt gerade" if playing else ("online" if person.get("online", false) else "gerade nicht online"), 22, TerminalTheme.GREEN_DIM))
+	if playing:
+		if str(activity.get("mode", "")) == "finite_grid":
+			menu._add_menu_button(menu._content, "ZUSCHAUEN", "Laufende Finite-Grid-Partie ansehen", func() -> void:
+				menu.close_menu()
+				menu.group_watch_requested.emit(str(activity["code"]), str(activity["key"])))
+		else:
+			menu._add_menu_button(menu._content, "ZUSCHAUEN", "Laufende Online-Partie ansehen", func() -> void:
+				menu.close_menu()
+				menu.online_watch_requested.emit(str(activity["code"]), str(activity["key"])))
 	menu._add_menu_button(menu._content, "HERAUSFORDERN", "Raum erstellen; %s bekommt eine Einladung" % who, func() -> void:
 		menu.close_menu()
 		menu.online_create_requested.emit(who))

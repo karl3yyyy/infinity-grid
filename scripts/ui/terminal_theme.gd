@@ -64,7 +64,17 @@ static func theme() -> Theme:
 	_theme.set_color("font_placeholder_color", "LineEdit", GREEN_DIM)
 	_theme.set_color("caret_color", "LineEdit", GREEN_BRIGHT)
 	_theme.set_color("selection_color", "LineEdit", Color(GREEN, 0.35))
+	apply_accessibility_mode(AccessibilitySettings.is_enabled())
 	return _theme
+
+
+static func apply_accessibility_mode(enabled: bool) -> void:
+	var active := theme() if _theme == null else _theme
+	active.default_font_size = 36 if enabled else 30
+	active.set_color("font_color", "Label", GREEN_BRIGHT if enabled else GREEN)
+	active.set_color("font_color", "Button", GREEN_BRIGHT if enabled else GREEN)
+	active.set_color("font_hover_color", "Button", Color.BLACK if enabled else INK)
+	active.set_color("font_focus_color", "Button", Color.BLACK if enabled else INK)
 
 
 ## The inverted block behind a selected entry.

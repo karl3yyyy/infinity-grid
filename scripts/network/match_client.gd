@@ -10,6 +10,7 @@ signal connected
 signal queued
 signal room_created(code: String)
 signal match_started(team: int, card_names: Array)
+signal watch_started(info: Dictionary)
 ## A dropped online match came back; moves holds every turn played so far.
 signal resumed(team: int, card_names: Array, moves: Array)
 signal opponent_moved(message: Dictionary)
@@ -28,6 +29,9 @@ signal starter_chosen(team: int)
 ## Ranked chess clock from the server: both banks in ms and who is to move.
 signal clock_synced(left_ms: Array, to_move: int)
 signal opponent_emote(emote_id: String)
+signal watch_emote(team: int, emote_id: String)
+signal watch_look(team: int, look: Dictionary)
+signal match_ended
 signal rejected(reason: String)
 ## The connection dropped and the client is trying to get back in.
 signal reconnecting
@@ -63,6 +67,9 @@ var _lobby_mode: String = ""
 var ping_required: bool = false
 ## Starter known from a resume (-1: the ping is still open).
 var resumed_starter: int = -1
+var code: String = ""
+var watch_key: String = ""
+var is_watching: bool = false
 
 
 ## Address of the PC host. In the browser it is the PC that served this page;
@@ -107,6 +114,10 @@ static func online_join_url(code: String) -> String:
 	return online_server_url() + "/play?mode=join&code=" + code.uri_encode()
 
 
+static func online_watch_url(code: String, watch_key: String) -> String:
+	return online_server_url() + "/play?mode=watch&code=%s&key=%s" % [code.uri_encode(), watch_key.uri_encode()]
+
+
 static func online_quick_url() -> String:
 	return online_server_url() + "/play?mode=quick"
 
@@ -142,8 +153,16 @@ static func _resume_url(session: Dictionary) -> String:
 
 
 func connect_to_host(url: String) -> Error:
+	is_watching = false
 	_lobby_mode = "quick" if url.contains("mode=quick") else ("ranked" if url.contains("mode=ranked") else "")
 	_quick_base = url.get_slice("/play", 0) if not _lobby_mode.is_empty() else ""
+	return _open(url)
+
+
+func watch(url: String) -> Error:
+	is_watching = true
+	_session.clear()
+	clear_saved_session()
 	return _open(url)
 
 
@@ -155,13 +174,20 @@ func resume_session(session: Dictionary) -> Error:
 
 ## Ends the match for good: the opponent is told and nothing is resumed.
 func leave() -> void:
-	_send_now({"type": "leave"})
+	if not is_watching:
+		_send_now({"type": "leave"})
 	_session.clear()
 	clear_saved_session()
 	disconnect_from_host()
 
 
 ## The match ended normally; there is nothing left to resume.
+func finish_match() -> void:
+	if not is_watching:
+		_send_now({"type": "finish"})
+	forget_session()
+
+
 func forget_session() -> void:
 	_session.clear()
 	clear_saved_session()
@@ -244,7 +270,7 @@ func _process(delta: float) -> void:
 ## Phones silently drop sockets when the app goes to the background, so the
 ## client pings and treats a missing answer as a lost connection.
 func _tick_heartbeat(delta: float) -> void:
-	if _session.is_empty():
+	if _session.is_empty() and not is_watching:
 		return
 	if _pong_wait >= 0.0:
 		_pong_wait -= delta
@@ -299,14 +325,19 @@ func _handle_message(text: String) -> void:
 			matched.emit(message.get("opponent", {}) as Dictionary)
 			_open("%s/play?mode=match&code=%s&team=%d" % [_quick_base, str(message["code"]), int(message["team"])])
 		"room":
+			code = str(message.get("code", ""))
 			room_created.emit(str(message.get("code", "")))
 		"start":
 			ping_required = bool(message.get("ping", false))
+			code = str(message.get("code", ""))
+			watch_key = str(message.get("watch_key", ""))
 			_remember(message)
 			match_started.emit(int(message["team"]), message["cards"] as Array)
 		"resume":
 			ping_required = true
 			resumed_starter = int(message.get("starter", -1))
+			code = str(message.get("code", ""))
+			watch_key = str(message.get("watch_key", ""))
 			_remember(message)
 			_reconnect_time_left = -1.0
 			resumed.emit(int(message["team"]), message["cards"] as Array, message.get("moves", []) as Array)
@@ -319,12 +350,17 @@ func _handle_message(text: String) -> void:
 			_emit_clock(message)
 		"move", "pass":
 			opponent_moved.emit(message)
+		"watch_start":
+			is_watching = true
+			code = str(message.get("code", ""))
+			watch_started.emit(message)
 		"ranked_result":
 			ranked_result.emit(message)
 		"ping_result":
 			ping_result.emit(message)
 		"emote":
 			opponent_emote.emit(str(message.get("id", "")))
+			watch_emote.emit(int(message.get("team", -1)), str(message.get("id", "")))
 		"starter":
 			starter_chosen.emit(int(message.get("team", 0)))
 		"opponent_away":
@@ -333,6 +369,10 @@ func _handle_message(text: String) -> void:
 			opponent_back.emit()
 		"look":
 			opponent_look.emit(message)
+			if message.has("team"):
+				watch_look.emit(int(message["team"]), message)
+		"match_ended":
+			match_ended.emit()
 		"opponent_left":
 			forget_session()
 			disconnect_from_host()

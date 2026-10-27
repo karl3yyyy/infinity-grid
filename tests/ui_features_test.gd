@@ -108,6 +108,9 @@ func _run_tests() -> void:
 	emote_wheel._choose("haha")
 	var emotes_after := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
 	_expect(emotes_after > emotes_before, "Choosing an emote displays it above the player's KERN")
+	emote_button.pressed.emit()
+	_expect(emote_wheel.visible, "The emote wheel can reopen immediately after choosing an emote")
+	emote_wheel.close()
 	battle.current_player = 1
 	var bot_turn_emotes_before := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
 	battle._on_emote_picked("haha")
@@ -117,6 +120,44 @@ func _run_tests() -> void:
 		and unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).back().global_position.distance_to(battle.players[2].global_position + Vector3(0, 2.6, 0)) < 0.1,
 		"Emotes in Bot Training stay above the local KERN during the bot's turn"
 	)
+	battle.chaos = ChaosRules.new()
+	battle.chaos.hidden_king = true
+	var secret_core: BattleUnit = battle.players[1]
+	battle.chaos.set_king(0, secret_core.grid_position)
+	for unit: BattleUnit in battle.players:
+		unit.is_master = false
+	var hidden_emotes_before := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D).size()
+	battle.show_emote(0, "haha")
+	var hidden_emotes := unit_container.get_children().filter(func(child: Node) -> bool: return child is Label3D)
+	_expect(
+		hidden_emotes.size() > hidden_emotes_before
+		and hidden_emotes.back().global_position.distance_to(secret_core.global_position + Vector3(0, 2.6, 0)) < 0.1,
+		"Emotes target the player's chosen hidden KERN"
+	)
+	battle.chaos = null
+	battle.players[2].is_master = true
+	var routine_signatures: Dictionary = {}
+	for character: Dictionary in CharacterRoster.CHARACTERS:
+		var character_id := str(character["id"])
+		routine_signatures[str(FighterSprite.victory_routine(character_id))] = character_id
+	_expect(routine_signatures.size() == CharacterRoster.CHARACTERS.size(), "Every character has a distinct victory animation")
+	var feature_menu := battle_ui.main_menu
+	feature_menu._play.show_chaos()
+	var chaos_card_count := 0
+	for card_node: Node in feature_menu._content.find_children("*", "PanelContainer", true, false):
+		chaos_card_count += 1
+	_expect(chaos_card_count >= 3, "The Chaos Lab presents each rule as a separate visual card")
+	battle.chaos_weather.begin({"hidden_king": true, "shifting_tiles": true})
+	_expect(battle.chaos_weather.visible, "Chaos-only weather activates for a Chaos match")
+	battle.chaos_weather.stop()
+	_expect(not battle.chaos_weather.visible, "Chaos weather is hidden outside Chaos matches")
+	feature_menu._play.show_play()
+	var original_accessibility := AccessibilitySettings.is_enabled()
+	AccessibilitySettings.set_enabled(true)
+	TerminalTheme.apply_accessibility_mode(true)
+	_expect(AccessibilitySettings.font_size(20) > 20 and AccessibilitySettings.reduced_motion(), "Accessibility mode increases text size and reduces motion")
+	AccessibilitySettings.set_enabled(original_accessibility)
+	TerminalTheme.apply_accessibility_mode(original_accessibility)
 	if stage != null:
 		var opponent_card: Card3D
 		for card_node: Card3D in stage._used_nodes():

@@ -7,6 +7,7 @@ const MovementCardScript := preload("res://scripts/battle/movement_card.gd")
 const BotAIScript := preload("res://scripts/battle/bot_ai.gd")
 const NetworkMatchScript := preload("res://scripts/battle/network_match.gd")
 const ChaosBotScript := preload("res://scripts/chaos/chaos_bot.gd")
+const ChaosWeatherScript := preload("res://scripts/chaos/chaos_weather.gd")
 ## The same position with the same side to move ends the match in a draw on this count.
 const DRAW_REPETITIONS: int = 3
 
@@ -68,6 +69,8 @@ const MAX_TIMEOUTS_IN_A_ROW: int = 3
 var turn_timer: TurnTimer
 var _timeouts_in_a_row: int = 0
 var ffa_battle: FfaBattle
+var _spectator_mode: bool = false
+var chaos_weather: ChaosWeather
 
 
 func setup(
@@ -88,6 +91,12 @@ func setup(
 	player_controller = player_input
 	unit_movement = movement
 	units_parent = unit_container
+	chaos_weather = ChaosWeatherScript.new()
+	chaos_weather.name = "ChaosWeather"
+	add_child(chaos_weather)
+	battle_ui.ffa_requested.connect(func(_humans: int, _tiles: bool, _effects: bool) -> void: chaos_weather.stop())
+	battle_ui.group_create_requested.connect(func(_settings: Dictionary, _max_players: int) -> void: chaos_weather.stop())
+	battle_ui.group_join_requested.connect(func(_code: String) -> void: chaos_weather.stop())
 	grid_manager.intro_started.connect(func() -> void: units_parent.visible = false)
 	grid_manager.intro_finished.connect(_beam_in_units)
 	turn_timer = TurnTimer.new()
@@ -106,6 +115,7 @@ func setup(
 	battle_ui.lan_match_requested.connect(_start_lan_match)
 	battle_ui.online_create_requested.connect(_start_online_create)
 	battle_ui.online_join_requested.connect(_start_online_join)
+	battle_ui.online_watch_requested.connect(_start_online_watch)
 	battle_ui.online_quick_requested.connect(_start_online_quick)
 	battle_ui.online_ranked_requested.connect(_start_online_ranked)
 	battle_ui.emote_picked.connect(_on_emote_picked)
@@ -184,6 +194,8 @@ func _show_title_menu() -> void:
 func _start_tutorial(mandatory: bool) -> void:
 	if battle_over:
 		return
+	chaos_weather.stop()
+	_spectator_mode = false
 	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
@@ -207,7 +219,11 @@ func _start_tutorial(mandatory: bool) -> void:
 
 func _start_bot_training() -> void:
 	if battle_over:
+		_replay_mode = "bot"
+		_restart_battle()
 		return
+	_spectator_mode = false
+	chaos_weather.stop()
 	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
@@ -228,7 +244,12 @@ func remember_ffa(humans: int, shifting_tiles: bool, card_effects: bool) -> void
 
 func _start_chaos(options: Dictionary) -> void:
 	if battle_over:
+		_replay_chaos_options = options.duplicate()
+		_replay_mode = "chaos"
+		_restart_battle()
 		return
+	_spectator_mode = false
+	chaos_weather.begin(options)
 	chaos = ChaosRules.new()
 	chaos.hidden_king = bool(options.get("hidden_king", false))
 	chaos.shifting_tiles = bool(options.get("shifting_tiles", false))
@@ -263,7 +284,7 @@ func _choose_secret_king() -> void:
 	_choosing_king = true
 	input_locked = false
 	player_controller.enabled = true
-	battle_ui.set_instruction("Wähle geheim deinen KERN. Der Bot sieht nicht, wen du wählst.")
+	battle_ui.set_instruction("VERSTECKTER KERN: Tippe auf eine deiner fünf Figuren. Der Ring zeigt dir deine geheime Wahl.")
 	await chaos_king_chosen
 	input_locked = true
 	player_controller.enabled = false
@@ -279,6 +300,7 @@ func _pick_king(coordinate: Vector2i) -> void:
 	unit.refresh_role_label()
 	unit.mark_as_king()
 	_choosing_king = false
+	battle_ui.set_instruction("Geheime Wahl gespeichert. Nur du siehst deinen KERN.")
 	SoundBoard.play("click")
 	chaos_king_chosen.emit()
 
@@ -462,7 +484,11 @@ func _shift_tiles() -> Dictionary:
 
 func _start_local_multiplayer() -> void:
 	if battle_over:
+		_replay_mode = "local"
+		_restart_battle()
 		return
+	_spectator_mode = false
+	chaos_weather.stop()
 	_apply_match_looks(0)
 	battle_ui.main_menu.close_menu()
 	grid_manager.get_parent().visible = true
@@ -489,6 +515,10 @@ func _start_online_join(code: String) -> void:
 	_start_network_match().start(MatchClient.online_join_url(code), "Suche Raum %s ..." % code, "Verbunden. Trete Raum %s bei ..." % code)
 
 
+func _start_online_watch(code: String, watch_key: String) -> void:
+	_start_network_match().watch(MatchClient.online_watch_url(code, watch_key))
+
+
 func _start_online_quick() -> void:
 	_start_network_match().start(MatchClient.online_quick_url(), "Verbinde ...", "Suche einen Gegner ...")
 
@@ -504,6 +534,7 @@ func show_ranked_result(result: Dictionary) -> void:
 	battle_over = true
 	input_locked = true
 	player_controller.enabled = false
+	battle_ui.main_menu.account.clear_live_match.call_deferred()
 	battle_ui.hide_side_action()
 	var score := float(result.get("score", 0.0))
 	var title := "SIEG!" if score > 0.75 else ("UNENTSCHIEDEN" if score > 0.25 else "NIEDERLAGE")
@@ -538,8 +569,10 @@ func _start_network_match() -> NetworkMatch:
 ## Sets up a fresh board for a match against another device.
 func begin_network_match(team: int, card_names: Array) -> bool:
 	var cards := MovementCardScript.cards_from_names(card_names)
-	if cards.size() != 5 or team < 0 or team > 1:
+	if cards.size() != 5 or team < -1 or team > 1:
 		return false
+	_spectator_mode = false
+	chaos_weather.stop()
 	network_team = team
 	match_cards = cards.duplicate()
 	hands[0] = [cards[0], cards[1]]
@@ -551,8 +584,8 @@ func begin_network_match(team: int, card_names: Array) -> bool:
 	must_pass = false
 	position_counts.clear()
 	_record_position()
-	_apply_match_looks(team)
-	camera_controller.set_player_view(team)
+	_apply_match_looks(0 if team < 0 else team)
+	camera_controller.set_player_view(0 if team < 0 else team)
 	# Online the Node Ping (or a resume) decides who starts; see set_starter().
 	return true
 
@@ -564,6 +597,8 @@ func set_starter(team: int) -> void:
 	apply_figure_facing()
 	await grid_manager.play_intro()
 	pinging = false
+	if chaos != null and chaos.hidden_king:
+		await _choose_secret_king()
 	if tutorial != null:
 		input_locked = true
 		player_controller.enabled = false
@@ -586,8 +621,6 @@ func set_starter(team: int) -> void:
 	await battle_ui.play_card_deal()
 	if tutorial != null:
 		await tutorial.after_deal()
-	if chaos != null and chaos.hidden_king:
-		await _choose_secret_king()
 	match_history.clear()
 	_record_match_history({"type": "start", "team": team})
 	_begin_turn(1)
@@ -595,6 +628,8 @@ func set_starter(team: int) -> void:
 
 ## The local player sent an emote: show it over their KERN, pass it on.
 func _on_emote_picked(emote_id: String) -> void:
+	if _spectator_mode:
+		return
 	if ffa_battle != null and ffa_battle.is_active():
 		ffa_battle.play_local_emote(emote_id)
 		return
@@ -610,9 +645,20 @@ func _on_emote_picked(emote_id: String) -> void:
 
 ## Only the KERN performs emotes.
 func show_emote(team: int, emote_id: String) -> void:
+	if team < 0 or team > 1 or EmoteWheel.entry(emote_id).is_empty():
+		return
 	var units: Array[BattleUnit] = players if team == 0 else enemies
+	if chaos != null and chaos.hidden_king:
+		var hidden_core := grid_manager.get_unit_at(chaos.king_cells[team]) as BattleUnit
+		if hidden_core != null and not hidden_core.is_dead:
+			EmoteStage.perform(units_parent, hidden_core, team, emote_id)
+			return
 	for unit: BattleUnit in units:
 		if unit.is_master and not unit.is_dead:
+			EmoteStage.perform(units_parent, unit, team, emote_id)
+			return
+	for unit: BattleUnit in units:
+		if not unit.is_dead:
 			EmoteStage.perform(units_parent, unit, team, emote_id)
 			return
 
@@ -951,7 +997,7 @@ func _begin_turn(repetitions: int) -> void:
 	must_pass = not _has_legal_move(current_player)
 	_refresh_core_threat_warning()
 	var bot_turn := bot_opponent_enabled and current_player == 1
-	var remote_turn := network_team >= 0 and current_player != network_team
+	var remote_turn := _spectator_mode or (network_team >= 0 and current_player != network_team)
 	if network_team >= 0 and not remote_turn and not network_match.ranked and not battle_over:
 		turn_timer.start(MOVE_SECONDS)
 	else:
@@ -979,17 +1025,23 @@ func _begin_turn(repetitions: int) -> void:
 
 
 func _refresh_core_threat_warning() -> void:
-	var standard_match := match_mode in ["bot", "local", "network"]
+	var standard_match := match_mode in ["bot", "local", "network", "chaos"]
 	var ranked_match := match_mode == "network" and network_match != null and network_match.ranked
-	var threatened := (
-		standard_match and not ranked_match and not battle_over and not pinging
-		and _has_master_capture_next_turn(_viewer_team())
-	)
+	var threatened := false
+	if standard_match and not ranked_match and not battle_over and not pinging:
+		threatened = _has_master_capture_next_turn(_viewer_team())
+		if _spectator_mode:
+			threatened = threatened or _has_master_capture_next_turn(1 - _viewer_team())
 	battle_ui.set_core_threat_warning(threatened)
+	SoundBoard.set_danger_mode(threatened)
 
 
 func _has_master_capture_next_turn(defending_team: int) -> bool:
-	var defending_master := _find_master(players if defending_team == 0 else enemies)
+	var defending_master := (
+		grid_manager.get_unit_at(chaos.king_cells[defending_team]) as BattleUnit
+		if chaos != null and chaos.hidden_king
+		else _find_master(players if defending_team == 0 else enemies)
+	)
 	if defending_master == null:
 		return false
 	var attacking_team := 1 - defending_team
@@ -1079,11 +1131,11 @@ func _position_key() -> String:
 
 func _run_bot_turn() -> void:
 	await get_tree().create_timer(0.4).timeout
-	if battle_over or current_player != 1 or not bot_opponent_enabled:
+	if battle_over or not bot_opponent_enabled or current_player != 1:
 		return
 	# Let the "thinking" text render before the search blocks the frame.
 	await get_tree().process_frame
-	var choice := _choose_chaos_move() if chaos != null else _choose_bot_move()
+	var choice := _choose_chaos_move() if chaos != null and current_player == 1 else _choose_bot_move(current_player)
 	if choice.is_empty():
 		return
 	if choice.has("pass"):
@@ -1128,11 +1180,11 @@ func _choose_chaos_move() -> Dictionary:
 	return {"unit": unit, "slot": int(result["slot"]), "destination": result["to"]}
 
 
-func _choose_bot_move() -> Dictionary:
+func _choose_bot_move(team: int = 1) -> Dictionary:
 	if tutorial != null:
 		return tutorial.choose_bot_move()
 	var ai: BotAI = BotAIScript.new(bot_difficulty)
-	var result := ai.choose_move(build_ai_state(), 1)
+	var result := ai.choose_move(build_ai_state(), team)
 	if result.is_empty():
 		return {}
 	if result.has("pass"):
@@ -1253,10 +1305,11 @@ func _on_unit_died(unit: BattleUnit) -> void:
 func _finish_battle(winner: int) -> void:
 	battle_over = true
 	battle_ui.set_core_threat_warning(false)
+	SoundBoard.set_danger_mode(false)
 	if tutorial != null:
 		tutorial.on_battle_over(winner)
 	turn_timer.stop()
-	var local_won := winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
+	var local_won := not _spectator_mode and winner >= 0 and (winner == network_team if network_team >= 0 else (winner == 0 or not bot_opponent_enabled))
 	# Only ranked and normal online matches count (not bot or hot-seat games).
 	if winner >= 0 and network_team >= 0:
 		var mode := "ranked" if network_match != null and network_match.ranked else "online"
@@ -1266,12 +1319,15 @@ func _finish_battle(winner: int) -> void:
 			battle_ui.main_menu.account.report_online_result(local_won)
 	if chaos != null and chaos.hidden_king:
 		_reveal_kings()
-	SoundBoard.play("victory" if local_won else "defeat")
+	if not _spectator_mode:
+		SoundBoard.play("victory" if local_won else "defeat")
 	SoundBoard.say("victory" if local_won else "defeat")
 	input_locked = true
 	player_controller.enabled = false
 	if network_match != null:
 		network_match.finished()
+		if not _spectator_mode:
+			await battle_ui.main_menu.account.clear_live_match()
 	if winner < 0:
 		battle_ui.show_result("UNENTSCHIEDEN")
 	elif network_team >= 0:
@@ -1280,8 +1336,29 @@ func _finish_battle(winner: int) -> void:
 		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if winner == 0 else "NIEDERLAGE\n" + GridLore.loss_line())
 		if winner == 0 and chaos == null:
 			_collect_bot_reward()
+	elif _spectator_mode:
+		battle_ui.show_result("ZUSCHAUEN · SPIELER %d GEWINNT" % (winner + 1))
 	else:
 		battle_ui.show_result("SPIELER %d GEWINNT" % (winner + 1))
+	if winner >= 0:
+		var winning_unit := _victory_unit(winner)
+		if winning_unit != null and winning_unit.rig != null:
+			winning_unit.rig.call_deferred("perform_victory", str(team_looks[winner].get("character", "")))
+
+
+func _victory_unit(team: int) -> BattleUnit:
+	var candidates: Array[BattleUnit] = players if team == 0 else enemies
+	if chaos != null and chaos.hidden_king:
+		var king := grid_manager.get_unit_at(chaos.king_cells[team]) as BattleUnit
+		if king != null and not king.is_dead:
+			return king
+	for unit: BattleUnit in candidates:
+		if unit.is_master and not unit.is_dead:
+			return unit
+	for unit: BattleUnit in candidates:
+		if not unit.is_dead:
+			return unit
+	return null
 
 
 ## The match is over: every surviving king shows its role.
@@ -1343,6 +1420,8 @@ func _new_match() -> void:
 func _restart_battle() -> void:
 	if network_match != null and not battle_over:
 		network_match.leave()
+		if not _spectator_mode:
+			battle_ui.main_menu.account.clear_live_match.call_deferred()
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().reload_current_scene()

@@ -9,6 +9,7 @@ signal joined(info: Dictionary)
 signal lobby_changed(info: Dictionary)
 signal started(info: Dictionary)
 signal resumed(info: Dictionary)
+signal watch_started(info: Dictionary)
 signal turn_received(turn: Dictionary)
 signal seat_away(seat: int, seconds: int)
 signal seat_back(seat: int)
@@ -19,6 +20,7 @@ signal emote_received(seat: int, emote_id: String)
 ## Node Ping: {picks, signal, winner}; winner -1 is a collision (tap again).
 signal ping_result(result: Dictionary)
 signal starter_chosen(seat: int)
+signal match_ended
 signal rejected(reason: String)
 signal connection_lost
 signal reconnecting
@@ -34,7 +36,9 @@ const CREATE_RETRIES: int = 3
 
 var seat: int = -1
 var code: String = ""
+var watch_key: String = ""
 var is_host: bool = false
+var is_watcher: bool = false
 
 var _socket := WebSocketPeer.new()
 var _open: bool = false
@@ -81,6 +85,7 @@ static func _resume_url(session: Dictionary) -> String:
 
 ## settings: {"tiles": bool, "effects": bool}; max_players: 2 to 4.
 func create_room(max_players: int, settings: Dictionary, name: String, avatar: String) -> Error:
+	is_watcher = false
 	forget_session()
 	_create_url = "%s/play?mode=group_create&max=%d&tiles=%d&effects=%d&name=%s&avatar=%s" % [
 		MatchClient.online_server_url(), max_players,
@@ -92,16 +97,26 @@ func create_room(max_players: int, settings: Dictionary, name: String, avatar: S
 
 
 func join_room(room_code: String, name: String, avatar: String) -> Error:
+	is_watcher = false
 	forget_session()
 	_create_url = ""
 	return _connect("%s/play?mode=group_join&code=%s&name=%s&avatar=%s" % [MatchClient.online_server_url(), room_code.uri_encode(), name.uri_encode(), avatar.uri_encode()])
 
 
 func resume_session(session: Dictionary) -> Error:
+	is_watcher = false
 	if not session.has("base") or not session.has("code") or not session.has("token"):
 		return ERR_INVALID_PARAMETER
 	_session = session.duplicate()
 	return _connect(_resume_url(_session))
+
+
+func watch_room(room_code: String, key: String) -> Error:
+	is_watcher = true
+	_session.clear()
+	return _connect("%s/play?mode=group_watch&code=%s&key=%s" % [
+		MatchClient.online_server_url(), room_code.uri_encode(), key.uri_encode(),
+	])
 
 
 ## The host starts the match once at least two players are in.
@@ -135,11 +150,18 @@ func send_emote(emote_id: String) -> void:
 
 ## Tells the room we are gone for good, then hangs up.
 func leave() -> void:
-	_send({"type": "leave"})
+	if not is_watcher:
+		_send({"type": "leave"})
 	forget_session()
 	if not _closed:
 		_socket.poll()
 	disconnect_from_host()
+
+
+func finish_match() -> void:
+	if not is_watcher:
+		_send({"type": "finish"})
+	forget_session()
 
 
 func disconnect_from_host() -> void:
@@ -190,7 +212,7 @@ func _process(delta: float) -> void:
 
 
 func _tick_heartbeat(delta: float) -> void:
-	if _session.is_empty():
+	if _session.is_empty() and not is_watcher:
 		return
 	if _pong_wait >= 0.0:
 		_pong_wait -= delta
@@ -243,18 +265,21 @@ func _handle(text: String) -> void:
 		"group":
 			seat = int(message["seat"])
 			code = str(message["code"])
+			watch_key = str(message.get("watch_key", ""))
 			is_host = bool(message.get("host", false))
 			joined.emit(message)
 		"lobby":
 			lobby_changed.emit(message)
 		"group_start":
 			seat = int(message["seat"])
+			watch_key = str(message.get("watch_key", ""))
 			is_host = bool(message.get("host", false))
 			_remember(message)
 			started.emit(message)
 		"group_resume":
 			seat = int(message["seat"])
 			code = str(message["code"])
+			watch_key = str(message.get("watch_key", ""))
 			is_host = bool(message.get("host", false))
 			_remember(message)
 			_reconnect_time_left = -1.0
@@ -265,6 +290,18 @@ func _handle(text: String) -> void:
 					history.append(_cells_to_vectors(turn))
 			info["moves"] = history
 			resumed.emit(info)
+		"watch_start":
+			seat = -1
+			is_host = false
+			is_watcher = true
+			code = str(message.get("code", ""))
+			var info: Dictionary = message.duplicate()
+			var history: Array = []
+			for turn: Variant in message.get("moves", []):
+				if turn is Dictionary:
+					history.append(_cells_to_vectors(turn))
+			info["moves"] = history
+			watch_started.emit(info)
 		"move", "pass", "effect":
 			_touch_session()
 			turn_received.emit(_cells_to_vectors(message))
@@ -282,6 +319,8 @@ func _handle(text: String) -> void:
 			ping_result.emit(message)
 		"starter":
 			starter_chosen.emit(int(message["seat"]))
+		"match_ended":
+			match_ended.emit()
 		"emote":
 			emote_received.emit(int(message["seat"]), str(message.get("id", "")))
 		"error":
@@ -337,5 +376,5 @@ static func _cells_to_vectors(message: Dictionary) -> Dictionary:
 
 
 func _send(message: Dictionary) -> void:
-	if _socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+	if _socket.get_ready_state() == WebSocketPeer.STATE_OPEN and not is_watcher:
 		_socket.send_text(JSON.stringify(message))

@@ -24,6 +24,8 @@ var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _music: AudioStreamPlayer
 var _voice := ""
+var _music_tween: Tween
+var _danger_mode: bool = false
 
 
 static func play(sound: String, volume_db: float = 0.0) -> void:
@@ -65,6 +67,11 @@ static func set_enabled(on: bool) -> void:
 	config.save(PROFILE_PATH)
 
 
+static func set_danger_mode(enabled: bool) -> void:
+	if _board != null:
+		_board._set_danger_mode(enabled)
+
+
 func _ready() -> void:
 	_board = self
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -100,7 +107,23 @@ func _build_music() -> void:
 	var stream := await SoundSynth.build_music(get_tree())
 	_music = AudioStreamPlayer.new()
 	_music.stream = stream
-	_music.volume_db = -14.0
+	_music.volume_db = -10.0 if _danger_mode else -14.0
+	_music.pitch_scale = 1.08 if _danger_mode else 1.0
 	add_child(_music)
 	if enabled:
 		_music.play()
+
+
+func _set_danger_mode(enabled: bool) -> void:
+	if _danger_mode == enabled:
+		return
+	_danger_mode = enabled
+	if enabled:
+		_play("glitch", -18.0)
+	if _music == null:
+		return
+	if _music_tween != null and _music_tween.is_running():
+		_music_tween.kill()
+	_music_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_music_tween.tween_property(_music, "volume_db", -10.0 if enabled else -14.0, 1.1)
+	_music_tween.tween_property(_music, "pitch_scale", 1.08 if enabled else 1.0, 1.1)

@@ -82,6 +82,7 @@ func _ready() -> void:
 	battle_ui.ffa_requested.connect(ffa_battle.start)
 	battle_ui.group_create_requested.connect(ffa_battle.create_room)
 	battle_ui.group_join_requested.connect(ffa_battle.join_room)
+	battle_ui.group_watch_requested.connect(ffa_battle.watch_room)
 	battle_ui.group_resume_requested.connect(ffa_battle.resume_room)
 
 

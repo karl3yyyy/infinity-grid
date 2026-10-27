@@ -41,6 +41,7 @@ var _top_row: Control
 ## Room with friends: every client plays the rules itself and the server relays the turns.
 var client: GroupClient
 var _online: bool = false
+var _spectator: bool = false
 var _my_seat: int = 0
 var _is_host: bool = false
 var _names: Array[String] = ["", "", "", ""]
@@ -91,6 +92,7 @@ func _install_hands() -> void:
 func start(humans: int, shifting_tiles: bool, card_effects: bool = false) -> void:
 	var seats: Array = {0: [], 1: [0], 2: [0, 2], 4: [0, 1, 2, 3]}.get(humans, [0])
 	_online = false
+	_spectator = false
 	_my_seat = 0
 	battle_manager.remember_ffa(humans, shifting_tiles, card_effects)
 	await _begin_game(seats, shifting_tiles, -1, [], card_effects)
@@ -99,6 +101,7 @@ func start(humans: int, shifting_tiles: bool, card_effects: bool = false) -> voi
 ## The room started: `info` is the server's group_start message.
 func start_online(info: Dictionary) -> void:
 	_online = true
+	_spectator = false
 	_my_seat = int(info["seat"])
 	_is_host = bool(info.get("host", false))
 	for seat: int in range(FfaRules.PLAYERS):
@@ -112,6 +115,7 @@ func start_online(info: Dictionary) -> void:
 
 func resume_online(info: Dictionary) -> void:
 	_online = true
+	_spectator = false
 	_my_seat = int(info["seat"])
 	_is_host = bool(info.get("host", false))
 	var names: Array = info.get("names", [])
@@ -143,7 +147,7 @@ func _begin_game(
 	_animating_remote = false
 	for seat: int in range(FfaRules.PLAYERS):
 		_is_human[seat] = seat in seats
-	_view_seat = _my_seat
+	_view_seat = 0 if _spectator else _my_seat
 	ScreenLayout.set_finite_grid_active(true)
 	_active = true
 	_busy = true
@@ -159,7 +163,7 @@ func _begin_game(
 	board_root.visible = true
 	_top_row.visible = false
 	camera.set_board(FfaRules.SIZE, false, FfaWorldHands.FRAMING_MARGIN_CELLS)
-	camera.set_seat_view(_my_seat)
+	camera.set_seat_view(0 if _spectator else _my_seat)
 	_make_looks()
 	if _online:
 		battle_ui.set_opponent_remote(true)
@@ -196,6 +200,8 @@ func _begin_game(
 		battle_ui.show_toast("Finite Grid ist wieder verbunden.")
 	if game == _game_id:
 		if rules.winner == FfaRules.RUNNING:
+			if _online and not _spectator and client != null and not client.watch_key.is_empty():
+				call_deferred("_publish_live_match")
 			_begin_turn()
 		else:
 			_finish()
@@ -285,18 +291,18 @@ func _dress(unit: BattleUnit, look: Dictionary, tint: Color) -> void:
 
 func _seat_name(seat: int) -> String:
 	if _online and _is_human[seat] and _names[seat] != "":
-		return _names[seat].to_upper() + (" (DU)" if seat == _my_seat else "")
+		return _names[seat].to_upper() + (" (DU)" if not _spectator and seat == _my_seat else "")
 	return ("SPIELER %d" if _is_human[seat] else "BOT %d") % (seat + 1)
 
 
 ## A human who sits at this device. Online only the own seat counts.
 func _is_local(seat: int) -> bool:
-	return _is_human[seat] and (not _online or seat == _my_seat)
+	return not _spectator and _is_human[seat] and (not _online or seat == _my_seat)
 
 
 ## Bots run on this device; online only the host runs them and relays their turns.
 func _runs_bot(seat: int) -> bool:
-	return not _is_human[seat] and (not _online or _is_host)
+	return not _spectator and not _is_human[seat] and (not _online or _is_host)
 
 
 func _begin_turn() -> void:
@@ -328,16 +334,22 @@ func _begin_turn() -> void:
 
 
 func _refresh_ui() -> void:
+	SoundBoard.set_danger_mode(_active and _has_core_threat())
 	var view := _view_seat
 	var own_turn := rules.current == view and _is_local(view) and rules.winner == FfaRules.RUNNING
-	battle_ui.update_hands([rules.hands[view], rules.hands[view]], rules.pass_card, 0, _slot if own_turn else -1, 0, not own_turn, false)
+	battle_ui.update_hands(
+		[rules.hands[view], rules.hands[view]], rules.pass_card,
+		0 if rules.current == view else -1, _slot if own_turn else -1,
+		0, not own_turn, false, rules.current == view,
+	)
 	battle_ui.hand_titles[0].text = _seat_name(view)
 	battle_ui.hand_titles[0].modulate = FfaFloor.SEAT_COLORS[view].lightened(0.3)
 	var names: Array[String] = []
 	for seat: int in range(FfaRules.PLAYERS):
 		names.append(_seat_name(seat))
-	_world_hands.show_seats(rules, view)
+	_world_hands.show_seats(rules, view, rules.current)
 	var giver := "GRID" if rules.pass_giver < 0 else names[rules.pass_giver]
+	battle_ui.hand_titles[0].text += "  ·  2 + 1 WEITERGEREICHT"
 	battle_ui.hand_titles[1].text = "↻ KARTE  %s → %s → %s" % [giver, names[rules.current], names[rules.next_after(rules.current)]]
 	battle_ui.hand_titles[1].modulate = Color("ffc23a")
 	var mover := rules.current
@@ -345,8 +357,16 @@ func _refresh_ui() -> void:
 	battle_ui.update_selection(_selected)
 
 
+func _has_core_threat() -> bool:
+	for cell: Vector2i in rules.pieces:
+		var piece: Dictionary = rules.pieces[cell]
+		if bool(piece["master"]) and rules.is_attacked(cell, int(piece["owner"])):
+			return true
+	return false
+
+
 func _on_card_selected(team_id: int, slot: int) -> void:
-	if not _active or _busy or team_id != 0 or slot < 0 or slot > 1 or rules.winner != FfaRules.RUNNING or not _is_local(rules.current):
+	if not _active or _busy or team_id != 0 or slot < 0 or slot > 2 or rules.winner != FfaRules.RUNNING or not _is_local(rules.current):
 		return
 	SoundBoard.play("click")
 	if _must_pass:
@@ -489,6 +509,8 @@ func _after_turn() -> void:
 	if rules.winner != FfaRules.RUNNING:
 		_finish()
 		return
+	if _world_hands != null and rules.pass_giver >= 0:
+		await _world_hands.animate_pass(rules.pass_giver, rules.current, rules.pass_card)
 	_begin_turn()
 
 
@@ -509,19 +531,32 @@ func _on_unit_died(unit: BattleUnit) -> void:
 
 func _finish() -> void:
 	_active = false
+	SoundBoard.set_danger_mode(false)
 	_busy = true
 	player_controller.enabled = false
 	_refresh_ui()
-	var local_won := rules.winner >= 0 and (rules.winner == _my_seat if _online else _is_human[rules.winner])
+	var local_won := not _spectator and rules.winner >= 0 and (rules.winner == _my_seat if _online else _is_human[rules.winner])
 	SoundBoard.play("victory" if local_won else "defeat")
 	if _online and client != null:
-		client.leave()
+		if _spectator:
+			client.disconnect_from_host()
+		else:
+			client.finish_match()
+	if _online and not _spectator:
+		await battle_ui.main_menu.account.clear_live_match()
 	if rules.winner == FfaRules.DRAW:
 		battle_ui.show_result("UNENTSCHIEDEN")
+	elif _spectator:
+		battle_ui.show_result("ZUSCHAUEN · %s GEWINNT" % _seat_name(rules.winner))
 	elif _humans == 1 or _online:
 		battle_ui.show_result("SIEG!\n" + GridLore.win_line() if rules.winner == _my_seat else "NIEDERLAGE\n%s gewinnt." % _seat_name(rules.winner))
 	else:
 		battle_ui.show_result("%s GEWINNT" % _seat_name(rules.winner))
+	if rules.winner >= 0:
+		for unit: BattleUnit in _units:
+			if unit.team_id == rules.winner and not unit.is_dead and unit.rig != null:
+				unit.rig.call_deferred("perform_victory", str(_looks[rules.winner].get("character", "")))
+				break
 
 
 # --- card effects ------------------------------------------------------------
@@ -646,6 +681,16 @@ func join_room(code: String) -> void:
 		menu._show_home()
 
 
+func watch_room(code: String, watch_key: String) -> void:
+	var room := _new_client()
+	battle_ui.main_menu.close_menu()
+	battle_ui.set_instruction("Verbinde mit der Finite-Grid-Partie ...")
+	if room.watch_room(code, watch_key) != OK:
+		room.disconnect_from_host()
+		battle_ui.main_menu.toast_requested.emit("Keine Verbindung zum Server.")
+		battle_ui.main_menu._show_home()
+
+
 func _new_client() -> GroupClient:
 	if client != null:
 		client.disconnect_from_host()
@@ -662,6 +707,7 @@ func _attach_client(room_client: GroupClient) -> void:
 	client = room_client
 	client.started.connect(start_online)
 	client.resumed.connect(resume_online)
+	client.watch_started.connect(watch_online)
 	client.turn_received.connect(_on_turn_received)
 	client.emote_received.connect(_on_emote_received)
 	client.seat_away.connect(_on_seat_away)
@@ -671,11 +717,37 @@ func _attach_client(room_client: GroupClient) -> void:
 	client.reconnecting.connect(_on_reconnecting)
 	client.connection_lost.connect(_on_connection_lost)
 	client.rejected.connect(func(_reason: String) -> void: _on_connection_lost())
+	client.match_ended.connect(func() -> void:
+		_active = false
+		player_controller.enabled = false
+		battle_ui.show_result("PARTIE BEENDET"))
+
+
+func watch_online(info: Dictionary) -> void:
+	_online = true
+	_spectator = true
+	_my_seat = 0
+	_is_host = false
+	var names: Array = info.get("names", [])
+	for seat: int in range(FfaRules.PLAYERS):
+		_names[seat] = str(names[seat])
+	var settings: Dictionary = info.get("settings", {})
+	var seats: Array = []
+	for seat: Variant in info.get("humans", []):
+		seats.append(int(seat))
+	var resume_info := info.duplicate()
+	resume_info["watching"] = true
+	await _begin_game(
+		seats, bool(settings.get("tiles", false)), int(info["seed"]),
+		info["cards"] as Array, bool(settings.get("effects", false)), resume_info,
+	)
 
 
 func _leave_room() -> void:
 	if client != null and _online and _active:
 		client.leave()
+		if not _spectator:
+			battle_ui.main_menu.account.clear_live_match.call_deferred()
 
 
 func is_active() -> bool:
@@ -683,7 +755,7 @@ func is_active() -> bool:
 
 
 func play_local_emote(emote_id: String) -> void:
-	if not _active or EmoteWheel.entry(emote_id).is_empty():
+	if not _active or _spectator or EmoteWheel.entry(emote_id).is_empty():
 		return
 	var seat := _my_seat if _online else _view_seat
 	_show_emote(seat, emote_id)
@@ -692,18 +764,25 @@ func play_local_emote(emote_id: String) -> void:
 
 
 func _on_emote_received(seat: int, emote_id: String) -> void:
-	if not _active or seat == _my_seat:
+	if not _active or (not _spectator and seat == _my_seat):
 		return
 	_show_emote(seat, emote_id)
 
 
 func _show_emote(seat: int, emote_id: String) -> void:
-	if seat < 0 or seat >= FfaRules.PLAYERS:
+	if seat < 0 or seat >= FfaRules.PLAYERS or EmoteWheel.entry(emote_id).is_empty():
 		return
+	var fallback: BattleUnit
 	for unit: BattleUnit in _units:
-		if unit.team_id == seat and unit.is_master and not unit.is_dead:
+		if unit.team_id != seat or unit.is_dead:
+			continue
+		if fallback == null:
+			fallback = unit
+		if unit.is_master:
 			EmoteStage.perform(units_root, unit, seat, emote_id)
 			return
+	if fallback != null:
+		EmoteStage.perform(units_root, fallback, seat, emote_id)
 
 
 ## Turns of other seats come in numbered; they run one after another once the board is idle.
@@ -762,6 +841,8 @@ func _out_of_sync() -> void:
 	player_controller.enabled = false
 	if client != null:
 		client.leave()
+		if not _spectator:
+			battle_ui.main_menu.account.clear_live_match.call_deferred()
 	battle_ui.show_result("NICHT SYNCHRON\nDie Partie ist bei jemandem anders verlaufen.")
 
 
@@ -858,4 +939,14 @@ func _on_connection_lost() -> void:
 		_active = false
 		_busy = true
 		player_controller.enabled = false
+		if not _spectator:
+			battle_ui.main_menu.account.clear_live_match.call_deferred()
 		battle_ui.show_result("KEINE VERBINDUNG")
+
+
+func _publish_live_match() -> void:
+	var account := battle_ui.main_menu.account
+	if account.username().is_empty() or client == null or client.watch_key.is_empty():
+		return
+	if not await account.publish_live_match("finite_grid", client.code, client.watch_key):
+		battle_ui.main_menu.toast_requested.emit("Deine Partie konnte nicht in der Freundesliste angezeigt werden.")

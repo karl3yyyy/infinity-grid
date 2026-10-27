@@ -23,6 +23,8 @@ var _last_error: String = ""
 var _last_response: Dictionary = {}
 ## When the server was last asked (Time.get_ticks_msec), for refresh_if_stale().
 var _refreshed_at: int = -100000
+var _live_match: Dictionary = {}
+var _live_match_timer: Timer
 
 
 func _ready() -> void:
@@ -109,6 +111,7 @@ func collect_google(nonce: String) -> bool:
 
 ## Forgets the account on this device and starts again as a new guest.
 func logout() -> void:
+	await clear_live_match()
 	code = ""
 	account = {}
 	_store()
@@ -221,6 +224,43 @@ func friends(action: String = "", body: Dictionary = {}) -> Dictionary:
 	var method := HTTPClient.METHOD_GET if action.is_empty() else HTTPClient.METHOD_POST
 	await _call("friends", method, "" if action.is_empty() else "/" + action, body, friends_url())
 	return _last_response if _last_error.is_empty() else {}
+
+
+func publish_live_match(mode: String, room_code: String, watch_key: String) -> bool:
+	if username().is_empty():
+		return false
+	_live_match = {"mode": mode, "code": room_code, "key": watch_key}
+	if (await friends("activity", _live_match)).is_empty():
+		_live_match.clear()
+		return false
+	if _live_match_timer == null:
+		_live_match_timer = Timer.new()
+		_live_match_timer.one_shot = true
+		_live_match_timer.timeout.connect(_renew_live_match)
+		add_child(_live_match_timer)
+	_live_match_timer.start(60.0)
+	return true
+
+
+func clear_live_match() -> void:
+	if _live_match.is_empty():
+		return
+	var previous := _live_match.duplicate()
+	_live_match.clear()
+	if _live_match_timer != null:
+		_live_match_timer.stop()
+	if (await friends("activity_clear", previous)).is_empty():
+		push_warning("Could not clear friend match activity: %s" % _last_error)
+
+
+func _renew_live_match() -> void:
+	if _live_match.is_empty():
+		return
+	var current := _live_match.duplicate()
+	if (await friends("activity", current)).is_empty():
+		push_warning("Could not refresh friend match activity: %s" % _last_error)
+	if not _live_match.is_empty() and _live_match == current and _live_match_timer != null:
+		_live_match_timer.start(60.0)
 
 
 ## A one-minute ticket for the ranked queue, or "" (see _last_error).

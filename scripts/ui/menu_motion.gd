@@ -10,6 +10,9 @@ const ENTRY_DELAY: float = 0.045
 
 ## Title text types out like a terminal command.
 static func type_in(label: Label, duration: float = 0.35) -> void:
+	if AccessibilitySettings.reduced_motion():
+		label.visible_ratio = 1.0
+		return
 	label.visible_ratio = 0.0
 	label.create_tween().tween_property(label, "visible_ratio", 1.0, duration)
 
@@ -17,6 +20,10 @@ static func type_in(label: Label, duration: float = 0.35) -> void:
 ## An entry fades and stretches in, staggered by its position in the list.
 ## Containers own position and size but not scale, so the motion uses scale.
 static func enter(control: Control, order: int) -> void:
+	if AccessibilitySettings.reduced_motion():
+		control.modulate.a = 1.0
+		control.scale = Vector2.ONE
+		return
 	control.modulate.a = 0.0
 	control.scale = Vector2(0.92, 1.0)
 	var tween := control.create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

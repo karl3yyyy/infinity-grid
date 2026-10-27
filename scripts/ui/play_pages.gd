@@ -119,18 +119,50 @@ func _chaos_summary() -> String:
 ## The chaos lab: new rules tried out on the living grid. Variants combine freely.
 func show_chaos() -> void:
 	menu._set_page("CHAOS LABOR", show_play)
-	menu._content.add_child(menu._make_text("Neue Regeln, getestet am lebenden Grid. Schalte Varianten an und kombiniere sie.", 22, TerminalTheme.GREEN_DIM))
+	menu._content.add_child(menu._make_text("BAUE DEIN CHAOS", 34, TerminalTheme.GREEN_BRIGHT))
+	menu._content.add_child(menu._make_text("Regeln kombinieren, Karte starten. Jede Partie bekommt ihr eigenes Wetter.", 22, TerminalTheme.GREEN_DIM))
 	var summary := _chaos_summary()
 	if summary != "":
-		menu._add_menu_button(menu._content, "> START", "Gegen den Bot: " + summary, menu._start_chaos)
+		menu._add_menu_button(menu._content, "▶  CHAOS STARTEN", "Aktiv: " + summary, menu._start_chaos)
 	else:
-		menu._content.add_child(menu._make_text("Wähle mindestens eine Variante.", MainMenu.TEXT_FONT_SIZE))
+		menu._content.add_child(menu._make_text("Wähle mindestens eine Regel, um zu starten.", MainMenu.TEXT_FONT_SIZE, Color("ffc23a")))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 370.0
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu._content.add_child(scroll)
+	var cards := VBoxContainer.new()
+	cards.add_theme_constant_override("separation", 10)
+	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(cards)
 	for variant: Dictionary in CHAOS_VARIANTS:
 		var key := str(variant["key"])
 		var on := bool(menu.chaos_options.get(key, false))
-		menu._add_menu_button(menu._content, "%s  [%s]" % [str(variant["title"]), "AN" if on else "AUS"], str(variant["text"]), func() -> void:
+		var card := PanelContainer.new()
+		var frame := StyleBoxFlat.new()
+		frame.bg_color = Color("18301a") if on else Color("101a13")
+		frame.border_color = TerminalTheme.GREEN_BRIGHT if on else Color("344838")
+		frame.set_border_width_all(2)
+		frame.set_content_margin_all(12.0)
+		card.add_theme_stylebox_override("panel", frame)
+		cards.add_child(card)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		card.add_child(row)
+		var copy := VBoxContainer.new()
+		copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		copy.add_child(menu._make_text(str(variant["title"]), 28, TerminalTheme.GREEN_BRIGHT if on else TerminalTheme.GREEN))
+		copy.add_child(menu._make_text(str(variant["text"]), 19, TerminalTheme.GREEN_DIM))
+		row.add_child(copy)
+		var toggle := Button.new()
+		toggle.text = "AN" if on else "AUS"
+		toggle.custom_minimum_size = Vector2(88.0, 60.0)
+		toggle.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(24))
+		toggle.pressed.connect(func() -> void:
 			menu.chaos_options[key] = not on
 			show_chaos())
+		toggle.focus_entered.connect(func() -> void: menu._description.text = "> " + str(variant["text"]))
+		row.add_child(toggle)
 	menu._add_menu_button(menu._content, "ALLES AN", "Totales Chaos: alle Varianten zugleich", func() -> void:
 		for variant: Dictionary in CHAOS_VARIANTS:
 			menu.chaos_options[str(variant["key"])] = true
@@ -151,7 +183,7 @@ func show_chaos() -> void:
 func show_finite_grid() -> void:
 	menu._set_page("FINITE GRID", show_play)
 	menu._content.add_child(menu._make_text(GridLore.FINITE_LORE, 22, TerminalTheme.GREEN_DIM))
-	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 Karten. Die gespielte Karte wandert im Uhrzeigersinn weiter. Verlierst du deinen KERN, kämpfst du mit den Echos weiter. Schlägst du den KERN eines anderen, bekommst du deinen KERN zurück (sonst einen verlorenen Echo). Raus ist, wer keine Figur mehr hat.", 22, TerminalTheme.GREEN_DIM))
+	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 eigene Karten. Wer dran ist, bekommt die weitergereichte dritte Karte dazu. Sie wandert nach dem Zug sichtbar zum nächsten Platz. Verlierst du deinen KERN, kämpfst du mit den Echos weiter. Schlägst du den KERN eines anderen, bekommst du deinen KERN zurück (sonst einen verlorenen Echo). Raus ist, wer keine Figur mehr hat.", 22, TerminalTheme.GREEN_DIM))
 	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer bleibt übrig", func() -> void: menu._start_ffa(1))
 	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten", func() -> void: menu._start_ffa(2))
 	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite", func() -> void: menu._start_ffa(4))

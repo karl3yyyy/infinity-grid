@@ -39,10 +39,9 @@ const CATALOGUE: Array[Dictionary] = [
 const SLOT_COUNT: int = 8
 const DEFAULT_LOADOUT: Array[String] = ["dance", "gg", "spin", "glhf", "haha", "e404", "chill", "what"]
 const PROFILE_PATH := "user://ring_duel_profile.cfg"
-const COOLDOWN_SECONDS: float = 3.0
 const RADIUS: float = 190.0
 
-var _ready_at: float = 0.0
+var _buttons: Array[Button] = []
 
 
 static func entry(emote_id: String) -> Dictionary:
@@ -85,38 +84,52 @@ func _ready() -> void:
 
 
 func open() -> void:
-	var now := Time.get_ticks_msec() / 1000.0
-	if now < _ready_at:
+	if visible:
+		close()
 		return
+	for button: Button in _buttons:
+		if is_instance_valid(button):
+			button.free()
+	_buttons.clear()
 	for child: Node in get_children():
-		if child is Button or child is Label:
-			child.queue_free()
-	var center := get_viewport_rect().size * Vector2(0.5, 0.45)
+		if child is Label:
+			child.free()
+	var viewport_size := get_viewport_rect().size
+	var center := viewport_size * Vector2(0.5, 0.45)
+	var radius := minf(RADIUS, minf(viewport_size.x * 0.26, viewport_size.y * 0.18))
 	var hint := Label.new()
 	hint.text = "Belegung: Sammlung > EMOTE-RAD"
-	hint.add_theme_font_size_override("font_size", 20)
+	hint.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(20))
 	hint.add_theme_color_override("font_color", TerminalTheme.GREEN_DIM)
 	add_child(hint)
-	hint.position = center + Vector2(-hint.get_minimum_size().x / 2.0, RADIUS + 70.0)
+	hint.position = center + Vector2(-hint.get_minimum_size().x / 2.0, radius + 70.0)
 	var loadout := load_loadout()
 	for index: int in range(loadout.size()):
 		var emote := entry(loadout[index])
 		var angle := -PI / 2.0 + TAU * index / loadout.size()
 		var button := Button.new()
 		button.text = emote["text"]
-		button.add_theme_font_size_override("font_size", 28)
+		button.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(28))
 		button.add_theme_color_override("font_color", KIND_COLORS[emote["kind"]])
-		button.custom_minimum_size = Vector2(150.0, 58.0)
+		button.custom_minimum_size = Vector2(150.0, 58.0) * (1.08 if AccessibilitySettings.is_enabled() else 1.0)
+		button.focus_mode = Control.FOCUS_ALL
+		button.add_to_group("interactive_ui")
 		add_child(button)
 		button.size = button.custom_minimum_size
-		var target := center + Vector2.from_angle(angle) * RADIUS - button.size / 2.0
-		button.position = center - button.size / 2.0
-		button.modulate.a = 0.0
-		# Buttons fly out from the centre like a radial menu unfolding.
-		var tween := button.create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tween.tween_property(button, "position", target, 0.22).set_delay(index * 0.02)
-		tween.tween_property(button, "modulate:a", 1.0, 0.18).set_delay(index * 0.02)
+		var target := center + Vector2.from_angle(angle) * radius - button.size / 2.0
+		target.x = clampf(target.x, 12.0, maxf(12.0, viewport_size.x - button.size.x - 12.0))
+		target.y = clampf(target.y, 12.0, maxf(12.0, viewport_size.y - button.size.y - 12.0))
+		if AccessibilitySettings.reduced_motion():
+			button.position = target
+			button.modulate.a = 1.0
+		else:
+			button.position = center - button.size / 2.0
+			button.modulate.a = 0.0
+			var tween := button.create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tween.tween_property(button, "position", target, 0.22).set_delay(index * 0.02)
+			tween.tween_property(button, "modulate:a", 1.0, 0.18).set_delay(index * 0.02)
 		button.pressed.connect(_choose.bind(emote["id"]))
+		_buttons.append(button)
 	visible = true
 	SoundBoard.play("click")
 
@@ -126,6 +139,7 @@ func close() -> void:
 
 
 func _choose(emote_id: String) -> void:
+	if not visible or entry(emote_id).is_empty():
+		return
 	close()
-	_ready_at = Time.get_ticks_msec() / 1000.0 + COOLDOWN_SECONDS
 	picked.emit(emote_id)

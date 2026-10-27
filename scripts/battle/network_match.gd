@@ -52,11 +52,23 @@ func setup(battle_manager: GridBattleManager, battle_ui: GridBattleUI) -> void:
 	client.clock_synced.connect(_on_clock_synced)
 	client.ranked_result.connect(func(result: Dictionary) -> void:
 		chess_clock.stop()
-		battle.show_ranked_result(result))
+		if battle._spectator_mode:
+			battle.end_with_message("PARTIE BEENDET")
+		else:
+			battle.show_ranked_result(result))
 	client.opponent_emote.connect(func(emote_id: String) -> void:
 		if battle.network_team >= 0:
 			battle.show_emote(1 - battle.network_team, emote_id))
+	client.watch_emote.connect(func(team: int, emote_id: String) -> void:
+		if battle._spectator_mode:
+			battle.show_emote(team, emote_id))
+	client.watch_look.connect(func(team: int, look: Dictionary) -> void:
+		if battle._spectator_mode and team >= 0 and team < 2:
+			battle.apply_team_look(team, look))
+	client.match_ended.connect(func() -> void:
+		battle.end_with_message("PARTIE BEENDET"))
 	client.match_started.connect(_on_match_started)
+	client.watch_started.connect(_on_watch_started)
 	client.resumed.connect(_on_resumed)
 	client.opponent_moved.connect(_on_opponent_moved)
 	client.opponent_away.connect(func(seconds: int) -> void:
@@ -65,7 +77,9 @@ func setup(battle_manager: GridBattleManager, battle_ui: GridBattleUI) -> void:
 	client.opponent_back.connect(func() -> void:
 		if not battle.battle_over:
 			battle.refresh_turn_instruction())
-	client.opponent_left.connect(battle.end_with_message.bind("GEGNER IST WEG"))
+	client.opponent_left.connect(func() -> void:
+		ui.main_menu.account.clear_live_match.call_deferred()
+		battle.end_with_message("GEGNER IST WEG"))
 	client.opponent_look.connect(func(look: Dictionary) -> void:
 		if battle.network_team >= 0:
 			battle.apply_team_look(1 - battle.network_team, look))
@@ -73,7 +87,9 @@ func setup(battle_manager: GridBattleManager, battle_ui: GridBattleUI) -> void:
 		if not battle.battle_over:
 			ui.set_instruction("Verbindung weg – verbinde neu ..."))
 	client.rejected.connect(_on_rejected)
-	client.connection_lost.connect(battle.end_with_message.bind("KEINE VERBINDUNG"))
+	client.connection_lost.connect(func() -> void:
+		ui.main_menu.account.clear_live_match.call_deferred()
+		battle.end_with_message("KEINE VERBINDUNG"))
 
 
 func start(url: String, connecting_text: String, connected_text: String) -> void:
@@ -91,6 +107,12 @@ func resume(session: Dictionary) -> void:
 		battle.end_with_message("KEINE VERBINDUNG")
 
 
+func watch(url: String) -> void:
+	ui.set_instruction("Verbinde mit der Partie ...")
+	if client.watch(url) != OK:
+		battle.end_with_message("KEINE VERBINDUNG")
+
+
 ## The local player made a turn; seq is its number in the match.
 func send_local_turn(message: Dictionary) -> void:
 	if message["type"] == "pass":
@@ -102,7 +124,7 @@ func send_local_turn(message: Dictionary) -> void:
 ## The match ended on the board; nothing is left to resume.
 func finished() -> void:
 	chess_clock.stop()
-	client.forget_session()
+	client.finish_match()
 
 
 func _on_clock_synced(left_ms: Array, to_move: int) -> void:
@@ -150,7 +172,35 @@ func _on_match_started(team: int, card_names: Array) -> void:
 	var starter := 0
 	if client.ping_required:
 		starter = await battle._ping_phase().run_network(client, team)
-	battle.set_starter(starter)
+	await battle.set_starter(starter)
+	if not client.watch_key.is_empty():
+		var account := ui.main_menu.account
+		if not account.username().is_empty():
+			var published: bool = await account.publish_live_match("duel", client.code, client.watch_key)
+			if not published:
+				ui.main_menu.toast_requested.emit("Deine Partie konnte nicht in der Freundesliste angezeigt werden.")
+
+
+func _on_watch_started(info: Dictionary) -> void:
+	if _started or not battle.begin_network_match(-1, info.get("cards", []) as Array):
+		battle.end_with_message("PARTIE KANN NICHT GELADEN WERDEN")
+		return
+	battle._spectator_mode = true
+	battle.match_mode = "network"
+	battle.bot_opponent_enabled = false
+	battle.network_team = -1
+	battle.battle_ui.set_opponent_remote(true)
+	_started = true
+	var looks: Array = info.get("looks", [])
+	for team: int in range(mini(2, looks.size())):
+		if looks[team] is Dictionary and not (looks[team] as Dictionary).is_empty():
+			battle.apply_team_look(team, looks[team])
+	await battle.set_starter(int(info.get("starter", -1)))
+	for index: int in range((info.get("moves", []) as Array).size()):
+		var turn: Dictionary = (info["moves"] as Array)[index]
+		turn["seq"] = index
+		_pending_turns.append(turn)
+	await play_pending_turns()
 
 
 func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
@@ -164,7 +214,7 @@ func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
 		var starter := client.resumed_starter
 		if starter < 0:
 			starter = await battle._ping_phase().run_network(client, team)
-		battle.set_starter(starter)
+		await battle.set_starter(starter)
 	else:
 		client.send_look(CharacterRoster.load_look())
 	for index: int in range(moves.size()):
@@ -172,6 +222,12 @@ func _on_resumed(team: int, card_names: Array, moves: Array) -> void:
 		turn["seq"] = index
 		_pending_turns.append(turn)
 	await play_pending_turns()
+	if not client.watch_key.is_empty():
+		var account := ui.main_menu.account
+		if not account.username().is_empty():
+			var published: bool = await account.publish_live_match("duel", client.code, client.watch_key)
+			if not published:
+				ui.main_menu.toast_requested.emit("Deine Partie konnte nicht in der Freundesliste angezeigt werden.")
 	if not battle.battle_over:
 		battle.refresh_turn_instruction()
 

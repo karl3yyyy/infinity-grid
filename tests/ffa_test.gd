@@ -59,6 +59,19 @@ func _test_rules() -> void:
 	_expect(rules.pieces[FfaRules.start_cell(1, 0)]["owner"] == 1 and not bool(rules.pieces[FfaRules.start_cell(1, 2)]["master"]) if rules.pieces.has(FfaRules.start_cell(1, 2)) else true, "Their echoes stay theirs")
 	_expect(rules.hands[0][0] == pass_before, "The used card is exchanged with the pass card")
 	_expect(rules.current == 1, "The player without a core still plays")
+	var third_card_rules := FfaRules.new()
+	third_card_rules.setup(false)
+	var shared := MovementCard.new("Weitergereicht", [Vector2i(0, 1)] as Array[Vector2i])
+	third_card_rules.pass_card = shared
+	var active_hand: Array = third_card_rules.hands[0].duplicate()
+	var active_core := FfaRules.start_cell(0, 2)
+	_expect(third_card_rules.targets_for(0, active_core, 2).has(Vector2i(4, 7)), "The active player may move with the third, passed card")
+	third_card_rules.apply_move(active_core, 2, Vector2i(4, 7))
+	_expect(
+		third_card_rules.hands[0] == active_hand and third_card_rules.pass_card == shared
+		and third_card_rules.pass_giver == 0,
+		"Playing the passed card keeps two personal cards and sends the shared card onward"
+	)
 	rules.alive[1] = false
 	rules.current = 0
 	_expect(rules.next_after(0) == 2, "Eliminated players are skipped")
@@ -118,6 +131,12 @@ func _test_screen() -> void:
 	while (battle._busy or not battle._is_local(battle.rules.current)) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_expect(not battle._busy and battle._is_local(battle.rules.current), "The Node Ping names a starter and you may act once it is your turn")
+	battle._refresh_ui()
+	var has_playable_pass_card := false
+	for placement: Dictionary in ui.card_stage._placements:
+		if int(placement.get("slot", -1)) == 2 and bool(placement.get("interactive", false)):
+			has_playable_pass_card = true
+	_expect(has_playable_pass_card, "The active Finite Grid player sees and can select the third card")
 	var origin := FfaRules.start_cell(0, 2)
 	battle._on_cell_clicked(origin)
 	battle.rules.hands[0][0] = MovementCard.new("Test step", [Vector2i(0, 1)] as Array[Vector2i])

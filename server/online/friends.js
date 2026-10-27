@@ -11,13 +11,15 @@
 //   POST /api/friends/invite  {username, code}  invite a friend to a room
 //   POST /api/friends/dismiss {username}    drop an invitation
 //   POST /api/friends/invited {username}    came through username's invite link: friends + credits
-// A person = {username, name, avatar, rating, rank, online}; invite = person + {code}.
+//   POST /api/friends/activity {mode, code, key}; POST activity_clear to hide it
+// A person = {username, name, avatar, rating, rank, online, active_match?}; invite = person + {code}.
 
 import { accountCall, accountKey, json, CORS, normaliseCode } from "./accounts.js";
 import { rankOf } from "./ranked.js";
 
 const MAX_FRIENDS = 100;
 const ONLINE_SECONDS = 150;
+const MATCH_ACTIVITY_SECONDS = 150;
 export const INVITE_SECONDS = 10 * 60;
 
 export async function handleFriendsApi(request, env, url) {
@@ -34,6 +36,20 @@ export async function handleFriendsApi(request, env, url) {
   const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
 
   if (action === "") {
+    return json(await overview(env, me, mine.username));
+  }
+  if (action === "activity" || action === "activity_clear") {
+    if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+    const mode = String(body.mode || "");
+    const room = String(body.code || "");
+    const key = String(body.key || "");
+    const validRoom = mode === "duel"
+      ? /^\d{4}$/.test(room) || /^[a-z0-9]{12}$/.test(room)
+      : mode === "finite_grid" && /^\d{5}$/.test(room);
+    if (!validRoom || !/^[a-z0-9]{24}$/.test(key)) return json({ error: "bad_match" }, 400);
+    await social(env, me, {
+      action, mode, code: room, key,
+    });
     return json(await overview(env, me, mine.username));
   }
   const other = await lookupUsername(env, String(body.username || ""));
@@ -108,7 +124,17 @@ export function socialOp(data, body) {
     case "uninvite":
       data.invites = data.invites.filter((invite) => invite.from !== key);
       break;
+    case "activity":
+      data.activeMatch = { mode: body.mode, code: body.code, key: body.key, at: now };
+      break;
+    case "activity_clear":
+      if (
+        data.activeMatch && data.activeMatch.code === body.code &&
+        data.activeMatch.key === body.key
+      ) delete data.activeMatch;
+      break;
   }
+  data.lastSeen = now;
   return { username: data.username || "", friends: data.friends, incoming: data.incoming, outgoing: data.outgoing, invites: data.invites };
 }
 
@@ -116,10 +142,15 @@ export function socialOp(data, body) {
 export function publicView(data) {
   const rating = data.rating || 1000;
   const games = data.games || 0;
+  const activity = data.activeMatch;
+  const activeMatch = activity && Date.now() - activity.at < MATCH_ACTIVITY_SECONDS * 1000
+    ? { mode: activity.mode, code: activity.code, key: activity.key }
+    : null;
   return {
     name: data.username || "Gast", avatar: typeof data.avatar === "string" ? data.avatar : "symbol:code", email: data.email || "",
     username: data.username || "", rating, games, rank: rankOf(rating, games), wins: data.wins || 0, losses: data.losses || 0,
     online: Date.now() - (data.lastSeen || 0) < ONLINE_SECONDS * 1000,
+    active_match: activeMatch,
   };
 }
 
@@ -129,12 +160,13 @@ async function social(env, key, body) {
   return answer.ok ? await answer.json() : null;
 }
 
-async function person(env, key) {
+async function person(env, key, includeMatch = false) {
   const account = env.ACCOUNTS.get(env.ACCOUNTS.idFromName(key));
   const answer = await account.fetch("https://account/public", { method: "POST", body: "{}" });
   if (!answer.ok) return null;
   const view = await answer.json();
   delete view.email;
+  if (!includeMatch) delete view.active_match;
   return view;
 }
 
@@ -145,12 +177,12 @@ async function befriend(env, a, b) {
 
 async function overview(env, me, username) {
   const lists = await social(env, me, { action: "get" });
-  const people = async (keys) => (await Promise.all(keys.map((key) => person(env, key)))).filter(Boolean);
-  const friends = await people(lists.friends);
+  const people = async (keys, includeMatch = false) => (await Promise.all(keys.map((key) => person(env, key, includeMatch)))).filter(Boolean);
+  const friends = await people(lists.friends, true);
   friends.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
   const invites = [];
   for (const invite of lists.invites) {
-    const from = await person(env, invite.from);
+    const from = await person(env, invite.from, lists.friends.includes(invite.from));
     if (from) invites.push({ ...from, code: invite.code });
   }
   return { username, friends, incoming: await people(lists.incoming), outgoing: await people(lists.outgoing), invites };

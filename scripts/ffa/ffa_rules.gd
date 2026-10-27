@@ -99,8 +99,9 @@ func can_enter(player: int, cell: Vector2i) -> bool:
 
 func targets_for(player: int, origin: Vector2i, slot: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var piece: Dictionary = pieces[origin]
-	var card: MovementCard = hands[player][slot]
+	if slot < 0 or slot > 2 or not pieces.has(origin):
+		return result
+	var card: MovementCard = pass_card if slot == 2 else hands[player][slot]
 	for cell: Vector2i in destinations(card, origin, player):
 		if can_enter(player, cell):
 			result.append(cell)
@@ -110,7 +111,7 @@ func targets_for(player: int, origin: Vector2i, slot: int) -> Array[Vector2i]:
 func legal_moves(player: int) -> Array[Dictionary]:
 	var moves: Array[Dictionary] = []
 	for origin: Vector2i in cells_of(player):
-		for slot: int in range(2):
+		for slot: int in range(3):
 			for cell: Vector2i in targets_for(player, origin, slot):
 				moves.append({"from": origin, "slot": slot, "to": cell})
 	return moves
@@ -187,6 +188,8 @@ func next_after(seat: int) -> int:
 
 func _exchange(slot: int) -> void:
 	pass_giver = current
+	if slot == 2:
+		return
 	var used: MovementCard = hands[current][slot]
 	hands[current][slot] = pass_card
 	pass_card = used

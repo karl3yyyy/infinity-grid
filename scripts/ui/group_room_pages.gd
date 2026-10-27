@@ -64,8 +64,8 @@ func show_join(back: Callable) -> void:
 	code_input.custom_minimum_size = Vector2(340.0, 56.0)
 	code_input.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	code_input.add_theme_font_size_override("font_size", 36)
-	WebTextInput.attach(code_input, "Raum-Code")
 	menu._content.add_child(code_input)
+	WebTextInput.attach(code_input, "Raum-Code")
 	var join := func() -> void:
 		var code := code_input.text.strip_edges()
 		if not GroupClient.is_group_code(code):

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5n0tb4c5jd7c"
-path="res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.ctex"
+path.s3tc="res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.s3tc.ctex"
+path.etc2="res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7b0a7496c939a21e72ae3917e832b434"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/arena/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg"
-dest_files=["res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.ctex"]
+dest_files=["res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.s3tc.ctex", "res://.godot/imported/chip_platform_tripo_material_79766425-cd2a-43f4-8971-6a2a5799b1c6_orm.jpg-69b951c99139b79fe2278aa457383503.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

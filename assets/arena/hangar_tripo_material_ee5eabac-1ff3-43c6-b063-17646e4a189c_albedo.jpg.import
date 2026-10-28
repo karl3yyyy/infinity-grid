@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cikqhdogh4mlw"
-path="res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.ctex"
+path.s3tc="res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.s3tc.ctex"
+path.etc2="res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bf07d4483e7fda846fa947f68217dd2d"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/arena/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg"
-dest_files=["res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.ctex"]
+dest_files=["res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.s3tc.ctex", "res://.godot/imported/hangar_tripo_material_ee5eabac-1ff3-43c6-b063-17646e4a189c_albedo.jpg-7f541a7c32509f708322ada9f1a9b718.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

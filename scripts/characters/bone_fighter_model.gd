@@ -16,14 +16,15 @@ var _hand_mount: BoneAttachment3D
 var _puff_root: Node3D
 
 
-## look: "model_scene" (glTF path), optional "weapon_scene", "scale".
+## look: "model_scene" (glTF path), optional "weapon_scene", "scale", "smoker" (cigarette).
 func build(look: Dictionary) -> void:
 	var body := (load(str(look["model_scene"])) as PackedScene).instantiate() as Node3D
 	body.name = "Body"
 	add_child(body)
 	skeleton = body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	scale = Vector3.ONE * float(look.get("scale", 1.0))
-	_add_cigarette()
+	if look.get("smoker", false):
+		_add_cigarette()
 	if look.has("weapon_scene"):
 		_add_weapon(look["weapon_scene"] as String, look.get("weapon_pose", {}) as Dictionary)
 	animation_player = AnimationPlayer.new()
@@ -111,6 +112,8 @@ func _mount(bone: String) -> BoneAttachment3D:
 ## Still for portraits: mid-puff of the Smoke animation, with wisps drifting
 ## from the mouth over the bazooka like a cowboy blowing over his gun.
 func show_smoke_pose(seconds: float = 2.2) -> void:
+	if cigarette == null:
+		return
 	animation_player.play(&"Smoke")
 	# The first frame is still the rest pose; pose it one frame later.
 	await (Engine.get_main_loop() as SceneTree).process_frame
@@ -152,6 +155,9 @@ func add_smoke_puffs(shown: bool = true) -> void:
 ## Showcase portrait: no weapon, a fat glowing cigarette in the mouth and the
 ## "Cool" animation (thumbs up, peace). The weapon only belongs in the arena.
 func show_cool_pose() -> void:
+	if cigarette == null:
+		play(&"Idle")
+		return
 	if weapon != null:
 		weapon.visible = false
 	cigarette_in_hand(false)

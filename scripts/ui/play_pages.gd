@@ -16,6 +16,9 @@ var account: AccountService
 var groups: GroupRoomPages
 
 
+var _finite_rules_open: bool = false
+
+
 func _init(owner_menu: MainMenu, owner_account: AccountService) -> void:
 	menu = owner_menu
 	account = owner_account
@@ -119,86 +122,64 @@ func _chaos_summary() -> String:
 ## The chaos lab: new rules tried out on the living grid. Variants combine freely.
 func show_chaos() -> void:
 	menu._set_page("CHAOS LABOR", show_play)
-	menu._content.add_child(menu._make_text("BAUE DEIN CHAOS", 34, TerminalTheme.GREEN_BRIGHT))
-	menu._content.add_child(menu._make_text("Regeln kombinieren, Karte starten. Jede Partie bekommt ihr eigenes Wetter.", 22, TerminalTheme.GREEN_DIM))
-	var summary := _chaos_summary()
-	if summary != "":
-		menu._add_menu_button(menu._content, "▶  CHAOS STARTEN", "Aktiv: " + summary, menu._start_chaos)
-	else:
-		menu._content.add_child(menu._make_text("Wähle mindestens eine Regel, um zu starten.", MainMenu.TEXT_FONT_SIZE, Color("ffc23a")))
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 370.0
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	menu._content.add_child(scroll)
-	var cards := VBoxContainer.new()
-	cards.add_theme_constant_override("separation", 10)
-	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(cards)
+	menu._content.add_child(menu._make_text("Regeln kombinieren, dann starten. Jede Partie bekommt ihr eigenes Wetter.", 22, TerminalTheme.GREEN_DIM))
+	var badges := {"hidden_king": "?", "shifting_tiles": "~", "card_effects": "*"}
 	for variant: Dictionary in CHAOS_VARIANTS:
 		var key := str(variant["key"])
 		var on := bool(menu.chaos_options.get(key, false))
-		var card := PanelContainer.new()
-		var frame := StyleBoxFlat.new()
-		frame.bg_color = Color("18301a") if on else Color("101a13")
-		frame.border_color = TerminalTheme.GREEN_BRIGHT if on else Color("344838")
-		frame.set_border_width_all(2)
-		frame.set_content_margin_all(12.0)
-		card.add_theme_stylebox_override("panel", frame)
-		cards.add_child(card)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		card.add_child(row)
-		var copy := VBoxContainer.new()
-		copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		copy.add_child(menu._make_text(str(variant["title"]), 28, TerminalTheme.GREEN_BRIGHT if on else TerminalTheme.GREEN))
-		copy.add_child(menu._make_text(str(variant["text"]), 19, TerminalTheme.GREEN_DIM))
-		row.add_child(copy)
-		var toggle := Button.new()
-		toggle.text = "AN" if on else "AUS"
-		toggle.custom_minimum_size = Vector2(88.0, 60.0)
-		toggle.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(24))
-		toggle.pressed.connect(func() -> void:
+		MenuCards.card(menu, str(badges[key]), str(variant["title"]), str(variant["text"]), str(variant["text"]), func() -> void:
 			menu.chaos_options[key] = not on
-			show_chaos())
-		toggle.focus_entered.connect(func() -> void: menu._description.text = "> " + str(variant["text"]))
-		row.add_child(toggle)
-	menu._add_menu_button(menu._content, "ALLES AN", "Totales Chaos: alle Varianten zugleich", func() -> void:
+			show_chaos(), "AN" if on else "AUS", on, Color("ffb13a"))
+	var presets := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, presets, "ALLES AN", "Totales Chaos: alle Varianten zugleich", func() -> void:
 		for variant: Dictionary in CHAOS_VARIANTS:
 			menu.chaos_options[str(variant["key"])] = true
 		show_chaos())
-	menu._add_menu_button(menu._content, "ÜBERRASCHUNG", "Das Grid würfelt die Varianten aus", func() -> void:
+	MenuCards.chip(menu, presets, "ÜBERRASCHUNG", "Das Grid würfelt die Varianten aus", func() -> void:
 		var any_on := false
 		while not any_on:
 			for variant: Dictionary in CHAOS_VARIANTS:
 				menu.chaos_options[str(variant["key"])] = randf() < 0.5
 				any_on = any_on or bool(menu.chaos_options[str(variant["key"])])
 		show_chaos())
-	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online mit bis zu 4 Leuten im Raum", func() -> void: groups.show_entry(show_chaos))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
+	var summary := _chaos_summary()
+	if summary != "":
+		MenuCards.card(menu, ">", "CHAOS STARTEN", "Aktiv: " + summary, "Partie gegen den Bot mit diesen Regeln", menu._start_chaos, "", true, Color("ffb13a"))
+	else:
+		menu._content.add_child(menu._make_text("Wähle mindestens eine Regel, um zu starten.", MainMenu.TEXT_FONT_SIZE, MenuCards.WARNING))
+	var bottom := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, bottom, "MIT FREUNDEN", "Online mit bis zu 4 Leuten im Raum", func() -> void: groups.show_entry(show_chaos))
+	MenuCards.chip(menu, bottom, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry()
 
 
 ## Four processes in one finite grid: its own mode next to chaos.
 func show_finite_grid() -> void:
 	menu._set_page("FINITE GRID", show_play)
-	menu._content.add_child(menu._make_text(GridLore.FINITE_LORE, 22, TerminalTheme.GREEN_DIM))
-	menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 eigene Karten. Wer dran ist, bekommt die weitergereichte dritte Karte dazu. Sie wandert nach dem Zug sichtbar zum nächsten Platz. Verlierst du deinen KERN, kämpfst du mit den Echos weiter. Schlägst du den KERN eines anderen, bekommst du deinen KERN zurück (sonst einen verlorenen Echo). Raus ist, wer keine Figur mehr hat.", 22, TerminalTheme.GREEN_DIM))
-	menu._add_menu_button(menu._content, "ALLEIN GEGEN 3 BOTS", "Nur einer bleibt übrig", func() -> void: menu._start_ffa(1))
-	menu._add_menu_button(menu._content, "ZU ZWEIT + 2 BOTS", "Zwei Menschen an gegenüberliegenden Seiten", func() -> void: menu._start_ffa(2))
-	menu._add_menu_button(menu._content, "4 SPIELER AM GERÄT", "Abwechselnd, jeder an seiner Seite", func() -> void: menu._start_ffa(4))
-	menu._add_menu_button(menu._content, "WANDERNDE FELDER  [%s]" % ("AN" if menu.finite_tiles else "AUS"), "Felder brechen weg und kehren zurück", func() -> void:
+	menu._content.add_child(menu._make_text(GridLore.FINITE_LORE, 20, TerminalTheme.GREEN_DIM))
+	if _finite_rules_open:
+		menu._content.add_child(menu._make_text("Vier Seiten, ein Quadrat. Jeder hat 5 Figuren und 2 eigene Karten. Wer dran ist, bekommt die weitergereichte dritte Karte dazu. Verlierst du deinen KERN, kämpfst du mit den Echos weiter. Schlägst du den KERN eines anderen, bekommst du deinen KERN zurück (sonst einen verlorenen Echo). Raus ist, wer keine Figur mehr hat.", 20, TerminalTheme.GREEN))
+	MenuCards.section_title(menu, "SPIEL STARTEN")
+	MenuCards.card(menu, "1+3", "ALLEIN GEGEN 3 BOTS", "Nur einer bleibt übrig", "Nur einer bleibt übrig", func() -> void: menu._start_ffa(1))
+	MenuCards.card(menu, "NET", "MIT FREUNDEN", "Online mit bis zu 4 Leuten: Raum-Code oder Einladung", "Raum-Code oder Einladung", func() -> void: groups.show_entry(show_finite_grid), "", false, Color("3fa9ff"))
+	MenuCards.section_title(menu, "REGELN")
+	var options := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, options, "FELDER WANDERN: %s" % ("AN" if menu.finite_tiles else "AUS"), "Felder brechen weg und kehren zurück", func() -> void:
 		menu.finite_tiles = not menu.finite_tiles
-		show_finite_grid())
-	menu._add_menu_button(menu._content, "KARTENEFFEKTE  [%s]" % ("AN" if menu.finite_effects else "AUS"), "Jede Karte: Schritt ODER Effekt (Schlag, Stoß, Schild, Tausch)", func() -> void:
+		show_finite_grid(), menu.finite_tiles)
+	MenuCards.chip(menu, options, "KARTENEFFEKTE: %s" % ("AN" if menu.finite_effects else "AUS"), "Jede Karte: Schritt ODER Effekt (Schlag, Stoß, Schild, Tausch)", func() -> void:
 		menu.finite_effects = not menu.finite_effects
-		show_finite_grid())
+		show_finite_grid(), menu.finite_effects)
 	var layout := ScreenLayout.mode()
-	menu._add_menu_button(menu._content, "BILDSCHIRM: %s" % str(ScreenLayout.NAMES[layout]), "%s Gilt für Finite Grid." % str(ScreenLayout.HINTS[layout]), func() -> void:
+	var view := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, view, "BILD: %s" % str(ScreenLayout.NAMES[layout]), "%s Gilt für Finite Grid." % str(ScreenLayout.HINTS[layout]), func() -> void:
 		ScreenLayout.next_mode()
 		show_finite_grid())
-	menu._add_menu_button(menu._content, "MIT FREUNDEN", "Online mit bis zu 4 Leuten: Raum-Code oder Einladung", func() -> void: groups.show_entry(show_finite_grid))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zu SPIELEN", show_play)
+	MenuCards.chip(menu, view, "REGELN LESEN" if not _finite_rules_open else "REGELN ZU", "Ausführliche Regeln für vier Seiten", func() -> void:
+		_finite_rules_open = not _finite_rules_open
+		show_finite_grid(), _finite_rules_open)
+	var back := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, back, "< ZURÜCK", "Zu SPIELEN", show_play)
 	menu._focus_first_entry()
 
 

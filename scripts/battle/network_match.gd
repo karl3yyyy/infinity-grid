@@ -190,6 +190,7 @@ func _on_watch_started(info: Dictionary) -> void:
 	battle.bot_opponent_enabled = false
 	battle.network_team = -1
 	battle.battle_ui.set_opponent_remote(true)
+	battle.battle_ui.spectating = true
 	_started = true
 	var looks: Array = info.get("looks", [])
 	for team: int in range(mini(2, looks.size())):

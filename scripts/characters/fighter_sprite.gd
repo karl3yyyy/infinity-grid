@@ -1,13 +1,14 @@
 class_name FighterSprite
 extends Node3D
 
-## Shows a FighterModel as a pixel-art sprite: the model is rendered at low
-## resolution in its own small world and drawn on the board as a camera-facing
-## quad with nearest filtering, a dark outline, a reduced palette, scanlines and
-## a rim light in the team colour. UnitMovement drives it through walking,
+## Shows a FighterModel as a sharp sprite: the model is rendered with MSAA in
+## its own small world and drawn on the board as a camera-facing quad with
+## linear filtering, a smooth dark outline and a rim light in the team colour. UnitMovement drives it through walking,
 ## pose() and release().
 
+## Layout size of the sprite; the model is rendered RENDER_SCALE times larger.
 const FRAME_SIZE := Vector2i(240, 336)
+const RENDER_SCALE: int = 3
 ## World height of the sprite quad on the board.
 const DISPLAY_HEIGHT: float = 1.85
 ## The low-res model animates at this rate, like hand-drawn sprite frames.
@@ -45,11 +46,10 @@ const SPRITE_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_prepass_alpha;
 
-uniform sampler2D frame : source_color, filter_nearest;
-uniform vec2 frame_size = vec2(120.0, 168.0);
+uniform sampler2D frame : source_color, filter_linear;
+uniform vec2 frame_size = vec2(720.0, 1008.0);
 uniform vec4 outline_color : source_color = vec4(0.02, 0.05, 0.03, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.43, 0.9, 0.35, 1.0);
-uniform float levels = 7.0;
 uniform float opacity = 1.0;
 uniform float hologram = 0.0;
 
@@ -59,37 +59,37 @@ void vertex() {
 	MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0.0, 0.0, 0.0), vec4(0.0, length(MODEL_MATRIX[1].xyz), 0.0, 0.0), vec4(0.0, 0.0, length(MODEL_MATRIX[2].xyz), 0.0), vec4(0.0, 0.0, 0.0, 1.0));
 }
 
+float ring_alpha(vec2 uv, vec2 radius) {
+	float a = 0.0;
+	a = max(a, texture(frame, uv + vec2(radius.x, 0.0)).a);
+	a = max(a, texture(frame, uv - vec2(radius.x, 0.0)).a);
+	a = max(a, texture(frame, uv + vec2(0.0, radius.y)).a);
+	a = max(a, texture(frame, uv - vec2(0.0, radius.y)).a);
+	a = max(a, texture(frame, uv + radius * 0.7).a);
+	a = max(a, texture(frame, uv - radius * 0.7).a);
+	a = max(a, texture(frame, uv + vec2(radius.x, -radius.y) * 0.7).a);
+	a = max(a, texture(frame, uv + vec2(-radius.x, radius.y) * 0.7).a);
+	return a;
+}
+
 void fragment() {
 	vec2 texel = 1.0 / frame_size;
-	vec2 uv = (floor(UV * frame_size) + 0.5) * texel;
-	vec4 color = texture(frame, uv);
-	float neighbours = 0.0;
-	neighbours = max(neighbours, texture(frame, uv + vec2(texel.x, 0.0)).a);
-	neighbours = max(neighbours, texture(frame, uv - vec2(texel.x, 0.0)).a);
-	neighbours = max(neighbours, texture(frame, uv + vec2(0.0, texel.y)).a);
-	neighbours = max(neighbours, texture(frame, uv - vec2(0.0, texel.y)).a);
-	if (color.a < 0.5) {
-		if (neighbours < 0.5) {
-			discard;
-		}
-		ALBEDO = outline_color.rgb;
-		ALPHA = opacity;
-	} else {
-		vec3 rgb = floor(color.rgb * levels + 0.5) / levels;
-		// Rim: pixels next to the silhouette edge pick up the green glow.
-		float edge = 1.0 - min(min(texture(frame, uv + vec2(texel.x * 2.0, 0.0)).a, texture(frame, uv - vec2(texel.x * 2.0, 0.0)).a), texture(frame, uv + vec2(0.0, texel.y * 2.0)).a);
-		rgb = mix(rgb, rim_color.rgb, edge * 0.65);
-		float row = mod(floor(UV.y * frame_size.y), 2.0);
-		rgb *= 1.0 - row * 0.12;
-		if (hologram > 0.0) {
-			float luma = dot(rgb, vec3(0.3, 0.59, 0.11));
-			rgb = mix(rgb, rim_color.rgb * (0.35 + luma * 1.4), hologram);
-			float band = step(0.82, fract(UV.y * 9.0 - TIME * 0.6));
-			rgb += rim_color.rgb * band * 0.25 * hologram;
-		}
-		ALBEDO = rgb;
-		ALPHA = opacity * (1.0 - hologram * 0.25);
+	vec4 color = texture(frame, UV);
+	float coverage = max(color.a, ring_alpha(UV, texel * 2.5));
+	if (coverage < 0.02) {
+		discard;
 	}
+	// Rim: pixels near the silhouette edge pick up the team glow.
+	float edge = 1.0 - min(min(texture(frame, UV + vec2(texel.x * 7.0, 0.0)).a, texture(frame, UV - vec2(texel.x * 7.0, 0.0)).a), min(texture(frame, UV + vec2(0.0, texel.y * 7.0)).a, texture(frame, UV - vec2(0.0, texel.y * 7.0)).a));
+	vec3 rgb = mix(color.rgb, rim_color.rgb, edge * 0.55);
+	if (hologram > 0.0) {
+		float luma = dot(rgb, vec3(0.3, 0.59, 0.11));
+		rgb = mix(rgb, rim_color.rgb * (0.35 + luma * 1.4), hologram);
+		float band = step(0.82, fract(UV.y * 9.0 - TIME * 0.6));
+		rgb += rim_color.rgb * band * 0.25 * hologram;
+	}
+	ALBEDO = mix(outline_color.rgb, rgb, smoothstep(0.0, 0.9, color.a));
+	ALPHA = opacity * coverage * (1.0 - hologram * 0.25);
 }
 """
 
@@ -100,8 +100,8 @@ const GHOST_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never;
 
-uniform sampler2D frame : source_color, filter_nearest;
-uniform vec2 frame_size = vec2(120.0, 168.0);
+uniform sampler2D frame : source_color, filter_linear;
+uniform vec2 frame_size = vec2(720.0, 1008.0);
 uniform vec4 rim_color : source_color = vec4(0.43, 0.9, 0.35, 1.0);
 
 void vertex() {
@@ -111,14 +111,14 @@ void vertex() {
 
 void fragment() {
 	vec2 texel = 1.0 / frame_size;
-	vec2 uv = (floor(UV * frame_size) + 0.5) * texel;
-	if (texture(frame, uv).a < 0.5) {
+	float alpha = texture(frame, UV).a;
+	if (alpha < 0.05) {
 		discard;
 	}
-	float inner = min(min(texture(frame, uv + vec2(texel.x * 2.0, 0.0)).a, texture(frame, uv - vec2(texel.x * 2.0, 0.0)).a), min(texture(frame, uv + vec2(0.0, texel.y * 2.0)).a, texture(frame, uv - vec2(0.0, texel.y * 2.0)).a));
+	float inner = min(min(texture(frame, UV + vec2(texel.x * 6.0, 0.0)).a, texture(frame, UV - vec2(texel.x * 6.0, 0.0)).a), min(texture(frame, UV + vec2(0.0, texel.y * 6.0)).a, texture(frame, UV - vec2(0.0, texel.y * 6.0)).a));
 	// Edge pixels get the outline; the inside only a faint veil.
 	ALBEDO = rim_color.rgb;
-	ALPHA = inner < 0.5 ? 0.85 : 0.07;
+	ALPHA = alpha * mix(0.85, 0.07, smoothstep(0.3, 0.9, inner));
 }
 """
 
@@ -147,10 +147,10 @@ var _seated: bool = false
 func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_display: bool = true) -> void:
 	viewport = SubViewport.new()
 	viewport.name = "Frame"
-	viewport.size = FRAME_SIZE
+	viewport.size = FRAME_SIZE * RENDER_SCALE
 	viewport.own_world_3d = true
 	viewport.transparent_bg = true
-	viewport.msaa_3d = Viewport.MSAA_DISABLED
+	viewport.msaa_3d = Viewport.MSAA_4X
 	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	add_child(viewport)
 
@@ -198,7 +198,7 @@ func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_displ
 	var material := ShaderMaterial.new()
 	material.shader = _shader
 	material.set_shader_parameter("frame", viewport.get_texture())
-	material.set_shader_parameter("frame_size", Vector2(FRAME_SIZE))
+	material.set_shader_parameter("frame_size", Vector2(FRAME_SIZE * RENDER_SCALE))
 	material.set_shader_parameter("rim_color", rim_color)
 	material.set_shader_parameter("hologram", hologram)
 	if _ghost_shader == null:
@@ -208,7 +208,7 @@ func build(look: Dictionary, rim_color: Color, hologram: float = 0.0, show_displ
 	ghost.shader = _ghost_shader
 	ghost.render_priority = 10
 	ghost.set_shader_parameter("frame", viewport.get_texture())
-	ghost.set_shader_parameter("frame_size", Vector2(FRAME_SIZE))
+	ghost.set_shader_parameter("frame_size", Vector2(FRAME_SIZE * RENDER_SCALE))
 	ghost.set_shader_parameter("rim_color", rim_color)
 	material.next_pass = ghost
 	display = MeshInstance3D.new()

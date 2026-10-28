@@ -9,6 +9,7 @@ extends RefCounted
 const SIDE_PIECE: String = "ECHO"
 const SIDE_PIECES: String = "ECHOS"
 
+const SHOP_LORE: String = "Das Grid hat zu wenig Speicher. Jeden Tag lagert es ein Programm in den Cache, jede Woche defragmentiert es ein paar mehr. Was keiner nimmt, verschwindet im Archiv und kommt irgendwann wieder."
 const FINITE_LORE: String = "FEHLER 0xF1N1T3: Das Grid hat plötzlich Ränder. Vier Prozesse wachen in einem endlichen Quadrat auf, ohne Weg hinaus. Der Speicher reicht für genau einen KERN. Das System meldet: Problem gelöst, sobald nur noch einer läuft."
 
 const FINITE_START_LINES: Array[String] = [

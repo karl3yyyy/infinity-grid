@@ -192,7 +192,7 @@ func _describe_action(entry: Dictionary) -> String:
 		if not captured.is_empty():
 			detail += "  %s geschlagen." % captured
 		if bool(action.get("temple_win", false)):
-			detail += "  Startfeld des gegnerischen KERNS erreicht."
+			detail += "  KERN hat den URSPRUNG des Gegners betreten."
 	elif type == "effect":
 		var target: Vector2i = action.get("to", Vector2i.ZERO)
 		detail += "  Effekt: %s auf (%d,%d)." % [str(action.get("effect", "")), target.x + 1, target.y + 1]

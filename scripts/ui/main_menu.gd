@@ -168,17 +168,38 @@ func _build_shell() -> void:
 	var top_spacer := Control.new()
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(top_spacer)
+	# Profile card: the picture opens the picture chooser, name and credits the profile.
+	var card := HBoxContainer.new()
+	card.add_theme_constant_override("separation", 12)
+	top_bar.add_child(card)
 	_profile_button = Button.new()
-	_profile_button.add_theme_font_size_override("font_size", 26)
+	_profile_button.add_theme_font_size_override("font_size", 28)
+	_profile_button.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_profile_button.focus_mode = Control.FOCUS_NONE
 	_profile_button.pressed.connect(_show_profile)
+	card.add_child(_profile_button)
+	var picture_button := Button.new()
+	picture_button.custom_minimum_size = Vector2(96.0, 96.0)
+	picture_button.focus_mode = Control.FOCUS_NONE
+	picture_button.tooltip_text = "Profilbild Ã¤ndern"
+	for state: String in ["normal", "hover", "pressed"]:
+		var frame := StyleBoxFlat.new()
+		frame.bg_color = Color("0e1810")
+		frame.border_color = TerminalTheme.GREEN_BRIGHT if state != "normal" else TerminalTheme.GREEN
+		frame.set_border_width_all(3)
+		frame.set_corner_radius_all(6)
+		frame.shadow_color = Color(0.43, 0.9, 0.35, 0.35)
+		frame.shadow_size = 10
+		picture_button.add_theme_stylebox_override(state, frame)
+	picture_button.pressed.connect(func() -> void: _show_avatar_picker(_show_home))
 	_profile_picture = TextureRect.new()
-	_profile_picture.custom_minimum_size = Vector2(40.0, 40.0)
+	_profile_picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
 	_profile_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_profile_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_profile_picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	top_bar.add_child(_profile_picture)
-	top_bar.add_child(_profile_button)
+	_profile_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_profile_picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_profile_picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	picture_button.add_child(_profile_picture)
+	card.add_child(picture_button)
 
 	var push_center := Control.new()
 	push_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -300,7 +321,7 @@ func _show_home() -> void:
 	_add_menu_button(_content, "SPIELEN", "Ranked, schnelles Spiel, Bot, zu zweit", _play.show_play)
 	if MatchClient.is_online_available():
 		_add_menu_button(_content, "FREUNDE", _friends.summary(), _friends.show_friends)
-	_add_menu_button(_content, "SAMMLUNG", "Charaktere, Skins, Spielfeld, Profilbild, Emotes, Karten", _show_collection)
+	_add_menu_button(_content, "ARSENAL", "Dein Look: Kern, Echos, Spielfeld, Karten, Profilbild, Emotes", _show_collection)
 	_add_menu_button(_content, "SHOP", "Credits gegen Style tauschen. Das Grid nimmt jede Währung.", _shop.show_shop)
 	_add_menu_button(_content, "EINSTELLUNGEN", "Lautstärke des Grids. Es flüstert nicht.", _show_settings)
 	if not OS.has_feature("web"):
@@ -334,12 +355,33 @@ func _show_profile() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 16)
 	_content.add_child(head)
+	var picture_button := Button.new()
+	picture_button.custom_minimum_size = Vector2(176.0, 176.0)
+	picture_button.tooltip_text = "Profilbild Ã¤ndern"
+	for state: String in ["normal", "hover", "pressed", "focus"]:
+		var frame := StyleBoxFlat.new()
+		frame.bg_color = Color("0e1810")
+		frame.border_color = TerminalTheme.GREEN if state == "normal" else TerminalTheme.GREEN_BRIGHT
+		frame.set_border_width_all(4)
+		frame.set_corner_radius_all(8)
+		frame.shadow_color = Color(0.43, 0.9, 0.35, 0.4)
+		frame.shadow_size = 14
+		picture_button.add_theme_stylebox_override(state, frame)
+	picture_button.pressed.connect(func() -> void: _show_avatar_picker(_show_profile))
 	var picture := TextureRect.new()
 	picture.texture = AvatarGallery.picture(avatar_id, _previews_root())
-	picture.custom_minimum_size = Vector2(112.0, 112.0)
+	picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR if avatar_id.begins_with("character:") else CanvasItem.TEXTURE_FILTER_NEAREST
+	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	head.add_child(picture)
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture_button.add_child(picture)
+	var picture_column := VBoxContainer.new()
+	picture_column.add_child(picture_button)
+	var change_hint := _make_text("BILD Ã„NDERN", 22, TerminalTheme.GREEN_DIM)
+	change_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	picture_column.add_child(change_hint)
+	head.add_child(picture_column)
 	var naming := VBoxContainer.new()
 	naming.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(naming)
@@ -375,29 +417,38 @@ func adopt_account_profile() -> void:
 
 
 func _show_collection() -> void:
-	_set_page("SAMMLUNG", _show_home)
-	var look := CharacterRoster.load_look()
-	_add_menu_button(_content, "CHARAKTERE", "Dein KERN: %s" % CharacterRoster.dressed_character(look)["name"], _show_character_picker)
-	_add_menu_button(_content, "ECHOS", "Deine Echos: %s" % CharacterRoster.echo_style(look["echo"])["name"], _show_echo_picker)
-	_add_menu_button(_content, "SPIELFELD", "Deine Brett-Seite: %s" % CharacterRoster.board_skin(look["board"])["name"], _show_board_picker)
-	_add_menu_button(_content, "KARTENSKINS", "Deine Karten: %s" % CardSkins.skin(look["cards"])["name"], _show_card_skin_picker)
-	_add_menu_button(_content, "PROFILBILD", "Dein Bild: %s" % AvatarGallery.entry(avatar_id)["name"], _show_avatar_picker.bind(_show_collection))
-	_add_menu_button(_content, "EMOTE-RAD", _emotes.summary(), _emotes.show_slots)
-	_add_menu_button(_content, "KARTEN", "Alle Bewegungskarten ansehen", _show_card_collection)
-	_add_menu_button(_content, "< ZURÜCK", "Zum Hauptmenü", _show_home)
-	_focus_first_entry()
+	ArsenalPage.new(self).show()
+
+
+## Shop items on offer right now (daily + weekly rotation).
+func _offered_items() -> Array:
+	return account.shop_daily() + account.shop_weekly()
+
+
+## Characters the player owns or that are on offer now; the full roster stays secret.
+func _known_characters() -> Array[Dictionary]:
+	var offered := _offered_items()
+	var known: Array[Dictionary] = []
+	for entry: Dictionary in CharacterRoster.CHARACTERS:
+		var item := CharacterRoster.item_id("character", str(entry["id"]))
+		if AccountService.owns(item) or item in offered:
+			known.append(entry)
+	return known
 
 
 ## Full-screen showcase, one swipeable page per character.
 func _show_character_picker(start_id: String = "") -> void:
 	var selected := str(CharacterRoster.load_look()["character"])
 	var opened := start_id if not start_id.is_empty() else selected
+	var roster := _known_characters()
 	var start := 0
-	for index: int in range(CharacterRoster.CHARACTERS.size()):
-		if CharacterRoster.CHARACTERS[index]["id"] == opened:
+	for index: int in range(roster.size()):
+		if roster[index]["id"] == opened:
 			start = index
 	var showcase := CharacterShowcase.new()
 	showcase.name = "CharacterShowcase"
+	showcase.roster = roster
+	showcase.offered = _offered_items()
 	add_child(showcase)
 	showcase.chosen.connect(func(character_id: String, _skin_id: String) -> void: CharacterRoster.save_look_value("character", character_id))
 	showcase.buy_requested.connect(func(item: String) -> void:
@@ -408,7 +459,7 @@ func _show_character_picker(start_id: String = "") -> void:
 		_show_collection())
 	showcase.overview_requested.connect(func() -> void:
 		showcase.queue_free()
-		CharacterOverview.new(self, _show_collection, _show_character_picker).show())
+		CharacterOverview.new(self, _show_collection, _show_character_picker, roster).show())
 	showcase.open(start, selected)
 
 
@@ -423,7 +474,7 @@ func _show_echo_picker() -> void:
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("echo", entry["id"])
 			_show_echo_picker(), _show_echo_picker)
-	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+	_add_menu_button(_content, "< ZURÜCK", "Zum Arsenal", _show_collection)
 
 
 func _show_card_skin_picker() -> void:
@@ -435,7 +486,7 @@ func _show_card_skin_picker() -> void:
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("cards", entry["id"])
 			_show_card_skin_picker(), _show_card_skin_picker)
-	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+	_add_menu_button(_content, "< ZURÜCK", "Zum Arsenal", _show_collection)
 
 
 func _show_board_picker() -> void:
@@ -447,7 +498,7 @@ func _show_board_picker() -> void:
 		func(entry: Dictionary) -> void:
 			CharacterRoster.save_look_value("board", entry["id"])
 			_show_board_picker(), _show_board_picker)
-	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+	_add_menu_button(_content, "< ZURÜCK", "Zum Arsenal", _show_collection)
 
 
 ## Live, animated preview of a fighter (the same pixel renderer as on the board).
@@ -473,7 +524,11 @@ func _add_picker_grid(kind: String, entries: Array[Dictionary], selected_id: Str
 	scroll.add_child(grid)
 	var cell_width := floorf((get_viewport().get_visible_rect().size.x - 150.0) / float(columns))
 	var selected_button: Button
+	var offered := _offered_items()
 	for entry: Dictionary in entries:
+		var item := CharacterRoster.item_id(kind, str(entry["id"]))
+		if not AccountService.owns(item) and not item in offered:
+			continue
 		var button := Button.new()
 		button.icon = make_texture.call(entry)
 		button.expand_icon = true
@@ -497,7 +552,6 @@ func _add_picker_grid(kind: String, entries: Array[Dictionary], selected_id: Str
 		if entry.has("style"):
 			style_note = "[%s] " % CharacterRoster.STYLES[entry["style"]]["name"]
 		var line := "%s%s %s– %s" % ["* " if chosen else "", entry["name"], style_note, entry["line"]]
-		var item := CharacterRoster.item_id(kind, str(entry["id"]))
 		if not AccountService.owns(item):
 			button.text = "%s  %d CR" % [entry["name"], CharacterRoster.PRICES[item]]
 			button.self_modulate = Color(1.0, 1.0, 1.0, 0.55)
@@ -519,7 +573,7 @@ func _show_card_collection() -> void:
 	_content.add_child(_make_text("VECTOR: gerade Sprünge  ·  WAVE: Flanken  ·  FIELD: Umzingeln  ·  OVERCLOCK: riskante Finisher", 20, TerminalTheme.GREEN_DIM))
 	var encyclopedia: CardEncyclopedia = CardEncyclopediaScript.new(deck)
 	_content.add_child(encyclopedia)
-	_add_menu_button(_content, "< ZURÜCK", "Zur Sammlung", _show_collection)
+	_add_menu_button(_content, "< ZURÜCK", "Zum Arsenal", _show_collection)
 	_focus_first_entry()
 
 
@@ -678,5 +732,6 @@ func _update_profile_button() -> void:
 		return
 	_profile_button.text = profile_name.to_upper()
 	_profile_picture.texture = AvatarGallery.picture(avatar_id, _previews_root())
+	_profile_picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR if avatar_id.begins_with("character:") else CanvasItem.TEXTURE_FILTER_NEAREST
 	if not account.account.is_empty():
-		_profile_button.text += "  %d CR" % account.credits()
+		_profile_button.text += "\n%d CR" % account.credits()

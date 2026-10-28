@@ -65,7 +65,7 @@ func _choose_easy(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Arra
 	for move: Array in moves:
 		if pieces[move[2]] == 2 and teams[move[2]] != team:
 			return move
-		if move[0] >= 0 and move[2] == TEMPLE_CELLS[1 - team]:
+		if move[0] >= 0 and pieces[move[0]] == 2 and move[2] == TEMPLE_CELLS[1 - team]:
 			return move
 	if randf() < 0.45:
 		return moves.pick_random()
@@ -247,10 +247,10 @@ func _undo(pieces: PackedInt32Array, teams: PackedInt32Array, hands: Array, team
 	teams[to] = int(undo["captured_team"])
 
 
-## An enemy piece stands on this team's KERN starting square: the game is lost.
+## The enemy KERN stands on this team's KERN starting square: the game is lost.
 func _temple_taken(pieces: PackedInt32Array, teams: PackedInt32Array, team: int) -> bool:
 	var temple: int = TEMPLE_CELLS[team]
-	return pieces[temple] != 0 and teams[temple] != team
+	return pieces[temple] == 2 and teams[temple] != team
 
 
 func _master_alive(pieces: PackedInt32Array, teams: PackedInt32Array, team: int) -> bool:

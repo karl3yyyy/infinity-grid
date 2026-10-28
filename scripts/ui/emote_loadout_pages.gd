@@ -31,7 +31,7 @@ func show_slots() -> void:
 	menu._add_menu_button(menu._content, "STANDARD", "Alle Plätze zurücksetzen", func() -> void:
 		EmoteWheel.save_loadout(EmoteWheel.DEFAULT_LOADOUT.duplicate())
 		show_slots())
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zur Sammlung", menu._show_collection)
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Arsenal", menu._show_collection)
 	menu._focus_first_entry()
 
 

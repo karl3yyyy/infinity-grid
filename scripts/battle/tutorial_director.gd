@@ -17,7 +17,7 @@ const INTRO: Array[String] = [
 	"Oh, ein neuer Knoten. Wie spontan. Ich bin Doc Voss und habe das Grid gebaut. Es sollte ein ruhiges Datennetz werden. Jetzt prügeln sich darin Leute mit Karten. Danke dafür.",
 	"Willkommen im Core System. Jede Partie ist die Übernahme einer Datenplattform. Hier siehst du das Brett: 5×5 Felder. Alles heißt bei uns anders, aber es ist derselbe Mist mit Terminal-Stimmung.",
 	"Links und rechts hängen über Infinity-Kabel zusammen. Wer links rausläuft, kommt rechts wieder rein. Ja, auch du. Oben und unten ist Schluss. Der Unendlichkeit wollte ich wenigstens eine Wand geben, an der man sich den Kopf stoßen kann.",
-	"Jede Seite hat einen KERN, die eine echte Person. Dazu vier Echos, vom Grid kopiert, weil es zu viel Speicherplatz hatte. Wer den gegnerischen KERN schlägt, gewinnt. Die Echos dürfen sterben. Sag es ihnen nicht.",
+	"Jede Seite hat einen KERN, die eine echte Person. Dazu vier Echos, vom Grid kopiert, weil es zu viel Speicherplatz hatte. Wer den gegnerischen KERN schlägt oder mit dem eigenen KERN dessen URSPRUNG betritt, gewinnt. Die Echos dürfen sterben. Sag es ihnen nicht.",
 ]
 const CARDS: Array[String] = [
 	"Frei laufen? Wo kämen wir da hin. Jede Karte erlaubt nur die Sprünge, die darauf leuchten: Die Mitte bist du, die Farbfelder sind die Ziele.",

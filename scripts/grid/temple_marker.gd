@@ -1,7 +1,7 @@
 class_name TempleMarker
 extends RefCounted
 
-## The glowing crown on a KERN's starting square: any enemy piece that steps onto
+## The glowing crown on a KERN's starting square: the enemy KERN that steps onto
 ## it wins the match (see GridBattleManager.temple_of). Purely visual.
 
 ## Same colours as GridBattleUI.TEAM_COLORS; kept here so the arena does not depend on the UI.

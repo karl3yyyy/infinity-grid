@@ -180,13 +180,24 @@ func _fill(list: VBoxContainer, status: Label) -> void:
 		var who := str(person["username"])
 		var dot := "*" if person.get("online", false) else "-"
 		var active_match: Variant = person.get("active_match", null)
-		var hint := "Partie läuft · antippen zum Zuschauen" if active_match is Dictionary else "%s · %d  –  antippen zum Herausfordern" % [str(person.get("rank", "")), int(person.get("rating", 1000))]
+		var hint := "Partie läuft · Profil öffnen" if active_match is Dictionary else "%s · %d  –  antippen zum Herausfordern" % [str(person.get("rank", "")), int(person.get("rating", 1000))]
 		menu._add_menu_button(list, "%s %s" % [dot, who], hint, _show_friend.bind(person))
+		if active_match is Dictionary:
+			menu._add_menu_button(list, "   > LIVE ZUSCHAUEN", "%s direkt zuschauen" % who, _watch.bind(active_match))
 	var outgoing: Array = overview.get("outgoing", [])
 	if not outgoing.is_empty():
 		_heading(list, "GESENDET")
 	for person: Dictionary in outgoing:
 		list.add_child(menu._make_text("  %s – wartet auf Annahme" % str(person["username"]), 22, TerminalTheme.GREEN_DIM))
+
+
+## Opens a running match as a spectator, straight from the friends list or a friend's page.
+func _watch(activity: Dictionary) -> void:
+	menu.close_menu()
+	if str(activity.get("mode", "")) == "finite_grid":
+		menu.group_watch_requested.emit(str(activity["code"]), str(activity["key"]))
+	else:
+		menu.online_watch_requested.emit(str(activity["code"]), str(activity["key"]))
 
 
 func _show_friend(person: Dictionary) -> void:
@@ -198,14 +209,7 @@ func _show_friend(person: Dictionary) -> void:
 	var playing := not activity.is_empty()
 	menu._content.add_child(menu._make_text("spielt gerade" if playing else ("online" if person.get("online", false) else "gerade nicht online"), 22, TerminalTheme.GREEN_DIM))
 	if playing:
-		if str(activity.get("mode", "")) == "finite_grid":
-			menu._add_menu_button(menu._content, "ZUSCHAUEN", "Laufende Finite-Grid-Partie ansehen", func() -> void:
-				menu.close_menu()
-				menu.group_watch_requested.emit(str(activity["code"]), str(activity["key"])))
-		else:
-			menu._add_menu_button(menu._content, "ZUSCHAUEN", "Laufende Online-Partie ansehen", func() -> void:
-				menu.close_menu()
-				menu.online_watch_requested.emit(str(activity["code"]), str(activity["key"])))
+		menu._add_menu_button(menu._content, "ZUSCHAUEN", "Laufende Partie ansehen", _watch.bind(activity))
 	menu._add_menu_button(menu._content, "HERAUSFORDERN", "Raum erstellen; %s bekommt eine Einladung" % who, func() -> void:
 		menu.close_menu()
 		menu.online_create_requested.emit(who))

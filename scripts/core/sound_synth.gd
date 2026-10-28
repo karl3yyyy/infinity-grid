@@ -60,8 +60,9 @@ static func effects() -> Dictionary:
 	return sounds
 
 
-## A looping track, built a slice per frame so start-up never stalls.
-static func build_music(tree: SceneTree) -> AudioStreamWAV:
+## A looping track, built a slice per frame so start-up never stalls. The danger
+## layer has the same length and fades in over the base track when a KERN is threatened.
+static func build_music(tree: SceneTree, danger_layer: bool = false) -> AudioStreamWAV:
 	var bar_seconds: float = 4.0 * 60.0 / BPM
 	var seconds: float = bar_seconds * 8.0
 	var count: int = int(seconds * MUSIC_RATE)
@@ -75,7 +76,7 @@ static func build_music(tree: SceneTree) -> AudioStreamWAV:
 			var t: float = float(i) / MUSIC_RATE
 			var noise: float = randf_range(-1.0, 1.0)
 			noise_low += (noise - noise_low) * 0.25
-			var sample: float = _music_sample(t, bar_seconds, noise, noise_low)
+			var sample: float = _danger_sample(t, bar_seconds, noise, noise_low) if danger_layer else _music_sample(t, bar_seconds, noise, noise_low)
 			data.encode_s16(i * 2, int(clampf(sample, -1.0, 1.0) * 28000.0))
 		index = end
 		await tree.process_frame
@@ -174,3 +175,20 @@ static func _make(seconds: float, wave: Callable) -> AudioStreamWAV:
 static func _crush(value: float, bits: int) -> float:
 	var steps: float = float(1 << bits)
 	return roundf(value * steps) / steps
+
+
+## Extra layer for a threatened KERN: a kick on every beat, a driving bass,
+## dissonant drones with tremolo and a noise riser that builds over four bars.
+static func _danger_sample(t: float, bar_seconds: float, noise: float, noise_low: float) -> float:
+	var beat: float = 60.0 / BPM
+	var chord: Array = CHORDS[int(t / bar_seconds) % CHORDS.size()]
+	var root: float = float(chord[0]) / 2.0
+	var sixteenth: float = beat / 4.0
+	var drive: float = tanh(3.0 * (sin(TAU * root * t) + 0.4 * sin(TAU * root * 2.0 * t))) * 0.13 * exp(-fmod(t, sixteenth) * 9.0)
+	var beat_local: float = fmod(t, beat)
+	var kick: float = 0.5 * sin(TAU * lerpf(130.0, 45.0, minf(beat_local / 0.1, 1.0)) * beat_local) * exp(-beat_local * 10.0)
+	var tremolo: float = 0.6 + 0.4 * sin(TAU * 6.0 * t)
+	var drone: float = 0.035 * tremolo * (sin(TAU * root * 2.119 * t) + sin(TAU * root * 2.828 * t))
+	var phase: float = fmod(t, bar_seconds * 4.0) / (bar_seconds * 4.0)
+	var riser: float = 0.07 * (noise - noise_low) * phase * phase
+	return drive + kick + drone + riser

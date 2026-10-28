@@ -2,7 +2,7 @@ class_name FfaWorldHands
 extends Node3D
 
 ## Finite Grid: each seat's two cards lie flat behind its side of the board.
-## The active seat's shared third card sits inward from its hand.
+## The active seat's shared third card lies beside its hand, never over the board.
 
 const CARD_PIXELS := Vector2(160.0, 224.0)
 const CARD_WORLD := Vector2(1.9, 2.66)
@@ -36,7 +36,7 @@ func _init() -> void:
 			views.append(_make_card(holder, (float(slot) - 0.5) * (CARD_WORLD.x + CARD_GAP), quads))
 		_views.append(views)
 		var shared_view := _make_card(holder, 0.0, quads)
-		quads[2].position = Vector3(0.0, CARD_WORLD.y + CARD_GAP, 0.0)
+		quads[2].position = Vector3(1.5 * (CARD_WORLD.x + CARD_GAP), 0.0, 0.0)
 		quads[2].visible = false
 		_shared_views.append(shared_view)
 		_shared_quads.append(quads[2])

@@ -178,6 +178,8 @@ func _test_shop_prices() -> void:
 		if not item.get_slice(":", 1) in ids:
 			unknown.append(item)
 	_expect(unknown.is_empty(), "Every shop item exists in the collection (unknown: %s)" % ", ".join(unknown))
+	_expect("!inRotation(PRICES, item)" in accounts, "The shop server only sells items that are in today's rotation")
+	_expect(FileAccess.file_exists("res://server/online/rotation.js"), "The shop rotation module exists")
 	var misnamed := CharacterSkins.SKINS.filter(func(skin: Dictionary) -> bool: return not str(skin["id"]).begins_with(str(skin["character"]) + "_"))
 	_expect(misnamed.is_empty(), "Skin ids start with their character, as the server expects")
 	_expect(CharacterRoster.price("character", CharacterRoster.CHARACTERS[0]["id"]) == 0 and CharacterRoster.price("echo", "echo") == 0 and CharacterRoster.price("board", "standard") == 0, "The default look is free")

@@ -50,7 +50,7 @@ The interface language is German.
 2. Pick one of your pieces. Highlighted squares show where the card allows it to go.
 3. Move there. Landing on an opposing piece captures it.
 4. The card you played swaps with the pass card; your opponent gets the old pass card next.
-5. Capture the opposing KERN, or move any of your pieces onto its starting square, to win.
+5. Capture the opposing KERN, or move your own KERN onto its starting square (the ORIGIN); Echos do not count, to win.
 
 Cards show a 5×5 diagram: the dark square is the piece, coloured squares are
 its targets. Moves past the left or right edge come back on the other side.

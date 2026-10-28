@@ -238,11 +238,10 @@ func _test_bot_levels() -> void:
 		var move := ai.choose_move(state, 1)
 		_expect(not move.is_empty() and move["to"] == Vector2i(2, 3), "Bot level %s captures an exposed master" % BotAI.label_for(level))
 	for level: int in range(3):
-		# A bot student can step onto Player 1's KERN starting square, which wins.
+		# Only a bot KERN on Player 1's KERN starting square wins; an Echo there does not.
 		var temple := _empty_ai_state(cards)
-		_place(temple, Vector2i(2, 3), 1, false)
+		_place(temple, Vector2i(2, 3), 1, true)
 		_place(temple, Vector2i(0, 4), 0, true)
-		_place(temple, Vector2i(4, 0), 1, true)
 		var temple_move := BotAI.new(level).choose_move(temple, 1)
 		_expect(not temple_move.is_empty() and temple_move["to"] == Vector2i(2, 4), "Bot level %s takes the KERN starting square" % BotAI.label_for(level))
 	var stuck_cards: Array[MovementCard] = [cards[0], cards[1], forward, MovementCard.new("Leap", [Vector2i(0, 2)]), cards[4]]

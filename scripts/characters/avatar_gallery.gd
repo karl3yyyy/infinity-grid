@@ -8,7 +8,7 @@ extends RefCounted
 const DEFAULT_ID := "symbol:code"
 const SIZE := 96
 ## Frame of a portrait render; small, it is only a head.
-const PORTRAIT_FRAME := Vector2i(96, 96)
+const PORTRAIT_FRAME := Vector2i(256, 256)
 
 const SYMBOLS: Array[Dictionary] = [
 	{"id": "symbol:code", "name": "CODE", "line": "Grüne Zeichen, die nie aufhören zu fallen."},
@@ -64,8 +64,8 @@ static func picture(id: String, host: Node) -> Texture2D:
 
 
 ## Animated portrait (head and shoulders) of a character, rendered live.
-static func portrait(id: String, host: Node, keep_frames_low: bool = false) -> FighterSprite:
-	var character := CharacterRoster.character(id.get_slice(":", 1))
+static func portrait(id: String, host: Node, keep_frames_low: bool = false, skin_id: String = "") -> FighterSprite:
+	var character := CharacterSkins.dress(CharacterRoster.character(id.get_slice(":", 1)), skin_id)
 	var fighter := FighterSprite.new()
 	host.add_child(fighter)
 	fighter.build(character, Color("6ee65a"), 0.0, false)

@@ -334,7 +334,8 @@ func _begin_turn() -> void:
 
 
 func _refresh_ui() -> void:
-	SoundBoard.set_danger_mode(_active and _has_core_threat())
+	# Danger music belongs to the normal match only.
+	SoundBoard.set_danger_mode(false)
 	var view := _view_seat
 	var own_turn := rules.current == view and _is_local(view) and rules.winner == FfaRules.RUNNING
 	battle_ui.update_hands(

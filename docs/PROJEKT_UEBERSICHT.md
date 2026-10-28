@@ -97,7 +97,7 @@ Testkauf: im Spiel Shop → Paket → im neuen Fenster mit Testkarte
 
 **Neu:** Freunde, Ranked (Ränge Bit-Runner → Data-Net Rogue → System Cipher →
 Core Master → Root Sovereign, Rangliste), fester Benutzername, neues Menü mit
-Animationen, Siegregel „Figur auf dem Startfeld des gegnerischen KERNs“.
+Animationen, Siegregel „eigener KERN betritt den URSPRUNG (Startfeld) des gegnerischen KERNs“, Echos zählen nicht.
 Nächster Schritt: das Design-Konzept (v4) gemeinsam durchgehen.
 
 

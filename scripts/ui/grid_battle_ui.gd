@@ -298,7 +298,12 @@ func show_choice(first_text: String, first: Callable, second_text: String, secon
 	side_choice_button.visible = true
 
 
+## Spectators see both sides by colour instead of "DU" and "GEGNER".
+var spectating: bool = false
+
+
 func set_opponent_remote(enabled: bool) -> void:
+	spectating = false
 	opponent_is_remote = enabled
 	if enabled:
 		opponent_is_bot = false
@@ -309,6 +314,8 @@ func _team_at(position: int) -> int:
 
 
 func _team_name(team_id: int) -> String:
+	if spectating and opponent_is_remote:
+		return "BLAU" if team_id == 0 else "ROT"
 	if opponent_is_remote:
 		return "DU" if team_id == viewer_team else "GEGNER"
 	if team_id == 1 and opponent_is_bot:
@@ -571,7 +578,7 @@ func _build_ui() -> void:
 		"> Die benutzte Karte geht an die Mitte; du bekommst die NÄCHSTE Karte.",
 		"> Links und rechts ist das Brett endlos: Wer rechts rausgeht, kommt links wieder rein.",
 		"> Kann keine Figur ziehen, gibst du eine Karte ab.",
-		"> Schlag den gegnerischen KERN – oder stell irgendeine deiner Figuren auf sein Startfeld – und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
+		"> Schlag den gegnerischen KERN – oder lass deinen KERN den URSPRUNG des Gegners betreten, sein Startfeld (Echos zählen nicht) – und du gewinnst. Dieselbe Stellung dreimal = Unentschieden.",
 	])
 	_rules_box.add_child(rules)
 	var rules_back := _make_button("< ZURÜCK", _rules_box)

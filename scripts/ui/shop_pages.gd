@@ -5,6 +5,7 @@ extends RefCounted
 ## buy dialog, drawn into the MainMenu's terminal frame with its page helpers.
 
 const KIND_NAMES := {"character": "Charakter", "skin": "Skin", "echo": "Echos", "board": "Spielfeld", "cards": "Karten"}
+const KIND_BADGES := {"character": "KERN", "skin": "SKIN", "echo": "ECHO", "board": "FELD", "cards": "KART"}
 
 var menu: MainMenu
 var account: AccountService
@@ -20,39 +21,85 @@ func show_shop() -> void:
 	if not account.has_account() or account.account.is_empty():
 		_offline_notice(show_shop)
 		return
-	menu._content.add_child(_credits_label())
-	menu._content.add_child(menu._make_text("Credits gibt es für Siege gegen den Bot (+10 / +20 / +40, bis zu 15 pro Tag) und jeden Tag +25 Bonus.", 22, TerminalTheme.GREEN_DIM))
+	ShopTiles.banner(menu, _credits_label(), GridLore.SHOP_LORE)
+	var daily := account.shop_daily()
+	var weekly := account.shop_weekly()
+	if daily.is_empty() and weekly.is_empty():
+		menu._content.add_child(menu._make_text("Der Cache ist leer. Das Grid sortiert gerade um, schau gleich nochmal vorbei.", MainMenu.TEXT_FONT_SIZE))
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 470.0
+	scroll.custom_minimum_size.y = 560.0
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	menu._content.add_child(scroll)
 	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 10)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
+	if not daily.is_empty():
+		list.add_child(_heading("TAGESCACHE"))
+		list.add_child(_countdown_label("daily"))
+		for item: String in daily:
+			_offer(list, item, true)
+	if not weekly.is_empty():
+		list.add_child(_heading("WOCHEN-DEFRAG"))
+		list.add_child(_countdown_label("weekly"))
+		for item: String in weekly:
+			_offer(list, item, false)
 	if not account.packs().is_empty():
-		list.add_child(_heading("CREDITS KAUFEN"))
-		for pack: Dictionary in account.packs():
-			menu._add_menu_button(list, "+%d CREDITS  %s" % [int(pack["credits"]), str(pack["label"])],
-				"Bezahlen mit Karte & Co. über Stripe", buy_pack.bind(pack))
-	var offered := 0
-	var heading := ""
-	for item: String in CharacterRoster.PRICES:
-		if AccountService.owns(item):
-			continue
-		# Skins are offered once their character is unlocked.
-		if item.begins_with("skin:") and not AccountService.owns(CharacterRoster.item_id("character", str(CharacterSkins.skin(item.get_slice(":", 1))["character"]))):
-			continue
-		offered += 1
-		var kind := item.get_slice(":", 0)
-		if kind != heading:
-			heading = kind
-			list.add_child(_heading(str(KIND_NAMES[kind]).to_upper()))
-		# Skins list only their own name; the character is named below the list.
-		var short_name := str(CharacterSkins.skin(item.get_slice(":", 1)).get("name", "")) if kind == "skin" else item_name(item)
-		menu._add_menu_button(list, "%s  %d CR" % [short_name, CharacterRoster.PRICES[item]],
-			"%s – %s%s" % [item_name(item) if kind == "skin" else KIND_NAMES[kind], _entry(item)["line"], _level_hint(item)], confirm_buy.bind(item, show_shop))
-	if offered == 0:
-		list.add_child(menu._make_text("Du hast schon alles. Respekt. Das Grid ist beeindruckt und pleite.", MainMenu.TEXT_FONT_SIZE))
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
+		list.add_child(_heading("CREDITS"))
+		menu._add_menu_button(list, "CREDITS KAUFEN", "Pakete über Stripe", show_credit_packs)
+	var bottom := MenuCards.chip_row(menu)
+	MenuCards.chip(menu, bottom, "ZUM ARSENAL", "Gekauftes anlegen und ansehen", menu._show_collection)
+	MenuCards.chip(menu, bottom, "< ZURÜCK", "Zum Hauptmenü", menu._show_home)
+	menu._focus_first_entry()
+
+
+## One offer in the shop list: the daily one as a spotlight, weekly ones as cards.
+## What the player owns already leads to the collection instead.
+func _offer(list: Control, item: String, spotlight: bool) -> void:
+	var owned := AccountService.owns(item)
+	var price := int(CharacterRoster.PRICES[item])
+	var action: Callable = menu._show_collection if owned else confirm_buy.bind(item, show_shop)
+	var price_text := "IM BESITZ" if owned else "%d CR" % price
+	var hint := "%s%s" % [_entry(item)["line"], "" if owned else _level_hint(item)]
+	if spotlight:
+		ShopTiles.spotlight(menu, list, item, "NUR HEUTE", item_name(item), str(_entry(item)["line"]), price_text, hint, action)
+		return
+	var kind := item.get_slice(":", 0)
+	var title := str(CharacterSkins.skin(item.get_slice(":", 1)).get("name", "")) if kind == "skin" else item_name(item)
+	ShopTiles.spotlight(menu, list, item, str(KIND_NAMES[kind]), title, str(_entry(item)["line"]), price_text, hint, action, false)
+
+
+## "Noch 2 T 05:13:09" until the daily or weekly offers rotate; ticks while the page is open.
+func _countdown_label(kind: String) -> Label:
+	var label := menu._make_text("", 22, ShopTiles.GOLD)
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var tick := func() -> void:
+		var seconds := int(account.shop_seconds_left(kind))
+		var days := seconds / 86400
+		var clock := "%02d:%02d:%02d" % [(seconds % 86400) / 3600, (seconds % 3600) / 60, seconds % 60]
+		label.text = "Noch %s%s" % ["%d T " % days if days > 0 else "", clock]
+	tick.call()
+	var timer := Timer.new()
+	timer.wait_time = 1.0
+	timer.autostart = true
+	timer.timeout.connect(tick)
+	label.add_child(timer)
+	return label
+
+
+func show_credit_packs() -> void:
+	menu._set_page("CREDITS KAUFEN", show_shop)
+	menu._content.add_child(_credits_label())
+	var best: Dictionary = {}
+	for pack: Dictionary in account.packs():
+		if best.is_empty() or float(pack["credits"]) > float(best["credits"]):
+			best = pack
+	for pack: Dictionary in account.packs():
+		var is_best := pack == best and account.packs().size() > 1
+		MenuCards.card(menu, "+", "%d CREDITS" % int(pack["credits"]), "Für neue Charaktere, Skins, Echos und Spielfelder." if is_best else "Bezahlen über Stripe",
+			"Bezahlen mit Karte & Co. über Stripe", buy_pack.bind(pack), str(pack["label"]), is_best, ShopTiles.GOLD)
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Shop", show_shop)
 	menu._focus_first_entry()
 
 
@@ -189,6 +236,8 @@ func _error_text(error: String) -> String:
 			return "Keine Verbindung zum Server."
 		"payments_off":
 			return "Echtgeld-Käufe sind gerade ausgeschaltet."
+		"not_in_rotation":
+			return "Gerade nicht im Cache. Schau täglich vorbei, das Grid sortiert um."
 		"payment_failed":
 			return "Die Kasse konnte nicht erstellt werden. Versuch es gleich nochmal."
 	return "Fehler: %s" % error

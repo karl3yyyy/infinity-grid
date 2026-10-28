@@ -2,23 +2,25 @@ class_name CharacterOverview
 extends RefCounted
 
 ## Sammlung > CHARAKTERE > ALLE: every character on one page as a grid of portraits.
-## Characters not owned yet are dimmed; a tap opens that character's big page.
+## Characters on offer in the shop are dimmed (all others stay hidden); a tap opens that character's big page.
 
 const COLUMNS: int = 3
 
 var menu: MainMenu
 var back: Callable
 var open_character: Callable
+var roster: Array[Dictionary] = []
 
 
-func _init(owner_menu: MainMenu, back_action: Callable, open_action: Callable) -> void:
+func _init(owner_menu: MainMenu, back_action: Callable, open_action: Callable, visible_characters: Array[Dictionary]) -> void:
+	roster = visible_characters
 	menu = owner_menu
 	back = back_action
 	open_character = open_action
 
 
 func show() -> void:
-	menu._set_page("ALLE CHARAKTERE", back)
+	menu._set_page("DEINE KERNE", back)
 	var selected_id := str(CharacterRoster.load_look()["character"])
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 640.0
@@ -33,7 +35,7 @@ func show() -> void:
 	scroll.add_child(grid)
 	var cell := floorf((menu.get_viewport().get_visible_rect().size.x - 170.0) / float(COLUMNS))
 	var current: Button
-	for character: Dictionary in CharacterRoster.CHARACTERS:
+	for character: Dictionary in roster:
 		var id := str(character["id"])
 		var owned := AvatarGallery.owns("character:" + id)
 		var button := Button.new()
@@ -41,7 +43,7 @@ func show() -> void:
 		button.expand_icon = true
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		button.text = str(character["name"]) if owned else "%s  (GESPERRT)" % character["name"]
+		button.text = str(character["name"]) if owned else "%s  (ANGEBOT)" % character["name"]
 		button.custom_minimum_size = Vector2(cell, cell + 34.0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 18)
@@ -62,6 +64,6 @@ func show() -> void:
 			SoundBoard.play("select")
 			open_character.call(id))
 		grid.add_child(button)
-	menu._add_menu_button(menu._content, "< ZURÜCK", "Zur Sammlung", back)
+	menu._add_menu_button(menu._content, "< ZURÜCK", "Zum Arsenal", back)
 	if current != null:
 		current.grab_focus.call_deferred()

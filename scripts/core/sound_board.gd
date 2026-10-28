@@ -23,8 +23,11 @@ var enabled: bool = true
 var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _music: AudioStreamPlayer
+var _danger_music: AudioStreamPlayer
 var _voice := ""
 var _music_tween: Tween
+const DANGER_SILENT_DB: float = -60.0
+const DANGER_LOUD_DB: float = -9.0
 var _danger_mode: bool = false
 
 
@@ -57,8 +60,10 @@ static func set_enabled(on: bool) -> void:
 	_board.enabled = on
 	if _board._music != null:
 		_board._music.stream_paused = not on
+		_board._danger_music.stream_paused = not on
 		if on and not _board._music.playing and _board._music.stream != null:
 			_board._music.play()
+			_board._danger_music.play()
 	if not on:
 		DisplayServer.tts_stop()
 	var config := ConfigFile.new()
@@ -105,13 +110,18 @@ func _play(sound: String, volume_db: float) -> void:
 
 func _build_music() -> void:
 	var stream := await SoundSynth.build_music(get_tree())
+	var danger_stream := await SoundSynth.build_music(get_tree(), true)
 	_music = AudioStreamPlayer.new()
 	_music.stream = stream
-	_music.volume_db = -10.0 if _danger_mode else -14.0
-	_music.pitch_scale = 1.08 if _danger_mode else 1.0
+	_music.volume_db = -14.0
 	add_child(_music)
+	_danger_music = AudioStreamPlayer.new()
+	_danger_music.stream = danger_stream
+	_danger_music.volume_db = DANGER_SILENT_DB if not _danger_mode else DANGER_LOUD_DB
+	add_child(_danger_music)
 	if enabled:
 		_music.play()
+		_danger_music.play()
 
 
 func _set_danger_mode(enabled: bool) -> void:
@@ -125,5 +135,5 @@ func _set_danger_mode(enabled: bool) -> void:
 	if _music_tween != null and _music_tween.is_running():
 		_music_tween.kill()
 	_music_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_music_tween.tween_property(_music, "volume_db", -10.0 if enabled else -14.0, 1.1)
-	_music_tween.tween_property(_music, "pitch_scale", 1.08 if enabled else 1.0, 1.1)
+	_music_tween.tween_property(_danger_music, "volume_db", DANGER_LOUD_DB if enabled else DANGER_SILENT_DB, 1.4)
+	_music_tween.tween_property(_music, "volume_db", -16.0 if enabled else -14.0, 1.4)

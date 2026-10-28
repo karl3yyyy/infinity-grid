@@ -144,8 +144,9 @@ func _run_tests() -> void:
 	var feature_menu := battle_ui.main_menu
 	feature_menu._play.show_chaos()
 	var chaos_card_count := 0
-	for card_node: Node in feature_menu._content.find_children("*", "PanelContainer", true, false):
-		chaos_card_count += 1
+	for card_node: Node in feature_menu._content.get_children():
+		if card_node is Button and (card_node as Button).custom_minimum_size.y >= 100.0:
+			chaos_card_count += 1
 	_expect(chaos_card_count >= 3, "The Chaos Lab presents each rule as a separate visual card")
 	battle.chaos_weather.begin({"hidden_king": true, "shifting_tiles": true})
 	_expect(battle.chaos_weather.visible, "Chaos-only weather activates for a Chaos match")

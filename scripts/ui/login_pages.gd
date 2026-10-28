@@ -44,7 +44,7 @@ func add_account_panel(parent: Control, avatar_action: Callable) -> void:
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	parent.add_child(actions)
-	menu._add_menu_button(actions, "PROFILBILD", "Porträts und Symbole – auch in der Sammlung", avatar_action)
+	menu._add_menu_button(actions, "PROFILBILD", "Porträts und Symbole – auch im Arsenal", avatar_action)
 	if online:
 		if account.email().is_empty():
 			menu._add_menu_button(actions, "ANMELDEN", "Mit Google oder E-Mail", show_login)

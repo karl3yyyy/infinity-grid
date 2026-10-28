@@ -10,15 +10,16 @@
 //   GET  /api/account                  -> {account}         (+ daily bonus)
 //   POST /api/account/profile {avatar}       (the name is the username, set once)
 //   POST /api/account/username {username}  signed-in accounts choose it once, for good
-//   POST /api/account/buy {item}       -> 402 not_enough_credits, 409 owned
+//   POST /api/account/buy {item}       -> 402 not_enough_credits, 403 not_in_rotation, 409 owned
 //   POST /api/account/reward {difficulty} after a won bot match
 //   POST /api/account/checkout {pack}  -> Stripe Checkout for a credit pack (payments.js)
-// account = {name, avatar, credits, owned: [...], prices: {...}, packs: [...], bonus?: n}
+// account = {name, avatar, credits, owned: [...], prices: {...}, shop: {daily, weekly, ...}, packs: [...], bonus?: n}
 
 import { createCheckout, offeredPacks } from "./payments.js";
 import { claimUsername, publicView, socialOp, validUsername } from "./friends.js";
 import { PLACEMENT_GAMES, rankOf, START_RATING, TIERS } from "./ranked.js";
 import { currentCycle, PURGE_CREDITS } from "./seasons.js";
+import { inRotation, rotation } from "./rotation.js";
 
 // Must match CharacterRoster.PRICES (checked by tests/lan_test.gd).
 // Items not listed are free for everyone.
@@ -251,6 +252,8 @@ export class Account {
       const price = PRICES[item];
       if (price === undefined) {
         [status, error] = [400, "not_for_sale"];
+      } else if (!inRotation(PRICES, item)) {
+        [status, error] = [403, "not_in_rotation"];
       } else if (needsCharacter(item, data.owned)) {
         [status, error] = [403, "needs_character"];
       } else if (data.owned.includes(item)) {
@@ -300,7 +303,7 @@ export class Account {
 function view(data) {
   const ranked = publicView(data);
   return {
-    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES, xp: data.xp || 0, tutorial_done: data.tutorialDone === true, cycle: cycleView(data),
+    name: ranked.name, avatar: ranked.avatar, email: data.email || "", credits: data.credits, owned: data.owned, prices: PRICES, shop: rotation(PRICES), xp: data.xp || 0, tutorial_done: data.tutorialDone === true, cycle: cycleView(data),
     username: ranked.username, rating: ranked.rating, games: ranked.games, rank: ranked.rank, wins: ranked.wins, losses: ranked.losses,
   };
 }

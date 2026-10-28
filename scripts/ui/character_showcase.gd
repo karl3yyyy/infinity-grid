@@ -34,7 +34,7 @@ const SPLASH_SHADER := """
 shader_type canvas_item;
 
 uniform vec4 accent : source_color = vec4(0.16, 0.83, 1.0, 1.0);
-uniform float levels = 5.0;
+uniform float levels = 12.0;
 uniform float split = 2.0;
 
 void fragment() {
@@ -68,13 +68,16 @@ var _backdrop: Control
 var _fighters: Node3D
 ## Skin shown on the current page ("" = original) and the row choosing it.
 var _skin_id: String = ""
+## Only characters the player owns or that are on offer right now; the rest stay secret.
+var roster: Array[Dictionary] = []
+var offered: Array = []
 var _skin_row: HBoxContainer
 
 
 func open(start_index: int, selected_id: String) -> void:
-	index = clampi(start_index, 0, CharacterRoster.CHARACTERS.size() - 1)
+	index = clampi(start_index, 0, roster.size() - 1)
 	_selected_id = selected_id
-	_skin_id = CharacterRoster.saved_skin(str(CharacterRoster.CHARACTERS[index]["id"]))
+	_skin_id = CharacterRoster.saved_skin(str(roster[index]["id"]))
 	_build_shell()
 	_show_slide(0)
 
@@ -181,8 +184,8 @@ func _arrow_button(direction: String) -> Button:
 func step(direction: int) -> void:
 	if _busy:
 		return
-	index = posmod(index + direction, CharacterRoster.CHARACTERS.size())
-	_skin_id = CharacterRoster.saved_skin(str(CharacterRoster.CHARACTERS[index]["id"]))
+	index = posmod(index + direction, roster.size())
+	_skin_id = CharacterRoster.saved_skin(str(roster[index]["id"]))
 	_show_slide(direction)
 
 
@@ -200,9 +203,12 @@ func _fill_skin_row(character: Dictionary, accent: Color) -> void:
 	var options: Array[Dictionary] = [{"id": "", "name": "ORIGINAL"}]
 	options.append_array(CharacterSkins.for_character(str(character["id"])))
 	for option: Dictionary in options:
-		var chip := Button.new()
 		var skin_id := str(option["id"])
-		var locked := skin_id != "" and not AccountService.owns(CharacterRoster.item_id("skin", skin_id))
+		var skin_item := CharacterRoster.item_id("skin", skin_id)
+		var locked := skin_id != "" and not AccountService.owns(skin_item)
+		if locked and not skin_item in offered:
+			continue
+		var chip := Button.new()
 		chip.text = str(option["name"])
 		chip.add_theme_font_size_override("font_size", 24)
 		chip.focus_mode = Control.FOCUS_NONE
@@ -227,9 +233,9 @@ func _show_slide(direction: int) -> void:
 		old.queue_free()
 		for fighter: Node in _fighters.get_children():
 			fighter.queue_free()
-	var character: Dictionary = CharacterRoster.CHARACTERS[index]
+	var character: Dictionary = roster[index]
 	var accent: Color = STYLE_COLORS.get(character.get("style", "brawler"), TerminalTheme.GREEN)
-	_counter.text = "%02d / %02d" % [index + 1, CharacterRoster.CHARACTERS.size()]
+	_counter.text = "%02d / %02d" % [index + 1, roster.size()]
 	_update_select_button(character)
 	_fill_skin_row(character, accent)
 	(_backdrop as SpeedLines).accent = accent
@@ -271,7 +277,7 @@ func _build_slide(character: Dictionary, accent: Color) -> Control:
 	splash.texture = _splash_texture(character, accent)
 	splash.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	splash.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	splash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	splash.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	splash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var material := ShaderMaterial.new()
 	var shader := Shader.new()
@@ -315,7 +321,7 @@ func _build_slide(character: Dictionary, accent: Color) -> Control:
 	ingame.custom_minimum_size = Vector2(FighterSprite.FRAME_SIZE) * 2.0
 	ingame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	ingame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	ingame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ingame.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	info.add_child(ingame)
 	var text := VBoxContainer.new()
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -440,7 +446,7 @@ func _locked_item(character_id: String) -> String:
 
 ## Locked looks are not selected here; the menu offers to buy them.
 func _choose() -> void:
-	var id := str(CharacterRoster.CHARACTERS[index]["id"])
+	var id := str(roster[index]["id"])
 	var item := _locked_item(id)
 	if item != "":
 		buy_requested.emit(item)
@@ -448,7 +454,7 @@ func _choose() -> void:
 	_selected_id = id
 	CharacterRoster.save_skin(id, _skin_id)
 	chosen.emit(_selected_id, _skin_id)
-	_update_select_button(CharacterRoster.CHARACTERS[index])
+	_update_select_button(roster[index])
 
 
 func _gui_input(event: InputEvent) -> void:

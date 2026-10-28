@@ -856,7 +856,7 @@ func _master_capture_targets(coordinates: Array[Vector2i]) -> Array[Vector2i]:
 		var captures_master := occupant != null and occupant.team_id != current_player and (
 			occupant.is_master or (chaos != null and chaos.hidden_king and chaos.is_king_at(occupant.team_id, coordinate))
 		)
-		var reaches_temple := (chaos == null or not chaos.hidden_king) and coordinate == temple_of(1 - current_player)
+		var reaches_temple := (chaos == null or not chaos.hidden_king) and selected_unit != null and selected_unit.is_master and coordinate == temple_of(1 - current_player)
 		var strikes_hidden_king := (
 			_effect_mode and _effects_on()
 			and CardEffect.kind_of(hands[current_player][selected_card_slot]) == CardEffect.Kind.STRIKE
@@ -883,8 +883,8 @@ func _perform_move(destination: Vector2i) -> void:
 	var captured_master := captured_unit != null and captured_unit.is_master
 	if chaos != null:
 		captured_master = captured_unit != null and chaos.is_king_at(captured_unit.team_id, destination)
-	# Any piece reaching the enemy KERN's starting square wins too.
-	var reached_temple := (chaos == null or not chaos.hidden_king) and destination == temple_of(1 - current_player)
+	# Only the own KERN reaching the enemy KERN's starting square wins; Echos do not count.
+	var reached_temple := (chaos == null or not chaos.hidden_king) and moving_unit.is_master and destination == temple_of(1 - current_player)
 	grid_manager.clear_highlights()
 	# Each side moves in its master character's fighting style.
 	var character := CharacterRoster.character(str(team_looks[current_player].get("character", "")))

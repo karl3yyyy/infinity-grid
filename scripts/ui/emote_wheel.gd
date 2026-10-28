@@ -98,7 +98,7 @@ func open() -> void:
 	var center := viewport_size * Vector2(0.5, 0.45)
 	var radius := minf(RADIUS, minf(viewport_size.x * 0.26, viewport_size.y * 0.18))
 	var hint := Label.new()
-	hint.text = "Belegung: Sammlung > EMOTE-RAD"
+	hint.text = "Belegung: Arsenal > EMOTE-RAD"
 	hint.add_theme_font_size_override("font_size", AccessibilitySettings.font_size(20))
 	hint.add_theme_color_override("font_color", TerminalTheme.GREEN_DIM)
 	add_child(hint)

@@ -178,6 +178,21 @@ func _store() -> void:
 
 
 ## Credit packs the server sells for real money ([] when payments are off).
+## Today's and this week's offers, decided by the server (rotation.js).
+func shop_daily() -> Array:
+	return (account.get("shop", {}) as Dictionary).get("daily", [])
+
+
+func shop_weekly() -> Array:
+	return (account.get("shop", {}) as Dictionary).get("weekly", [])
+
+
+## Seconds until the daily or weekly offers change (kind "daily" or "weekly").
+func shop_seconds_left(kind: String) -> float:
+	var ends_ms := float((account.get("shop", {}) as Dictionary).get(kind + "_ends", 0.0))
+	return maxf(ends_ms / 1000.0 - Time.get_unix_time_from_system(), 0.0)
+
+
 func packs() -> Array:
 	return account.get("packs", [])
 

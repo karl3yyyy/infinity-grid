@@ -2,7 +2,7 @@
 // Mirrors scripts/battle/movement_card.gd and GridBattleManager; the card
 // offsets are checked against the game by tests/lan_test.gd.
 //
-// Win: capture the enemy master, or move any piece onto its starting square.
+// Win: capture the enemy master, or move the own master onto its starting square.
 // Board: 5x5, x wraps around, y does not. Team 0 starts on row 4 and moves
 // towards row 0, team 1 starts on row 0. Offsets are x = right, y = forward
 // from the owning player's view.
@@ -122,8 +122,8 @@ export function play(game, team, message) {
     const target = game.pieces[toKey];
     if (!legal || (target && target.team === team)) return { ok: false };
     if (target && target.master) winner = team;
-    // Any piece on the enemy master's starting square wins.
-    if (toKey === (team === 0 ? "2,0" : "2,4")) winner = team;
+    // Only the master on the enemy master's starting square wins.
+    if (piece.master && toKey === (team === 0 ? "2,0" : "2,4")) winner = team;
     delete game.pieces[`${from[0]},${from[1]}`];
     game.pieces[toKey] = piece;
   } else {
